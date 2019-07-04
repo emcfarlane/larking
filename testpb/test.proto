@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package gateway.testpb;
+
+import "google/api/annotations.proto";
+
+option go_package = "testpb";
+
+service Messaging {
+  // HTTP | gRPC
+  // -----|-----
+  // `GET /v1/messages/123456`  | `GetMessageOne(name: "messages/123456")`
+  rpc GetMessageOne(GetMessageRequestOne) returns (Message) {
+    option (google.api.http) = {
+        get: "/v1/messages/{name=name/*}"
+    };
+  }
+
+  // HTTP | gRPC
+  // -----|-----
+  // `GET /v1/messages/123456?revision=2&sub.subfield=foo` |
+  // `GetMessage(message_id: "123456" revision: 2 sub: SubMessage(subfield:
+  // "foo"))`
+  // `GET /v1/users/me/messages/123456` | `GetMessage(user_id: "me" message_id:
+  // "123456")`
+  rpc GetMessageTwo(GetMessageRequestTwo) returns (Message) {
+    option (google.api.http) = {
+      get:"/v1/messages/{message_id}"
+      additional_bindings {
+        get: "/v1/users/{user_id}/messages/{message_id}"
+      }
+    };
+  }
+
+  // HTTP | gRPC
+  // -----|-----
+  // `PATCH /v1/messages/123456 { "text": "Hi!" }` | `UpdateMessage(message_id:
+  // "123456" message { text: "Hi!" })`
+  rpc UpdateMessage(UpdateMessageRequestOne) returns (Message) {
+    option (google.api.http) = {
+      patch: "/v1/messages/{message_id}"
+      body: "message"
+    };
+  }
+
+
+  // HTTP | gRPC
+  // -----|-----
+  // `PATCH /v1/messages/123456 { "text": "Hi!" }` | `UpdateMessage(message_id:
+  // "123456" text: "Hi!")`
+  rpc UpdateMessageBody(Message) returns (Message) {
+    option (google.api.http) = {
+      patch: "/v1/messages/{message_id}/body"
+      body: "*"
+    };
+  }
+}
+message Message {
+  string message_id = 1;
+  string text = 2; // The resource content
+  string user_id = 3;
+}
+message GetMessageRequestOne {
+  string name = 1; // Mapped to URL path
+}
+message GetMessageRequestTwo {
+  message SubMessage {
+    string subfield = 1;
+  }
+  string message_id = 1; // Mapped to URL path
+  int64 revision = 2;    // Mapped to URL query parameter `revision`
+  SubMessage sub = 3;    // Mapped to URL query parameter `sub.subfield`
+  string user_id = 4;    // Additional binding
+}
+message UpdateMessageRequestOne {
+  string message_id = 1; // Mapped to the URL
+  Message message = 2;   // Mapped to the body
+}
