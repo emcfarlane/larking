@@ -17,9 +17,9 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	"github.com/afking/gateway/google/api/annotations"
-	_ "github.com/afking/gateway/google/api/annotations"
-	_ "github.com/afking/gateway/google/api/httpbody"
+	"github.com/afking/gateway/google.golang.org/genproto/googleapis/api/annotations"
+	//_ "github.com/afking/gateway/google.golang.org/genproto/googleapis/api/annotations"
+	_ "github.com/afking/gateway/google.golang.org/genproto/googleapis/api/httpbody"
 	_ "google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -32,9 +32,10 @@ type Handler struct {
 
 // getExtensionHTTP
 func getExtensionHTTP(m proto.Message) *annotations.HttpRule {
-	xd := annotations.E_Http
-	v := m.ProtoReflect().Get(xd.Type)
-	return xd.Type.InterfaceOf(v).(*annotations.HttpRule)
+	//xd := annotations.E_Http
+	//v := m.ProtoReflect().Get(xd.Type)
+	//return xd.Type.InterfaceOf(v).(*annotations.HttpRule)
+	return proto.GetExtension(m, annotations.E_Http).(*annotations.HttpRule)
 }
 
 type variable struct {
@@ -91,7 +92,12 @@ func fieldPath(fieldDescs protoreflect.FieldDescriptors, names ...string) []prot
 	return fds
 }
 
-func parseRule(parent *path, rule *annotations.HttpRule, desc protoreflect.MethodDescriptor, grpcURL *url.URL) error {
+func parseRule(
+	parent *path,
+	rule *annotations.HttpRule,
+	desc protoreflect.MethodDescriptor,
+	grpcURL *url.URL,
+) error {
 	var tmpl, verb string
 	switch v := rule.Pattern.(type) {
 	case *annotations.HttpRule_Get:
@@ -475,9 +481,10 @@ func (h *Handler) match(r *http.Request) (*method, []*param, error) {
 	s := r.URL.Path
 	if !strings.HasPrefix(s, "/") {
 		s = "/" + s
+		r.URL.Path = s
 	}
 
-	// [/]some/request/path
+	// /some/request/path
 	// variables can eat multiple
 
 	path := h.path
