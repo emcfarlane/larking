@@ -5,6 +5,8 @@ package testpb
 import (
 	context "context"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -113,6 +115,23 @@ type MessagingServer interface {
 	UpdateMessageBody(context.Context, *Message) (*Message, error)
 }
 
+// UnimplementedMessagingServer can be embedded to have forward compatible implementations.
+type UnimplementedMessagingServer struct {
+}
+
+func (*UnimplementedMessagingServer) GetMessageOne(context.Context, *GetMessageRequestOne) (*Message, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetMessageOne not implemented")
+}
+func (*UnimplementedMessagingServer) GetMessageTwo(context.Context, *GetMessageRequestTwo) (*Message, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetMessageTwo not implemented")
+}
+func (*UnimplementedMessagingServer) UpdateMessage(context.Context, *UpdateMessageRequestOne) (*Message, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateMessage not implemented")
+}
+func (*UnimplementedMessagingServer) UpdateMessageBody(context.Context, *Message) (*Message, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateMessageBody not implemented")
+}
+
 func RegisterMessagingServer(s *grpc.Server, srv MessagingServer) {
 	s.RegisterService(&_Messaging_serviceDesc, srv)
 }
@@ -211,5 +230,5 @@ var _Messaging_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "test.proto",
+	Metadata: "github.com/afking/gateway/testpb/test.proto",
 }

@@ -32,9 +32,6 @@ type Handler struct {
 
 // getExtensionHTTP
 func getExtensionHTTP(m proto.Message) *annotations.HttpRule {
-	//xd := annotations.E_Http
-	//v := m.ProtoReflect().Get(xd.Type)
-	//return xd.Type.InterfaceOf(v).(*annotations.HttpRule)
 	return proto.GetExtension(m, annotations.E_Http).(*annotations.HttpRule)
 }
 
@@ -491,13 +488,9 @@ func (h *Handler) match(r *http.Request) (*method, []*param, error) {
 	params := []*param{}
 
 	for i := 0; i < len(s); {
-		//fmt.Println("matching", s[i:])
-		if !strings.HasPrefix(s, "/") {
-			return nil, nil, fmt.Errorf("wtf mate")
-		}
 		j := strings.Index(s[i+1:], "/")
 		if j == -1 {
-			j = len(s)
+			j = len(s) // capture end of path
 		} else {
 			j += i + 1
 		}
