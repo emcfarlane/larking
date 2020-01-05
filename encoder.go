@@ -1,6 +1,7 @@
+// TODO: remove, this was an attempt to skip encode/decoding in memory.
 package gateway
 
-import (
+/*import (
 	"encoding/binary"
 	"fmt"
 	"sync"
@@ -12,20 +13,20 @@ import (
 // Name is the name registered for the proto compressor.
 const Name = "gateway"
 
-var globalCodec = &codec{mctx: make(map[uint32]interface{})}
+var globalCodec = &codecMem{mctx: make(map[uint32]interface{})}
 
 func init() {
 	encoding.RegisterCodec(globalCodec)
 }
 
 // codec hacks around encoding context by passing lookup keys within the data.
-type codec struct {
+type codecMem struct {
 	count uint32
 	mu    sync.Mutex
 	mctx  map[uint32]interface{}
 }
 
-func (c *codec) encode(v interface{}) []byte {
+func (c *codecMem) encode(v interface{}) []byte {
 	i := atomic.AddUint32(&c.count, 1)
 	buf := make([]byte, binary.MaxVarintLen32)
 	n := binary.PutUvarint(buf, uint64(i))
@@ -36,7 +37,7 @@ func (c *codec) encode(v interface{}) []byte {
 	return buf[:n]
 }
 
-func (c *codec) decode(b []byte) (interface{}, error) {
+func (c *codecMem) decode(b []byte) (interface{}, error) {
 	x, n := binary.Uvarint(b)
 	if n <= 0 {
 		return nil, fmt.Errorf("codec overflow")
@@ -53,11 +54,11 @@ func (c *codec) decode(b []byte) (interface{}, error) {
 	return ctx, nil
 }
 
-func (c *codec) Marshal(v interface{}) ([]byte, error) {
+func (c *codecMem) Marshal(v interface{}) ([]byte, error) {
 	return c.encode(v), nil
 }
 
-func (c *codec) Unmarshal(data []byte, v interface{}) error {
+func (c *codecMem) Unmarshal(data []byte, v interface{}) error {
 	ctx, err := c.decode(data)
 	if err != nil {
 		return err
@@ -71,4 +72,4 @@ func (c *codec) Unmarshal(data []byte, v interface{}) error {
 	return t.unmarshal(v)
 }
 
-func (c *codec) Name() string { return Name }
+func (c *codecMem) Name() string { return Name }*/

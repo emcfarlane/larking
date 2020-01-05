@@ -1,13 +1,10 @@
 package gateway
 
 import (
-	"bytes"
-	"encoding/binary"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strings"
 
@@ -15,7 +12,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"github.com/afking/gateway/google.golang.org/genproto/googleapis/api/annotations"
 	//_ "github.com/afking/gateway/google.golang.org/genproto/googleapis/api/annotations"
@@ -57,11 +53,13 @@ func newPath() *path {
 }
 
 type method struct {
-	desc     protoreflect.MethodDescriptor
-	url      *url.URL
+	desc protoreflect.MethodDescriptor
+	//url      *url.URL // /<service.Service>/<Method>
 	body     []protoreflect.FieldDescriptor
-	bodyStar bool // body="*" no params
-	resp     []protoreflect.FieldDescriptor
+	bodyStar bool                           // body="*" no params
+	resp     []protoreflect.FieldDescriptor // TODO: this can only be single?
+	//respStar bool                           // body=[""|"*"]
+	invoke invoker
 }
 
 func fieldPath(fieldDescs protoreflect.FieldDescriptors, names ...string) []protoreflect.FieldDescriptor {
@@ -89,11 +87,14 @@ func fieldPath(fieldDescs protoreflect.FieldDescriptors, names ...string) []prot
 	return fds
 }
 
-func parseRule(
-	parent *path,
+type invoker func(ctx context.Context, args, reply proto.Message) error
+
+func (p *path) parseRule(
 	rule *annotations.HttpRule,
 	desc protoreflect.MethodDescriptor,
-	grpcURL *url.URL,
+	//grpcURL *url.URL,
+	//invoke func(ctx context.Context,
+	invoke invoker,
 ) error {
 	var tmpl, verb string
 	switch v := rule.Pattern.(type) {
@@ -112,6 +113,8 @@ func parseRule(
 	case *annotations.HttpRule_Patch:
 		verb = http.MethodPatch
 		tmpl = v.Patch
+	default:
+		return fmt.Errorf("unsupported pattern %v", v)
 	}
 
 	l := &lexer{
@@ -121,7 +124,7 @@ func parseRule(
 
 	msgDesc := desc.Input()
 	fieldDescs := msgDesc.Fields()
-	cursor := parent // cursor
+	cursor := p // cursor
 
 	var t token
 	for t = l.token(); t.isEnd(); t = l.token() {
@@ -222,7 +225,8 @@ func parseRule(
 
 	m := &method{
 		desc: desc,
-		url:  grpcURL,
+		//url:  grpcURL,
+		invoke: invoke,
 	}
 	switch rule.Body {
 	case "*":
@@ -246,11 +250,11 @@ func parseRule(
 	}
 
 	cursor.methods[verb] = m // register method
-	fmt.Println("Registered", verb, tmpl, "->", m.url)
+	fmt.Println("Registered", verb, tmpl)
 
 	for _, addRule := range rule.AdditionalBindings {
 		// TODO: nested value check?
-		if err := parseRule(parent, addRule, desc, grpcURL); err != nil {
+		if err := p.parseRule(addRule, desc, invoke); err != nil {
 			return err
 		}
 	}
@@ -258,7 +262,7 @@ func parseRule(
 	return nil
 }
 
-func NewHandler(gs *grpc.Server) (*Handler, error) {
+/*func NewHandler(gs *grpc.Server) (*Handler, error) {
 	h := &Handler{
 		path: newPath(),
 		srv:  gs,
@@ -439,7 +443,7 @@ func (t *transformer) unmarshal(v interface{}) error {
 	}
 
 	return nil
-}
+}*/
 
 type param struct {
 	fds []protoreflect.FieldDescriptor
@@ -474,17 +478,11 @@ func parseParam(fds []protoreflect.FieldDescriptor, raw []byte) (*param, error) 
 	return &param{fds, val}, nil
 }
 
-func (h *Handler) match(r *http.Request) (*method, []*param, error) {
-	s := r.URL.Path
-	if !strings.HasPrefix(s, "/") {
-		s = "/" + s
-		r.URL.Path = s
-	}
-
-	// /some/request/path
+func (p *path) match(s, method string) (*method, []*param, error) {
+	// /some/request/path VERB
 	// variables can eat multiple
 
-	path := h.path
+	path := p
 	params := []*param{}
 
 	for i := 0; i < len(s); {
@@ -534,7 +532,7 @@ func (h *Handler) match(r *http.Request) (*method, []*param, error) {
 		return nil, nil, fmt.Errorf("404")
 	}
 
-	m, ok := path.methods[r.Method]
+	m, ok := path.methods[method]
 	if !ok {
 		return nil, nil, fmt.Errorf("405")
 	}
@@ -542,11 +540,15 @@ func (h *Handler) match(r *http.Request) (*method, []*param, error) {
 	return m, params, nil
 }
 
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+/*func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s := r.URL.Path
+	if !strings.HasPrefix(s, "/") {
+		s = "/" + s
+		r.URL.Path = s
+	}
 
 	// match handler to URL
-
-	m, ps, err := h.match(r)
+	m, ps, err := h.path.match(s, r.Method)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -605,4 +607,4 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	h.srv.ServeHTTP(t, r)
 	fmt.Println("END")
-}
+}*/
