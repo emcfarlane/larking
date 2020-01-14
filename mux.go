@@ -206,6 +206,20 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// TODO: cleanup paramd decoding
+	for _, p := range params {
+		cur := args.ProtoReflect()
+		for i, fd := range p.fds {
+			if len(p.fds)-1 == i {
+				cur.Set(fd, p.val)
+			} else {
+				// TODO: more types
+				cur = cur.Mutable(fd).Message()
+			}
+		}
+
+	}
+
 	if err := method.invoke(r.Context(), args, reply); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
