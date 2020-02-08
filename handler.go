@@ -1,4 +1,4 @@
-package gateway
+package graphpb
 
 import (
 	"context"
@@ -8,20 +8,18 @@ import (
 	"regexp"
 	"strings"
 
-	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
-
-	"github.com/afking/gateway/google.golang.org/genproto/googleapis/api/annotations"
-	//_ "github.com/afking/gateway/google.golang.org/genproto/googleapis/api/annotations"
-	_ "github.com/afking/gateway/google.golang.org/genproto/googleapis/api/httpbody"
 	_ "google.golang.org/protobuf/types/descriptorpb"
+
+	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
+	//_ "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
+	_ "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 )
 
 type Handler struct {
 	path          *path
-	srv           *grpc.Server
 	unmarshalOpts protojson.UnmarshalOptions
 	marshalOpts   protojson.MarshalOptions
 }
@@ -92,8 +90,6 @@ type invoker func(ctx context.Context, args, reply proto.Message) error
 func (p *path) parseRule(
 	rule *annotations.HttpRule,
 	desc protoreflect.MethodDescriptor,
-	//grpcURL *url.URL,
-	//invoke func(ctx context.Context,
 	invoke invoker,
 ) error {
 	var tmpl, verb string
@@ -113,7 +109,7 @@ func (p *path) parseRule(
 	case *annotations.HttpRule_Patch:
 		verb = http.MethodPatch
 		tmpl = v.Patch
-	default:
+	default: // TODO: custom  method support
 		return fmt.Errorf("unsupported pattern %v", v)
 	}
 
@@ -262,189 +258,6 @@ func (p *path) parseRule(
 	return nil
 }
 
-/*func NewHandler(gs *grpc.Server) (*Handler, error) {
-	h := &Handler{
-		path: newPath(),
-		srv:  gs,
-	}
-
-	for name, info := range gs.GetServiceInfo() {
-		file, ok := info.Metadata.(string)
-		if !ok {
-			return nil, fmt.Errorf("service %q has unexpected metadata %v", name, info.Metadata)
-		}
-
-		fd, err := protoregistry.GlobalFiles.FindFileByPath(file)
-		if err != nil {
-			return nil, err
-		}
-
-		sds := fd.Services()
-		for i := 0; i < sds.Len(); i++ {
-			sd := sds.Get(i)
-			if string(sd.FullName()) != name {
-				continue
-			}
-			fmt.Println("sd.FuleName()", sd.FullName())
-
-			mds := sd.Methods()
-			for j := 0; j < mds.Len(); j++ {
-				md := mds.Get(j)
-
-				opts := md.Options()
-				if opts == nil {
-					continue
-				}
-
-				u, err := url.Parse(fmt.Sprintf(
-					"/%s/%s", name, md.Name(),
-				))
-				if err != nil {
-					return nil, err
-				}
-
-				rule := getExtensionHTTP(opts)
-				fmt.Printf("%T %+v\n", rule, rule)
-
-				//fmt.Println("parseRule()", u, rule)
-				if err := parseRule(h.path, rule, md, u); err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
-
-	fmt.Printf("%+v\n", h.path)
-
-	return h, nil
-}
-
-const contentType = "application/grpc+" + Name
-
-// http.ResponseWriter + unmarshaler
-type transformer struct {
-	//body io.ReadCloser
-	b   []byte
-	w   http.ResponseWriter
-	f   http.Flusher
-	hdr http.Header
-	m   *method
-	ps  []*param
-
-	buf bytes.Buffer
-}
-
-func (t *transformer) Flush() {
-	fmt.Println("FLUSH")
-	t.f.Flush()
-}
-
-func (t *transformer) Header() http.Header {
-	return t.hdr
-}
-
-func (t *transformer) Write(b []byte) (n int, err error) {
-	//return 0, fmt.Errorf("fudge")
-	//fmt.Println("WRITE", b, "the")
-	n, err = t.buf.Write(b)
-	if err != nil {
-		return
-	}
-
-	if t.buf.Len() <= 5 {
-		return
-	}
-
-	buf := t.buf.Bytes()
-	nKey := int(binary.BigEndian.Uint32(buf[1:5]))
-	if 5+nKey > t.buf.Len() {
-		return
-	}
-	key := t.buf.Next(5 + nKey)[5:]
-	//fmt.Println("key", key)
-
-	v, err := globalCodec.decode(key)
-	if err != nil {
-		return n, err
-	}
-
-	return n, t.marshal(v)
-}
-
-func (t *transformer) WriteHeader(statusCode int) {
-	// write some headers
-	hdrs := t.w.Header()
-	for key, values := range t.hdr {
-		// TODO: filtering options
-		hdrs[key] = values
-	}
-	t.w.WriteHeader(statusCode)
-
-	fmt.Println("WRITE STATUS", statusCode)
-}
-
-func toMessage(v interface{}) (proto.Message, error) {
-	m, ok := v.(proto.Message)
-	if !ok {
-		return nil, fmt.Errorf("expected proto.Message received %T", v)
-	}
-	return m, nil
-}
-
-func (t *transformer) marshal(v interface{}) error {
-	fmt.Printf("marshal %T\n", v)
-	m, err := toMessage(v)
-	if err != nil {
-		return err
-	}
-
-	// TODO: response body fields
-	// TODO: json options
-
-	mBuf, err := protojson.Marshal(m)
-	if err != nil {
-		return err
-	}
-	_, err = t.w.Write(mBuf)
-	fmt.Println("WRITING", string(mBuf))
-	return err
-}
-
-func (t *transformer) unmarshal(v interface{}) error {
-	fmt.Printf("unmarshal %T\n", v)
-	m, err := toMessage(v)
-	if err != nil {
-		return err
-	}
-
-	// TODO: body fields
-	// TODO: json options
-	if len(t.b) > 0 {
-		if err := protojson.Unmarshal(t.b, m); err != nil {
-			fmt.Println("here?", string(t.b), err)
-			return err
-		}
-	}
-
-	if len(t.ps) > 0 {
-		msg := m.ProtoReflect()
-		for _, p := range t.ps {
-			cur := msg
-			for i, fd := range p.fds {
-				if len(p.fds)-1 == i {
-					cur.Set(fd, p.val)
-				} else {
-					// TODO: more types
-					cur = cur.Mutable(fd).Message()
-				}
-			}
-
-		}
-	}
-
-	return nil
-}*/
-
 type param struct {
 	fds []protoreflect.FieldDescriptor
 	val protoreflect.Value
@@ -539,72 +352,3 @@ func (p *path) match(s, method string) (*method, []*param, error) {
 	fmt.Println("FOUND")
 	return m, params, nil
 }
-
-/*func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s := r.URL.Path
-	if !strings.HasPrefix(s, "/") {
-		s = "/" + s
-		r.URL.Path = s
-	}
-
-	// match handler to URL
-	m, ps, err := h.path.match(s, r.Method)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	//fmt.Println("METHOD", m)
-
-	// TODO: query params
-
-	hdr := make(http.Header)
-	hdr.Set("content-type", contentType)
-	trl := make(http.Header)
-
-	f, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "requires a ResponseWriter supporting http.Flusher", http.StatusInternalServerError)
-		return
-	}
-
-	// TODO: sanitise
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := r.Body.Close(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	t := &transformer{
-		b:   body,
-		w:   w,
-		f:   f,
-		hdr: make(http.Header),
-		m:   m,
-		ps:  ps,
-	}
-
-	b := globalCodec.encode(t)
-	buf := make([]byte, 5+len(b))
-	binary.BigEndian.PutUint32(buf[1:5], uint32(len(b)))
-	copy(buf[5:], b)
-	gb := bytes.NewReader(buf)
-	fmt.Printf("buf %+v %v %v\n", buf, len(buf), len(b))
-
-	// mutate request to satisfy gRPC transport handling...
-	r.Method = http.MethodPost
-	r.URL = m.url
-	r.Proto = "HTTP/2"
-	r.ProtoMajor = 2
-	r.ProtoMinor = 0
-	r.Header = hdr
-	r.Body = ioutil.NopCloser(gb)
-	r.ContentLength = int64(len(buf))
-	r.Trailer = trl
-
-	h.srv.ServeHTTP(t, r)
-	fmt.Println("END")
-}*/

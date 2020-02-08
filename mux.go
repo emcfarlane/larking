@@ -1,4 +1,4 @@
-package gateway
+package graphpb
 
 import (
 	"bytes"
@@ -19,8 +19,8 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 
-	"github.com/afking/gateway/google.golang.org/genproto/googleapis/api/annotations"
-	rpb "github.com/afking/gateway/grpc/reflection/v1alpha"
+	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
+	rpb "github.com/afking/graphpb/grpc/reflection/v1alpha"
 )
 
 type Mux struct {

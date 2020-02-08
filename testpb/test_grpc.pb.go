@@ -55,7 +55,7 @@ func NewMessagingClient(cc *grpc.ClientConn) MessagingClient {
 
 func (c *messagingClient) GetMessageOne(ctx context.Context, in *GetMessageRequestOne, opts ...grpc.CallOption) (*Message, error) {
 	out := new(Message)
-	err := c.cc.Invoke(ctx, "/gateway.testpb.Messaging/GetMessageOne", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/graphpb.testpb.Messaging/GetMessageOne", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (c *messagingClient) GetMessageOne(ctx context.Context, in *GetMessageReque
 
 func (c *messagingClient) GetMessageTwo(ctx context.Context, in *GetMessageRequestTwo, opts ...grpc.CallOption) (*Message, error) {
 	out := new(Message)
-	err := c.cc.Invoke(ctx, "/gateway.testpb.Messaging/GetMessageTwo", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/graphpb.testpb.Messaging/GetMessageTwo", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (c *messagingClient) GetMessageTwo(ctx context.Context, in *GetMessageReque
 
 func (c *messagingClient) UpdateMessage(ctx context.Context, in *UpdateMessageRequestOne, opts ...grpc.CallOption) (*Message, error) {
 	out := new(Message)
-	err := c.cc.Invoke(ctx, "/gateway.testpb.Messaging/UpdateMessage", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/graphpb.testpb.Messaging/UpdateMessage", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (c *messagingClient) UpdateMessage(ctx context.Context, in *UpdateMessageRe
 
 func (c *messagingClient) UpdateMessageBody(ctx context.Context, in *Message, opts ...grpc.CallOption) (*Message, error) {
 	out := new(Message)
-	err := c.cc.Invoke(ctx, "/gateway.testpb.Messaging/UpdateMessageBody", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/graphpb.testpb.Messaging/UpdateMessageBody", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func _Messaging_GetMessageOne_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/gateway.testpb.Messaging/GetMessageOne",
+		FullMethod: "/graphpb.testpb.Messaging/GetMessageOne",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServer).GetMessageOne(ctx, req.(*GetMessageRequestOne))
@@ -164,7 +164,7 @@ func _Messaging_GetMessageTwo_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/gateway.testpb.Messaging/GetMessageTwo",
+		FullMethod: "/graphpb.testpb.Messaging/GetMessageTwo",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServer).GetMessageTwo(ctx, req.(*GetMessageRequestTwo))
@@ -182,7 +182,7 @@ func _Messaging_UpdateMessage_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/gateway.testpb.Messaging/UpdateMessage",
+		FullMethod: "/graphpb.testpb.Messaging/UpdateMessage",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServer).UpdateMessage(ctx, req.(*UpdateMessageRequestOne))
@@ -200,7 +200,7 @@ func _Messaging_UpdateMessageBody_Handler(srv interface{}, ctx context.Context, 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/gateway.testpb.Messaging/UpdateMessageBody",
+		FullMethod: "/graphpb.testpb.Messaging/UpdateMessageBody",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServer).UpdateMessageBody(ctx, req.(*Message))
@@ -209,7 +209,7 @@ func _Messaging_UpdateMessageBody_Handler(srv interface{}, ctx context.Context, 
 }
 
 var _Messaging_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "gateway.testpb.Messaging",
+	ServiceName: "graphpb.testpb.Messaging",
 	HandlerType: (*MessagingServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -230,5 +230,5 @@ var _Messaging_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "github.com/afking/gateway/testpb/test.proto",
+	Metadata: "github.com/afking/graphpb/testpb/test.proto",
 }

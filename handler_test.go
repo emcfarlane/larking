@@ -1,20 +1,21 @@
-package gateway
+package graphpb
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	"github.com/golang/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/testing/protocmp"
 
-	"github.com/afking/gateway/grpc/reflection"
-	"github.com/afking/gateway/testpb"
+	"github.com/afking/graphpb/grpc/reflection"
+	"github.com/afking/graphpb/mock_testpb"
+	"github.com/afking/graphpb/testpb"
 )
 
 type testServer struct {
@@ -46,10 +47,14 @@ func (ts *testServer) UpdateMessageBody(ctx context.Context, req *testpb.Message
 func TestMessageServer(t *testing.T) {
 
 	// Create test server.
-	ts := &testServer{}
+	//ts := &testServer{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ms := mock_testpb.NewMockMessagingServer(ctrl)
 
 	gs := grpc.NewServer()
-	testpb.RegisterMessagingServer(gs, ts)
+	testpb.RegisterMessagingServer(gs, ms)
 	reflection.Register(gs)
 
 	/*h, err := NewHandler(gs)
@@ -80,6 +85,7 @@ func TestMessageServer(t *testing.T) {
 		name       string
 		req        *http.Request
 		in, out    proto.Message
+		method     func(arg0, arg1 interface{}) *gomock.Call
 		err        error
 		statusCode int
 	}{{
@@ -90,19 +96,23 @@ func TestMessageServer(t *testing.T) {
 		},
 		out:        &testpb.Message{Text: "hello, world!"},
 		err:        nil,
+		method:     ms.EXPECT().GetMessageOne,
 		statusCode: 200,
 	}}
 
-	opts := cmp.Options{protocmp.Transform()}
+	//opts := cmp.Options{protocmp.Transform()}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ts.check = func(ctx context.Context, in interface{}) (interface{}, error) {
+			/*ts.check = func(ctx context.Context, in interface{}) (interface{}, error) {
 				if diff := cmp.Diff(tt.in, in, opts...); diff != "" {
 					t.Errorf("mismatch (-want +got):\n%s", diff)
 				}
 				return tt.out, tt.err
-			}
+			}*/
+			fmt.Println("HERE.........!")
+			x := tt.method(gomock.Any(), tt.in).Return(tt.out, tt.err)
+			t.Log(x)
 
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, tt.req)

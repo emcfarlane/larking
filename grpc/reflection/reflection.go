@@ -16,9 +16,10 @@
  *
  */
 
-// Modified to support proto v2
-// https://raw.githubusercontent.com/grpc/grpc-go/dfbefc6795cd46d1b52c409c02bcd4230fbf8cfd/reflection/serverreflection.go
 /*
+Modified to support proto v2:
+https://raw.githubusercontent.com/grpc/grpc-go/dfbefc6795cd46d1b52c409c02bcd4230fbf8cfd/reflection/serverreflection.go
+
 Package reflection implements server reflection service.
 
 The service implemented is defined in:
@@ -52,7 +53,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	rpb "github.com/afking/gateway/grpc/reflection/v1alpha"
+	rpb "github.com/afking/graphpb/grpc/reflection/v1alpha"
 )
 
 type serverReflectionServer struct {

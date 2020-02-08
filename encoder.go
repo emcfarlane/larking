@@ -1,5 +1,5 @@
 // TODO: remove, this was an attempt to skip encode/decoding in memory.
-package gateway
+package graphpb
 
 /*import (
 	"encoding/binary"
@@ -11,7 +11,7 @@ package gateway
 )
 
 // Name is the name registered for the proto compressor.
-const Name = "gateway"
+const Name = "graphpb"
 
 var globalCodec = &codecMem{mctx: make(map[uint32]interface{})}
 

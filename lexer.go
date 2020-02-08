@@ -1,4 +1,4 @@
-package gateway
+package graphpb
 
 import (
 	"unicode"
@@ -129,6 +129,18 @@ func isValue(r rune) bool {
 	}
 }
 
+func (l *lexer) chain(typOne, typTwo tokenType, next stateFn) token {
+	l.state = func(l *lexer) token {
+		l.state = next
+		return l.emit(typTwo)
+	}
+
+	l.pos -= l.width
+	tok := l.emit(typOne)
+	l.pos += l.width
+	return tok
+}
+
 func lexText(l *lexer) token {
 	for {
 		r := l.next()
@@ -144,18 +156,6 @@ func lexText(l *lexer) token {
 			return l.emit(tokenValue)
 		}
 	}
-}
-
-func (l *lexer) chain(typOne, typTwo tokenType, next stateFn) token {
-	l.state = func(l *lexer) token {
-		l.state = next
-		return l.emit(typTwo)
-	}
-
-	l.pos -= l.width
-	tok := l.emit(typOne)
-	l.pos += l.width
-	return tok
 }
 
 func lexFieldPath(l *lexer) token {

@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package gateway.testpb;
+package graphpb.testpb;
 
 import "google/api/annotations.proto";
 
-option go_package = "github.com/afking/gateway/testpb;testpb";
+option go_package = "github.com/afking/graphpb/testpb;testpb";
 
 service Messaging {
   // HTTP | gRPC
