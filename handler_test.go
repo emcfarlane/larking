@@ -10,57 +10,34 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	"github.com/afking/graphpb/grpc/reflection"
 	"github.com/afking/graphpb/mock_testpb"
 	"github.com/afking/graphpb/testpb"
 )
 
-type testServer struct {
-	check func(context.Context, interface{}) (interface{}, error)
-	//msg *testpb.Message
-	//err error
-}
-
-func (ts *testServer) GetMessageOne(ctx context.Context, req *testpb.GetMessageRequestOne) (*testpb.Message, error) {
-	v, err := ts.check(ctx, req)
-	return v.(*testpb.Message), err
-}
-
-func (ts *testServer) GetMessageTwo(ctx context.Context, req *testpb.GetMessageRequestTwo) (*testpb.Message, error) {
-	v, err := ts.check(ctx, req)
-	return v.(*testpb.Message), err
-}
-
-func (ts *testServer) UpdateMessage(ctx context.Context, req *testpb.UpdateMessageRequestOne) (*testpb.Message, error) {
-	v, err := ts.check(ctx, req)
-	return v.(*testpb.Message), err
-}
-
-func (ts *testServer) UpdateMessageBody(ctx context.Context, req *testpb.Message) (*testpb.Message, error) {
-	v, err := ts.check(ctx, req)
-	return v.(*testpb.Message), err
-}
-
 func TestMessageServer(t *testing.T) {
 
 	// Create test server.
-	//ts := &testServer{}
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	var ts = new(struct{ testpb.MessagingServer }) // override each test
 
-	ms := mock_testpb.NewMockMessagingServer(ctrl)
-
-	gs := grpc.NewServer()
-	testpb.RegisterMessagingServer(gs, ms)
+	gs := grpc.NewServer(
+		grpc.StreamInterceptor(
+			streamServerTestInterceptor,
+		),
+		grpc.UnaryInterceptor(
+			unaryServerTestInterceptor,
+		),
+	)
+	testpb.RegisterMessagingServer(gs, ts)
 	reflection.Register(gs)
 
-	/*h, err := NewHandler(gs)
-	if err != nil {
-		t.Fatal(err)
-	}*/
 	lis, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
@@ -80,39 +57,55 @@ func TestMessageServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	opts := cmp.Options{protocmp.Transform()}
+
 	// TODO: compare http.Response output
 	tests := []struct {
-		name       string
-		req        *http.Request
-		in, out    proto.Message
-		method     func(arg0, arg1 interface{}) *gomock.Call
-		err        error
+		name   string
+		req    *http.Request
+		expect func(t *testing.T, ms *mock_testpb.MockMessagingServer)
+		//in, out    proto.Message
+		//method     func(arg0, arg1 interface{}) *gomock.Call
+		//err        error
 		statusCode int
 	}{{
 		name: "first",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/messages/name/hello", nil),
-		in: &testpb.GetMessageRequestOne{
-			Name: "name/hello",
+		expect: func(t *testing.T, ms *mock_testpb.MockMessagingServer) {
+			ms.EXPECT().GetMessageOne(
+				gomock.Any(),
+				protoMatches{&testpb.GetMessageRequestOne{
+					Name: "name/hello",
+				}, opts},
+			).Return(&testpb.Message{Text: "hello, world!"}, nil)
 		},
-		out:        &testpb.Message{Text: "hello, world!"},
-		err:        nil,
-		method:     ms.EXPECT().GetMessageOne,
+		statusCode: 200,
+	}, {
+		name: "sub.subfield",
+		req:  httptest.NewRequest(http.MethodGet, "/v1/messages/123456?revision=2&sub.subfield=foo", nil),
+		expect: func(t *testing.T, ms *mock_testpb.MockMessagingServer) {
+			ms.EXPECT().GetMessageTwo(
+				gomock.Any(),
+				protoMatches{&testpb.GetMessageRequestTwo{
+					MessageId: "123456",
+					Revision:  2,
+					Sub: &testpb.GetMessageRequestTwo_SubMessage{
+						Subfield: "foo",
+					},
+				}, opts},
+			).Return(&testpb.Message{Text: "hello, query params!"}, nil)
+		},
 		statusCode: 200,
 	}}
 
-	//opts := cmp.Options{protocmp.Transform()}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			/*ts.check = func(ctx context.Context, in interface{}) (interface{}, error) {
-				if diff := cmp.Diff(tt.in, in, opts...); diff != "" {
-					t.Errorf("mismatch (-want +got):\n%s", diff)
-				}
-				return tt.out, tt.err
-			}*/
-			fmt.Println("HERE.........!")
-			x := tt.method(gomock.Any(), tt.in).Return(tt.out, tt.err)
-			t.Log(x)
+			ctrl := gomock.NewController(&mockReporter{T: t})
+			defer ctrl.Finish()
+
+			ms := mock_testpb.NewMockMessagingServer(ctrl)
+			ts.MessagingServer = ms
+			tt.expect(t, ms)
 
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, tt.req)
@@ -122,12 +115,55 @@ func TestMessageServer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Log("body:", string(b))
-			t.Logf("resp: %+v\n", resp)
 
 			if tt.statusCode != resp.StatusCode {
 				t.Errorf("expected %d got %d", tt.statusCode, resp.StatusCode)
+				t.Fatal(string(b))
 			}
 		})
 	}
 }
+
+type mockReporter struct {
+	T    *testing.T
+	done bool
+}
+
+func (x mockReporter) Helper()                                   { x.T.Helper() }
+func (x mockReporter) Errorf(format string, args ...interface{}) { x.T.Errorf(format, args...) }
+func (x *mockReporter) Fatalf(format string, args ...interface{}) {
+	if !x.done {
+		x.done = true
+		panic(fmt.Sprintf(format, args...))
+	}
+	x.T.Fatalf(format, args...)
+}
+
+func unaryServerTestInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (_ interface{}, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = status.Errorf(codes.Internal, "%s", r)
+		}
+	}()
+	return handler(ctx, req)
+}
+
+// StreamServerInterceptor returns a new streaming server interceptor for panic recovery.
+func streamServerTestInterceptor(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = status.Errorf(codes.Internal, "%s", r)
+		}
+	}()
+	return handler(srv, stream)
+}
+
+type protoMatches struct {
+	msg  proto.Message
+	opts []cmp.Option
+}
+
+func (p protoMatches) Matches(x interface{}) bool {
+	return cmp.Diff(p.msg, x, p.opts...) == ""
+}
+func (p protoMatches) String() string { return fmt.Sprint(p.msg) }

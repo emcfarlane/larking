@@ -6,9 +6,10 @@ package mock_testpb
 
 import (
 	context "context"
+	reflect "reflect"
+
 	testpb "github.com/afking/graphpb/testpb"
 	gomock "github.com/golang/mock/gomock"
-	reflect "reflect"
 )
 
 // MockMessagingServer is a mock of MessagingServer interface

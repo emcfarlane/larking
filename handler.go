@@ -1,10 +1,13 @@
 package graphpb
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -262,41 +265,162 @@ type param struct {
 	fds []protoreflect.FieldDescriptor
 	val protoreflect.Value
 	//val string // raw value
+	//val []byte
 }
 
-func parseParam(fds []protoreflect.FieldDescriptor, raw []byte) (*param, error) {
+func parseParam(fds []protoreflect.FieldDescriptor, raw []byte) (param, error) {
 	if len(fds) == 0 {
-		return nil, fmt.Errorf("zero field")
+		return param{}, fmt.Errorf("zero field")
 	}
-
 	fd := fds[len(fds)-1]
 
-	var val protoreflect.Value
-	switch fd.Kind() {
+	switch kind := fd.Kind(); kind {
 	case protoreflect.BoolKind:
 		var b bool
 		if err := json.Unmarshal(raw, &b); err != nil {
-			return nil, err
+			return param{}, err
 		}
-		val = protoreflect.ValueOf(b)
-	case protoreflect.StringKind:
-		val = protoreflect.ValueOf(string(raw))
-	case protoreflect.BytesKind:
-		val = protoreflect.ValueOf(raw)
+		return param{fds, protoreflect.ValueOfBool(b)}, nil
 
-	// TODO: extend
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
+		var x int32
+		if err := json.Unmarshal(raw, &x); err != nil {
+			return param{}, err
+		}
+		return param{fds, protoreflect.ValueOfInt32(x)}, nil
+
+	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+		var x int64
+		if err := json.Unmarshal(raw, &x); err != nil {
+			return param{}, err
+		}
+		return param{fds, protoreflect.ValueOfInt64(x)}, nil
+
+	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
+		var x uint32
+		if err := json.Unmarshal(raw, &x); err != nil {
+			return param{}, err
+		}
+		return param{fds, protoreflect.ValueOfUint32(x)}, nil
+
+	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+		var x uint64
+		if err := json.Unmarshal(raw, &x); err != nil {
+			return param{}, err
+		}
+		return param{fds, protoreflect.ValueOfUint64(x)}, nil
+
+	case protoreflect.FloatKind:
+		var x float32
+		if err := json.Unmarshal(raw, &x); err != nil {
+			return param{}, err
+		}
+		return param{fds, protoreflect.ValueOfFloat32(x)}, nil
+
+	case protoreflect.DoubleKind:
+		var x float64
+		if err := json.Unmarshal(raw, &x); err != nil {
+			return param{}, err
+		}
+		return param{fds, protoreflect.ValueOfFloat64(x)}, nil
+
+	case protoreflect.StringKind:
+		return param{fds, protoreflect.ValueOfString(string(raw))}, nil
+
+	case protoreflect.BytesKind:
+		enc := base64.StdEncoding
+		if bytes.ContainsAny(raw, "-_") {
+			enc = base64.URLEncoding
+		}
+		if len(raw)%4 != 0 {
+			enc = enc.WithPadding(base64.NoPadding)
+		}
+
+		dst := make([]byte, enc.DecodedLen(len(raw)))
+		n, err := enc.Decode(dst, raw)
+		if err != nil {
+			return param{}, err
+		}
+		return param{fds, protoreflect.ValueOfBytes(dst[:n])}, nil
+
+	case protoreflect.EnumKind:
+		var x int32
+		if err := json.Unmarshal(raw, &x); err == nil {
+			return param{fds, protoreflect.ValueOfEnum(protoreflect.EnumNumber(x))}, nil
+		}
+
+		s := string(raw)
+		if isNullValue(fd) && s == "null" {
+			return param{fds, protoreflect.ValueOfEnum(0)}, nil
+		}
+
+		enumVal := fd.Enum().Values().ByName(protoreflect.Name(s))
+		if enumVal == nil {
+			return param{}, fmt.Errorf("unexpected enum %s", raw)
+		}
+		return param{fds, protoreflect.ValueOfEnum(enumVal.Number())}, nil
+
 	default:
-		return nil, fmt.Errorf("handle desc %v", fd)
+		return param{}, fmt.Errorf("unknown param type %s", kind)
+
 	}
-	return &param{fds, val}, nil
 }
 
-func (p *path) match(s, method string) (*method, []*param, error) {
+func isNullValue(fd protoreflect.FieldDescriptor) bool {
+	ed := fd.Enum()
+	return ed != nil && ed.FullName() == "google.protobuf.NullValue"
+}
+
+type params []param
+
+func (ps params) set(m proto.Message) error {
+	for _, p := range ps {
+		cur := m.ProtoReflect()
+		for i, fd := range p.fds {
+			if len(p.fds)-1 == i {
+				cur.Set(fd, p.val)
+				break
+			}
+
+			// TODO: more types?
+			cur = cur.Mutable(fd).Message()
+			// IsList()
+			// IsMap()
+		}
+
+	}
+	return nil
+}
+
+func (m *method) parseQueryParams(values url.Values) (params, error) {
+	msgDesc := m.desc.Input()
+	fieldDescs := msgDesc.Fields()
+
+	var ps params
+	for key, vs := range values {
+		fds := fieldPath(fieldDescs, strings.Split(key, ".")...)
+		if fds == nil {
+			continue
+		}
+
+		for _, v := range vs {
+			p, err := parseParam(fds, []byte(v))
+			if err != nil {
+				return nil, err
+			}
+			ps = append(ps, p)
+		}
+	}
+	return ps, nil
+}
+
+//func (p *path) match(s, method string) (*method, []*param, error) {
+func (p *path) match(s, method string) (*method, params, error) {
 	// /some/request/path VERB
 	// variables can eat multiple
 
 	path := p
-	params := []*param{}
+	var params params = []param{}
 
 	for i := 0; i < len(s); {
 		j := strings.Index(s[i+1:], "/")
