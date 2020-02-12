@@ -35,12 +35,7 @@ type token struct {
 }
 
 func (t token) isEnd() bool {
-	switch t.typ {
-	case tokenError, tokenEOF:
-		return false
-	default:
-		return true
-	}
+	return t.typ == tokenError || t.typ == tokenEOF
 }
 
 type tokens []token
@@ -76,7 +71,7 @@ func typSet(typs ...tokenType) (set uint) {
 }
 
 // collect groups tokens returning the group and the last oddball
-func (l *lexer) collect(allow, ignore []tokenType) (toks []token, tok token) {
+func (l *lexer) collect(allow, ignore []tokenType) (toks tokens, tok token) {
 	allowed := typSet(allow...)
 	ignored := typSet(ignore...)
 	for tok = l.token(); ; tok = l.token() {
@@ -121,12 +116,7 @@ func lexError(l *lexer) token {
 }
 
 func isValue(r rune) bool {
-	switch {
-	case unicode.IsLetter(r), unicode.IsNumber(r), r == '_', r == '-':
-		return true
-	default:
-		return false
-	}
+	return unicode.IsLetter(r) || unicode.IsNumber(r) || r == '_' || r == '-'
 }
 
 func (l *lexer) chain(typOne, typTwo tokenType, next stateFn) token {

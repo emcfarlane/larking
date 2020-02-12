@@ -28,7 +28,6 @@ type Mux struct {
 	path      *path
 }
 
-//func NewMux(fds ...protoreflect.FileDescriptor) (*Mux, error) {
 func NewMux(ccs ...*grpc.ClientConn) (*Mux, error) {
 	m := &Mux{
 		processed: make(map[protoreflect.FullName]bool),
@@ -162,6 +161,7 @@ func (m *Mux) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) e
 				return cc.Invoke(ctx, method, args, reply) // TODO: grpc.ClientOpts
 			}
 
+			//fmt.Println("prule", rule)
 			if err := m.path.parseRule(rule, md, invoke); err != nil {
 				return err
 			}
@@ -185,6 +185,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// TODO: fix the body marshalling
 	argsDesc := method.desc.Input()
 	replyDesc := method.desc.Output()
+	fmt.Printf("\n%s -> %s\n", argsDesc, replyDesc)
 
 	args := dynamicpb.NewMessage(argsDesc)
 	reply := dynamicpb.NewMessage(replyDesc)
@@ -198,12 +199,20 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body.Close()
 
-	// TODO: check if body is apart of the message.
-	if len(body) > 0 {
-		if err := protojson.Unmarshal(body, args); err != nil {
+	if method.hasBody {
+		cur := args.ProtoReflect()
+		for _, fd := range method.body {
+			cur = cur.Mutable(fd).Message()
+		}
+		msg := cur.Interface()
+		fmt.Printf("body %s %T %v\n", body, msg, method.body)
+
+		if err := protojson.Unmarshal(body, msg); err != nil {
+			fmt.Println("here", msg, err)
 			http.Error(w, err.Error(), 500)
 			return
 		}
+
 	}
 
 	queryParams, err := method.parseQueryParams(r.URL.Query())
@@ -213,12 +222,20 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	params = append(params, queryParams...)
 
+	fmt.Println("!!!")
+	for _, p := range params {
+		fmt.Printf("%+v %+v\n", p.fds, p.val)
+	}
+	fmt.Println("!!!")
+
 	if err := params.set(args); err != nil {
+		fmt.Println(err)
 		http.Error(w, err.Error(), 500)
 		return
 	}
 
 	if err := method.invoke(r.Context(), args, reply); err != nil {
+		fmt.Println(err)
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -226,12 +243,14 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	b, err := protojson.Marshal(reply)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
+		fmt.Println(err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := io.Copy(w, bytes.NewReader(b)); err != nil {
 		http.Error(w, err.Error(), 500)
+		fmt.Println(err)
 		return
 	}
 }

@@ -8,10 +8,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"regexp"
+	"sort"
 	"strings"
 
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	_ "google.golang.org/protobuf/types/descriptorpb"
@@ -21,46 +20,54 @@ import (
 	_ "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 )
 
-type Handler struct {
-	path          *path
-	unmarshalOpts protojson.UnmarshalOptions
-	marshalOpts   protojson.MarshalOptions
-}
-
 // getExtensionHTTP
 func getExtensionHTTP(m proto.Message) *annotations.HttpRule {
 	return proto.GetExtension(m, annotations.E_Http).(*annotations.HttpRule)
 }
 
 type variable struct {
-	name string
-	fds  []protoreflect.FieldDescriptor // name.to.field
-	exp  *regexp.Regexp                 // expr/**
+	name string  // path.to.field=segment/*/***
+	toks []token // segment/*/**
 	next *path
 }
 
+type variables []*variable
+
+func (p variables) Len() int           { return len(p) }
+func (p variables) Less(i, j int) bool { return p[i].name < p[j].name }
+func (p variables) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+
 type path struct {
-	segments  map[string]*path     // maps constants to path routes
-	variables map[string]*variable // maps key=vale names to path variables
-	methods   map[string]*method   // maps http methods to grpc methods
+	segments  map[string]*path // maps constants to path routes
+	variables variables        // sorted array of variables
+	//variables map[string]*variable // maps key=vale names to path variables
+	methods map[string]*method // maps http methods to grpc methods
+}
+
+func (p *path) findVariable(name string) (*variable, bool) {
+	for _, v := range p.variables {
+		if v.name == name {
+			return v, true
+		}
+	}
+	return nil, false
 }
 
 func newPath() *path {
 	return &path{
-		segments:  make(map[string]*path),
-		variables: make(map[string]*variable),
-		methods:   make(map[string]*method),
+		segments: make(map[string]*path),
+		//variables: make(map[string]*variable),
+		methods: make(map[string]*method),
 	}
 }
 
 type method struct {
-	desc protoreflect.MethodDescriptor
-	//url      *url.URL // /<service.Service>/<Method>
-	body     []protoreflect.FieldDescriptor
-	bodyStar bool                           // body="*" no params
-	resp     []protoreflect.FieldDescriptor // TODO: this can only be single?
-	//respStar bool                           // body=[""|"*"]
-	invoke invoker
+	desc    protoreflect.MethodDescriptor
+	body    []protoreflect.FieldDescriptor   // body
+	vars    [][]protoreflect.FieldDescriptor // variables on path
+	hasBody bool                             // body="*" or body="field.name" or body="" for no body
+	resp    []protoreflect.FieldDescriptor   // body=[""|"*"]
+	invoke  invoker
 }
 
 func fieldPath(fieldDescs protoreflect.FieldDescriptors, names ...string) []protoreflect.FieldDescriptor {
@@ -124,9 +131,10 @@ func (p *path) parseRule(
 	msgDesc := desc.Input()
 	fieldDescs := msgDesc.Fields()
 	cursor := p // cursor
+	var vars [][]protoreflect.FieldDescriptor
 
 	var t token
-	for t = l.token(); t.isEnd(); t = l.token() {
+	for t = l.token(); !t.isEnd(); t = l.token() {
 		//fmt.Println("token", t)
 
 		switch t.typ {
@@ -150,7 +158,7 @@ func (p *path) parseRule(
 				tokenDot,
 			})
 
-			var vals []token
+			var vals tokens
 			if tokNext.typ == tokenEqual {
 				vals, tokNext = l.collect([]tokenType{
 					tokenSlash,
@@ -166,53 +174,37 @@ func (p *path) parseRule(
 			}
 
 			if tokNext.typ != tokenVariableEnd {
+				// TODO: better error reporting.
 				return fmt.Errorf("unexpected token %+v", tokNext)
 			}
 
-			keyVals := tokens(keys).vals()
-			valVals := tokens(vals).vals()
+			keyVals := keys.vals()
+			valVals := vals.vals()
 			varLookup := strings.Join(keyVals, ".") + "=" +
 				strings.Join(valVals, "")
-
-			v := cursor.variables[varLookup]
-			if v != nil {
-				cursor = v.next
-				break
-			}
 
 			fds := fieldPath(fieldDescs, keyVals...)
 			if fds == nil {
 				return fmt.Errorf("field not found %v", keys)
 			}
 
-			// Some dodgy regexp conversions
-			exp := "^\\/"
-			for _, val := range vals {
-				switch val.typ {
-				case tokenSlash:
-					exp += "\\/"
-				case tokenStar:
-					exp += "[a-zA-Z0-9]+"
-				case tokenStarStar:
-					exp += "[a-zA-Z0-9\\/]+"
-				case tokenValue:
-					exp += val.val
-				default:
-					return fmt.Errorf("regexp unhandled  %v", val)
-				}
+			// TODO: validate tokens.
+			// TODO: field type checking.
+
+			vars = append(vars, fds)
+
+			if v, ok := p.findVariable(varLookup); ok {
+				cursor = v.next
+				continue
 			}
 
-			r, err := regexp.Compile(exp)
-			if err != nil {
-				return err
-			}
-
-			v = &variable{
-				fds:  fds,
-				exp:  r,
+			v := &variable{
+				name: varLookup,
+				toks: vals,
 				next: newPath(),
 			}
-			cursor.variables[varLookup] = v
+			cursor.variables = append(cursor.variables, v)
+			sort.Sort(cursor.variables)
 			cursor = v.next
 		}
 
@@ -223,20 +215,21 @@ func (p *path) parseRule(
 	}
 
 	m := &method{
-		desc: desc,
-		//url:  grpcURL,
+		desc:   desc,
+		vars:   vars,
 		invoke: invoke,
 	}
 	switch rule.Body {
 	case "*":
-		m.bodyStar = true
+		m.hasBody = true
 	case "":
-		m.bodyStar = false
+		m.hasBody = false
 	default:
 		m.body = fieldPath(fieldDescs, strings.Split(rule.Body, ".")...)
 		if m.body == nil {
 			return fmt.Errorf("body field error %v", rule.Body)
 		}
+		m.hasBody = true
 	}
 
 	switch rule.ResponseBody {
@@ -252,7 +245,10 @@ func (p *path) parseRule(
 	fmt.Println("Registered", verb, tmpl)
 
 	for _, addRule := range rule.AdditionalBindings {
-		// TODO: nested value check?
+		if len(addRule.AdditionalBindings) != 0 {
+			return fmt.Errorf("nested rules") // TODO: errors...
+		}
+
 		if err := p.parseRule(addRule, desc, invoke); err != nil {
 			return err
 		}
@@ -264,8 +260,6 @@ func (p *path) parseRule(
 type param struct {
 	fds []protoreflect.FieldDescriptor
 	val protoreflect.Value
-	//val string // raw value
-	//val []byte
 }
 
 func parseParam(fds []protoreflect.FieldDescriptor, raw []byte) (param, error) {
@@ -414,14 +408,66 @@ func (m *method) parseQueryParams(values url.Values) (params, error) {
 	return ps, nil
 }
 
-//func (p *path) match(s, method string) (*method, []*param, error) {
+func (v *variable) index(s string) int {
+	var i int
+	fmt.Println("\tlen(v.toks)", len(v.toks))
+	for _, tok := range v.toks {
+		if i == len(s) {
+			return -1
+		}
+
+		switch tok.typ {
+		case tokenSlash:
+			if !strings.HasPrefix(s[i:], "/") {
+				return -1
+			}
+			i += 1
+			fmt.Println("\ttokenSlash", i)
+
+		case tokenStar:
+			i = strings.Index(s[i:], "/")
+			if i == -1 {
+				i = len(s)
+			}
+			fmt.Println("\ttokenStar", i)
+
+		case tokenStarStar:
+			i = len(s)
+			fmt.Println("\ttokenStarStar", i)
+
+		case tokenValue:
+			if !strings.HasPrefix(s[i:], tok.val) {
+				return -1
+			}
+			i += len(tok.val)
+			fmt.Println("\ttokenValue", i)
+
+		default:
+			panic(":(")
+		}
+	}
+	return i
+}
+
 func (p *path) match(s, method string) (*method, params, error) {
+	fmt.Println("SEARCHING FOR", s)
 	// /some/request/path VERB
 	// variables can eat multiple
 
-	path := p
-	var params params = []param{}
+	// Depth first search preferring path segments over variables.
+	type node struct {
+		i int // segment index
+		//path   *path // path cursor
+		variable *variable //
 
+		captured bool
+	}
+	var stack []node
+	var captures []string
+
+	path := p
+
+searchLoop:
 	for i := 0; i < len(s); {
 		j := strings.Index(s[i+1:], "/")
 		if j == -1 {
@@ -430,49 +476,88 @@ func (p *path) match(s, method string) (*method, params, error) {
 			j += i + 1
 		}
 
-		seg := s[i:j]
-		fmt.Println(seg, path.segments)
-		if nextPath, ok := path.segments[seg]; ok {
+		segment := s[i:j]
+		fmt.Println("------------------")
+		fmt.Println(segment, path.segments)
+
+		// Push path variables to stack.
+		for _, v := range path.variables {
+			stack = append(stack, node{
+				i, v, false,
+			})
+		}
+		//if len(path.variables) != 0 {
+		//	stack = append(stack, node{i, j, path, 0})
+		//}
+
+		if nextPath, ok := path.segments[segment]; ok {
 			path = nextPath
 			i = j
-			fmt.Println("segment", seg)
+			fmt.Println("segment", segment)
+
 			continue
 		}
+		fmt.Println("segment fault", segment, len(stack))
 
-		var matched *variable
-		fmt.Println("vars", path.variables)
-		var k int // greatest length match
-		for _, v := range path.variables {
-			sub := s[i:]
-			loc := v.exp.FindStringIndex(sub)
-			if loc != nil && loc[1] > k {
-				matched = v
-				k = loc[1]
+		for k := len(stack) - 1; k >= 0; k-- {
+			n := stack[k]
+			stack = stack[:k] // pop
+			fmt.Println("len(stack)", len(stack))
+
+			// pop
+			if n.captured {
+				fmt.Println("pop", n.variable.name, captures[len(captures)-1])
+				captures = captures[:len(captures)-1]
+				continue
 			}
 
-		}
-		if matched != nil {
-			path = matched.next
-
-			// capture path param
-			raw := []byte(s[i+1 : i+k]) // TODO...
-			p, err := parseParam(matched.fds, raw)
-			if err != nil {
-				return nil, nil, err
+			i = n.i
+			l := n.variable.index(s[i+1:]) // check
+			if l == -1 {
+				fmt.Println("pop", n.variable.name, "<nil>")
+				continue
 			}
-			params = append(params, p)
+			j = i + l + 1
 
-			i += k
-			continue
+			// method check
+			if j == len(s) {
+				if _, ok := n.variable.next.methods[method]; !ok {
+					fmt.Println("skipping on method", method)
+					continue
+				}
+			}
+
+			// push
+			fmt.Println("indexing", i, j, s, len(s))
+			raw := s[i+1 : j]
+			fmt.Println("push", n.variable.name, raw)
+			n.captured = true
+			captures = append(captures, raw)
+			path = n.variable.next //
+			i = j
+			continue searchLoop
 		}
 
-		return nil, nil, fmt.Errorf("404")
+		return nil, nil, fmt.Errorf("405")
 	}
 
 	m, ok := path.methods[method]
 	if !ok {
 		return nil, nil, fmt.Errorf("405")
 	}
-	fmt.Println("FOUND")
+
+	if len(m.vars) != len(captures) {
+		panic(fmt.Sprintf("wft %d %d", len(m.vars), len(captures)))
+	}
+
+	params := make(params, len(m.vars))
+	for i, fds := range m.vars {
+		p, err := parseParam(fds, []byte(captures[i]))
+		if err != nil {
+			return nil, nil, err
+		}
+		params[i] = p
+	}
+
 	return m, params, nil
 }

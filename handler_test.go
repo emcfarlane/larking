@@ -1,12 +1,16 @@
 package graphpb
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -96,11 +100,42 @@ func TestMessageServer(t *testing.T) {
 			).Return(&testpb.Message{Text: "hello, query params!"}, nil)
 		},
 		statusCode: 200,
+	}, {
+		name: "additional_bindings",
+		req:  httptest.NewRequest(http.MethodGet, "/v1/users/usr_123/messages/msg_123?revision=2", nil),
+		expect: func(t *testing.T, ms *mock_testpb.MockMessagingServer) {
+			ms.EXPECT().GetMessageTwo(
+				gomock.Any(),
+				protoMatches{&testpb.GetMessageRequestTwo{
+					MessageId: "msg_123",
+					Revision:  2,
+					UserId:    "usr_123",
+				}, opts},
+			).Return(&testpb.Message{Text: "hello, additional bindings!"}, nil)
+		},
+		statusCode: 200,
+	}, {
+		name: "patch",
+		req: httptest.NewRequest(http.MethodPatch, "/v1/messages/msg_123", strings.NewReader(
+			`{ "text": "Hi!" }`,
+		)),
+		expect: func(t *testing.T, ms *mock_testpb.MockMessagingServer) {
+			ms.EXPECT().UpdateMessage(
+				gomock.Any(),
+				protoMatches{&testpb.UpdateMessageRequestOne{
+					MessageId: "msg_123",
+					Message: &testpb.Message{
+						Text: "Hi!",
+					},
+				}, opts},
+			).Return(&testpb.Message{Text: "hello, additional bindings!"}, nil)
+		},
+		statusCode: 200,
 	}}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(&mockReporter{T: t})
+			ctrl := gomock.NewController(&mockReporter{T: t, id: getGID()})
 			defer ctrl.Finish()
 
 			ms := mock_testpb.NewMockMessagingServer(ctrl)
@@ -125,15 +160,14 @@ func TestMessageServer(t *testing.T) {
 }
 
 type mockReporter struct {
-	T    *testing.T
-	done bool
+	T  *testing.T
+	id uint64
 }
 
 func (x mockReporter) Helper()                                   { x.T.Helper() }
 func (x mockReporter) Errorf(format string, args ...interface{}) { x.T.Errorf(format, args...) }
 func (x *mockReporter) Fatalf(format string, args ...interface{}) {
-	if !x.done {
-		x.done = true
+	if getGID() != x.id {
 		panic(fmt.Sprintf(format, args...))
 	}
 	x.T.Fatalf(format, args...)
@@ -167,3 +201,13 @@ func (p protoMatches) Matches(x interface{}) bool {
 	return cmp.Diff(p.msg, x, p.opts...) == ""
 }
 func (p protoMatches) String() string { return fmt.Sprint(p.msg) }
+
+// :(
+func getGID() uint64 {
+	b := make([]byte, 64)
+	b = b[:runtime.Stack(b, false)]
+	b = bytes.TrimPrefix(b, []byte("goroutine "))
+	b = b[:bytes.IndexByte(b, ' ')]
+	n, _ := strconv.ParseUint(string(b), 10, 64)
+	return n
+}
