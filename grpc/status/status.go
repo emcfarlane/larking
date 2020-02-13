@@ -34,7 +34,10 @@ import (
 
 	"google.golang.org/protobuf/proto"
 	//"github.com/golang/protobuf/ptypes"
+
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
+
 	//spb "google.golang.org/genproto/googleapis/rpc/status"
 	spb "github.com/afking/graphpb/google.golang.org/genproto/googleapis/rpc/status"
 	//"google.golang.org/grpc/codes"
@@ -189,14 +192,16 @@ func (s *Status) Details() []interface{} {
 	}
 	details := make([]interface{}, 0, len(s.s.Details))
 	for _, any := range s.s.Details {
-		msgType, err := protoreflect.GlobalTypes.FindMessageByURL(any.TypeUrl)
+		msgType, err := protoregistry.GlobalTypes.FindMessageByURL(any.TypeUrl)
 		if err != nil {
-			return nil, err
+			details = append(details, err)
+			continue
 		}
 
-		msg := msgType.New()
-		if err := proto.Unmarshal(any.Value, msgType); err != nil {
-			return nil, err
+		msg := msgType.New().Interface()
+		if err := proto.Unmarshal(any.Value, msg); err != nil {
+			details = append(details, err)
+			continue
 		}
 		details = append(details, msg)
 	}

@@ -22,11 +22,13 @@
 package status
 
 import (
-	any "github.com/golang/protobuf/ptypes/any"
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	//any "github.com/golang/protobuf/ptypes/any"
 	reflect "reflect"
 	sync "sync"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	any "google.golang.org/protobuf/types/known/anypb"
 )
 
 const (
