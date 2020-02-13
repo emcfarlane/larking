@@ -16,27 +16,25 @@
  *
  */
 
-/*
-Modified to support proto v2:
-https://raw.githubusercontent.com/grpc/grpc-go/dfbefc6795cd46d1b52c409c02bcd4230fbf8cfd/reflection/serverreflection.go
-
-Package reflection implements server reflection service.
-
-The service implemented is defined in:
-https://github.com/grpc/grpc/blob/master/src/proto/grpc/reflection/v1alpha/reflection.proto.
-
-To register server reflection on a gRPC server:
-	import "google.golang.org/grpc/reflection"
-
-	s := grpc.NewServer()
-	pb.RegisterYourOwnServer(s, &server{})
-
-	// Register reflection service on gRPC server.
-	reflection.Register(s)
-
-	s.Serve(lis)
-
-*/
+// Modified for ProtobufV2:
+// https://raw.githubusercontent.com/grpc/grpc-go/v1.27.x/reflection/serverreflection.go
+//
+// Package reflection implements server reflection service.
+//
+// The service implemented is defined in:
+// https://github.com/grpc/grpc/blob/master/src/proto/grpc/reflection/v1alpha/reflection.proto.
+//
+// To register server reflection on a gRPC server:
+// 	import "google.golang.org/grpc/reflection"
+//
+// 	s := grpc.NewServer()
+// 	pb.RegisterYourOwnServer(s, &server{})
+//
+// 	// Register reflection service on gRPC server.
+// 	reflection.Register(s)
+//
+// 	s.Serve(lis)
+//
 package reflection
 
 import (

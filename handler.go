@@ -15,8 +15,10 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	_ "google.golang.org/protobuf/types/descriptorpb"
 
+	"github.com/afking/graphpb/grpc/codes"
+	"github.com/afking/graphpb/grpc/status"
+
 	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
-	//_ "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
 	_ "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 )
 
@@ -543,7 +545,7 @@ searchLoop:
 
 	m, ok := path.methods[method]
 	if !ok {
-		return nil, nil, fmt.Errorf("405")
+		return nil, nil, status.Error(codes.NotFound, "method not found")
 	}
 
 	if len(m.vars) != len(captures) {

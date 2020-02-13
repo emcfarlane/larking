@@ -58,6 +58,8 @@ func (r *resolver) FindFileByPath(path string) (protoreflect.FileDescriptor, err
 }
 
 func (r *resolver) FindDescriptorByName(fullname protoreflect.FullName) (protoreflect.Descriptor, error) {
+	// TODO: !!!
+
 	return nil, fmt.Errorf("MISSING %s", fullname)
 }
 
