@@ -97,7 +97,6 @@ func (s *Status) Proto() *spb.Status {
 	if s == nil {
 		return nil
 	}
-	//return s.s.Clone().(*spb.Status)
 	return proto.Clone(s.s).(*spb.Status)
 }
 

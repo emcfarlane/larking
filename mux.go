@@ -21,6 +21,7 @@ import (
 
 	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
 	rpb "github.com/afking/graphpb/grpc/reflection/v1alpha"
+	"github.com/afking/graphpb/grpc/status"
 )
 
 type Mux struct {
@@ -172,15 +173,14 @@ func (m *Mux) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) e
 	return nil
 }
 
-func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	if !strings.HasPrefix(r.URL.Path, "/") {
 		r.URL.Path = "/" + r.URL.Path
 	}
 
 	method, params, err := m.path.match(r.URL.Path, r.Method)
 	if err != nil {
-		http.Error(w, err.Error(), 500) // TODO
-		return
+		return err
 	}
 	fmt.Println("FOUND", r.URL.Path, method, params)
 
@@ -196,8 +196,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
+		return err
 	}
 	r.Body.Close()
 
@@ -210,49 +209,48 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("body %s %T %v\n", body, msg, method.body)
 
 		if err := protojson.Unmarshal(body, msg); err != nil {
-			fmt.Println("here", msg, err)
-			http.Error(w, err.Error(), 500)
-			return
+			return err
 		}
-
 	}
 
 	queryParams, err := method.parseQueryParams(r.URL.Query())
 	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
+		return err
 	}
 	params = append(params, queryParams...)
 
-	fmt.Println("!!!")
-	for _, p := range params {
-		fmt.Printf("%+v %+v\n", p.fds, p.val)
-	}
-	fmt.Println("!!!")
-
 	if err := params.set(args); err != nil {
-		fmt.Println(err)
-		http.Error(w, err.Error(), 500)
-		return
+		return err
 	}
 
 	if err := method.invoke(r.Context(), args, reply); err != nil {
-		fmt.Println(err)
-		http.Error(w, err.Error(), 500)
-		return
+		return err
 	}
 
 	b, err := protojson.Marshal(reply)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
-		fmt.Println(err)
-		return
+		return err
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := io.Copy(w, bytes.NewReader(b)); err != nil {
-		http.Error(w, err.Error(), 500)
-		fmt.Println(err)
-		return
+		return err
+	}
+	return nil
+}
+
+func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if err := m.serveHTTP(w, r); err != nil {
+		// TODO: check accepts json
+
+		s, _ := status.FromError(err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(HTTPStatusCode(s.Code()))
+
+		b, err := protojson.Marshal(s.Proto())
+		if err != nil {
+			panic(err) // ...
+		}
+		w.Write(b)
 	}
 }

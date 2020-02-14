@@ -17,6 +17,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -29,17 +30,50 @@ import (
 func TestMessageServer(t *testing.T) {
 
 	// Create test server.
-	var ts = new(struct{ testpb.MessagingServer }) // override each test
+	//var ts = new(struct{ testpb.MessagingServer }) // override each test
+	ctrl := gomock.NewController(&mockReporter{T: t, id: getGID()})
+	defer ctrl.Finish()
 
+	ms := mock_testpb.NewMockMessagingServer(ctrl)
+
+	overrides := make(map[string]func(context.Context, proto.Message, string) (proto.Message, error))
 	gs := grpc.NewServer(
 		grpc.StreamInterceptor(
 			streamServerTestInterceptor,
 		),
 		grpc.UnaryInterceptor(
-			unaryServerTestInterceptor,
+			//unaryServerTestInterceptor,
+			func(
+				ctx context.Context,
+				req interface{},
+				info *grpc.UnaryServerInfo,
+				handler grpc.UnaryHandler,
+			) (_ interface{}, err error) {
+				defer func() {
+					if r := recover(); r != nil {
+						err = status.Errorf(codes.Internal, "%s", r)
+					}
+				}()
+
+				md, ok := metadata.FromIncomingContext(ctx)
+				if !ok {
+					return handler(ctx, req) // default
+				}
+				ss := md["test"]
+				if len(ss) == 0 {
+					return handler(ctx, req) // default
+				}
+				h, ok := overrides[ss[0]]
+				if !ok {
+					return handler(ctx, req) // default
+				}
+
+				// TODO: reflection assert on handler types.
+				return h(ctx, req.(proto.Message), info.FullMethod)
+			},
 		),
 	)
-	testpb.RegisterMessagingServer(gs, ts)
+	testpb.RegisterMessagingServer(gs, ms)
 	reflection.Register(gs)
 
 	lis, err := net.Listen("tcp", "localhost:0")
@@ -61,57 +95,66 @@ func TestMessageServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	opts := cmp.Options{protocmp.Transform()}
+	type in struct {
+		method string
+		msg    proto.Message
+		// TODO: headers?
+	}
+
+	type out struct {
+		msg proto.Message
+		err error
+		// TODO: trailers?
+	}
 
 	// TODO: compare http.Response output
 	tests := []struct {
-		name   string
-		req    *http.Request
-		expect func(t *testing.T, ms *mock_testpb.MockMessagingServer)
-		//in, out    proto.Message
-		//method     func(arg0, arg1 interface{}) *gomock.Call
-		//err        error
+		name       string
+		req        *http.Request
+		in         in
+		out        out
 		statusCode int
 	}{{
 		name: "first",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/messages/name/hello", nil),
-		expect: func(t *testing.T, ms *mock_testpb.MockMessagingServer) {
-			ms.EXPECT().GetMessageOne(
-				gomock.Any(),
-				protoMatches{&testpb.GetMessageRequestOne{
-					Name: "name/hello",
-				}, opts},
-			).Return(&testpb.Message{Text: "hello, world!"}, nil)
+		in: in{
+			method: "/graphpb.testpb.Messaging/GetMessageOne",
+			msg:    &testpb.GetMessageRequestOne{Name: "name/hello"},
+		},
+		out: out{
+			msg: &testpb.Message{Text: "hello, world!"},
 		},
 		statusCode: 200,
 	}, {
 		name: "sub.subfield",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/messages/123456?revision=2&sub.subfield=foo", nil),
-		expect: func(t *testing.T, ms *mock_testpb.MockMessagingServer) {
-			ms.EXPECT().GetMessageTwo(
-				gomock.Any(),
-				protoMatches{&testpb.GetMessageRequestTwo{
-					MessageId: "123456",
-					Revision:  2,
-					Sub: &testpb.GetMessageRequestTwo_SubMessage{
-						Subfield: "foo",
-					},
-				}, opts},
-			).Return(&testpb.Message{Text: "hello, query params!"}, nil)
+		in: in{
+			method: "/graphpb.testpb.Messaging/GetMessageTwo",
+			msg: &testpb.GetMessageRequestTwo{
+				MessageId: "123456",
+				Revision:  2,
+				Sub: &testpb.GetMessageRequestTwo_SubMessage{
+					Subfield: "foo",
+				},
+			},
+		},
+		out: out{
+			msg: &testpb.Message{Text: "hello, query params!"},
 		},
 		statusCode: 200,
 	}, {
 		name: "additional_bindings",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/users/usr_123/messages/msg_123?revision=2", nil),
-		expect: func(t *testing.T, ms *mock_testpb.MockMessagingServer) {
-			ms.EXPECT().GetMessageTwo(
-				gomock.Any(),
-				protoMatches{&testpb.GetMessageRequestTwo{
-					MessageId: "msg_123",
-					Revision:  2,
-					UserId:    "usr_123",
-				}, opts},
-			).Return(&testpb.Message{Text: "hello, additional bindings!"}, nil)
+		in: in{
+			method: "/graphpb.testpb.Messaging/GetMessageTwo",
+			msg: &testpb.GetMessageRequestTwo{
+				MessageId: "msg_123",
+				Revision:  2,
+				UserId:    "usr_123",
+			},
+		},
+		out: out{
+			msg: &testpb.Message{Text: "hello, additional bindings!"},
 		},
 		statusCode: 200,
 	}, {
@@ -119,31 +162,51 @@ func TestMessageServer(t *testing.T) {
 		req: httptest.NewRequest(http.MethodPatch, "/v1/messages/msg_123", strings.NewReader(
 			`{ "text": "Hi!" }`,
 		)),
-		expect: func(t *testing.T, ms *mock_testpb.MockMessagingServer) {
-			ms.EXPECT().UpdateMessage(
-				gomock.Any(),
-				protoMatches{&testpb.UpdateMessageRequestOne{
-					MessageId: "msg_123",
-					Message: &testpb.Message{
-						Text: "Hi!",
-					},
-				}, opts},
-			).Return(&testpb.Message{Text: "hello, additional bindings!"}, nil)
+		in: in{
+			method: "/graphpb.testpb.Messaging/UpdateMessage",
+			msg: &testpb.UpdateMessageRequestOne{
+				MessageId: "msg_123",
+				Message: &testpb.Message{
+					Text: "Hi!",
+				},
+			},
+		},
+		out: out{
+			msg: &testpb.Message{Text: "hello, additional bindings!"},
 		},
 		statusCode: 200,
+	}, {
+		name:       "404",
+		req:        httptest.NewRequest(http.MethodGet, "/error404", nil),
+		statusCode: 404,
 	}}
+
+	opts := cmp.Options{protocmp.Transform()}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(&mockReporter{T: t, id: getGID()})
-			defer ctrl.Finish()
+			overrides[t.Name()] = func(
+				ctx context.Context, msg proto.Message, method string,
+			) (proto.Message, error) {
+				if method != tt.in.method {
+					return nil, fmt.Errorf("grpc expected %s, got %s", tt.in.method, method)
+				}
 
-			ms := mock_testpb.NewMockMessagingServer(ctrl)
-			ts.MessagingServer = ms
-			tt.expect(t, ms)
+				diff := cmp.Diff(msg, tt.in.msg, opts...)
+				if diff != "" {
+					return nil, fmt.Errorf(diff)
+				}
+				return tt.out.msg, tt.out.err
+			}
+			defer delete(overrides, t.Name())
+
+			// ctx hack
+			ctx := tt.req.Context()
+			ctx = metadata.AppendToOutgoingContext(ctx, "test", t.Name())
+			req := tt.req.WithContext(ctx)
 
 			w := httptest.NewRecorder()
-			h.ServeHTTP(w, tt.req)
+			h.ServeHTTP(w, req)
 			resp := w.Result()
 
 			b, err := ioutil.ReadAll(resp.Body)
@@ -197,10 +260,8 @@ type protoMatches struct {
 	opts []cmp.Option
 }
 
-func (p protoMatches) Matches(x interface{}) bool {
-	return cmp.Diff(p.msg, x, p.opts...) == ""
-}
-func (p protoMatches) String() string { return fmt.Sprint(p.msg) }
+func (p protoMatches) Matches(x interface{}) bool { return cmp.Diff(p.msg, x, p.opts...) == "" }
+func (p protoMatches) String() string             { return fmt.Sprint(p.msg) }
 
 // :(
 func getGID() uint64 {

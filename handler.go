@@ -540,12 +540,12 @@ searchLoop:
 			continue searchLoop
 		}
 
-		return nil, nil, fmt.Errorf("405")
+		return nil, nil, status.Error(codes.NotFound, "not found")
 	}
 
 	m, ok := path.methods[method]
 	if !ok {
-		return nil, nil, status.Error(codes.NotFound, "method not found")
+		return nil, nil, status.Error(codes.NotFound, "not found")
 	}
 
 	if len(m.vars) != len(captures) {
