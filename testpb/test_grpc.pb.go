@@ -4,6 +4,8 @@ package testpb
 
 import (
 	context "context"
+
+	httpbody "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -230,5 +232,154 @@ var _Messaging_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
+	Metadata: "github.com/afking/graphpb/testpb/test.proto",
+}
+
+// FilesClient is the client API for Files service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type FilesClient interface {
+	// HTTP | gRPC
+	// -----|-----
+	// `POST /files/cat.jpg <body>` | `UploadDownload(filename: "cat.jpg", file: {
+	// content_type: "image/jpeg", data: <body>})"`
+	UploadDownload(ctx context.Context, in *UploadFileRequest, opts ...grpc.CallOption) (*httpbody.HttpBody, error)
+	LargeUploadDownload(ctx context.Context, opts ...grpc.CallOption) (Files_LargeUploadDownloadClient, error)
+}
+
+type filesClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewFilesClient(cc *grpc.ClientConn) FilesClient {
+	return &filesClient{cc}
+}
+
+func (c *filesClient) UploadDownload(ctx context.Context, in *UploadFileRequest, opts ...grpc.CallOption) (*httpbody.HttpBody, error) {
+	out := new(httpbody.HttpBody)
+	err := c.cc.Invoke(ctx, "/graphpb.testpb.Files/UploadDownload", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *filesClient) LargeUploadDownload(ctx context.Context, opts ...grpc.CallOption) (Files_LargeUploadDownloadClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Files_serviceDesc.Streams[0], "/graphpb.testpb.Files/LargeUploadDownload", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &filesLargeUploadDownloadClient{stream}
+	return x, nil
+}
+
+type Files_LargeUploadDownloadClient interface {
+	Send(*UploadFileRequest) error
+	Recv() (*httpbody.HttpBody, error)
+	grpc.ClientStream
+}
+
+type filesLargeUploadDownloadClient struct {
+	grpc.ClientStream
+}
+
+func (x *filesLargeUploadDownloadClient) Send(m *UploadFileRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *filesLargeUploadDownloadClient) Recv() (*httpbody.HttpBody, error) {
+	m := new(httpbody.HttpBody)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// FilesServer is the server API for Files service.
+type FilesServer interface {
+	// HTTP | gRPC
+	// -----|-----
+	// `POST /files/cat.jpg <body>` | `UploadDownload(filename: "cat.jpg", file: {
+	// content_type: "image/jpeg", data: <body>})"`
+	UploadDownload(context.Context, *UploadFileRequest) (*httpbody.HttpBody, error)
+	LargeUploadDownload(Files_LargeUploadDownloadServer) error
+}
+
+// UnimplementedFilesServer can be embedded to have forward compatible implementations.
+type UnimplementedFilesServer struct {
+}
+
+func (*UnimplementedFilesServer) UploadDownload(context.Context, *UploadFileRequest) (*httpbody.HttpBody, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UploadDownload not implemented")
+}
+func (*UnimplementedFilesServer) LargeUploadDownload(Files_LargeUploadDownloadServer) error {
+	return status.Errorf(codes.Unimplemented, "method LargeUploadDownload not implemented")
+}
+
+func RegisterFilesServer(s *grpc.Server, srv FilesServer) {
+	s.RegisterService(&_Files_serviceDesc, srv)
+}
+
+func _Files_UploadDownload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UploadFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FilesServer).UploadDownload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/graphpb.testpb.Files/UploadDownload",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FilesServer).UploadDownload(ctx, req.(*UploadFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Files_LargeUploadDownload_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(FilesServer).LargeUploadDownload(&filesLargeUploadDownloadServer{stream})
+}
+
+type Files_LargeUploadDownloadServer interface {
+	Send(*httpbody.HttpBody) error
+	Recv() (*UploadFileRequest, error)
+	grpc.ServerStream
+}
+
+type filesLargeUploadDownloadServer struct {
+	grpc.ServerStream
+}
+
+func (x *filesLargeUploadDownloadServer) Send(m *httpbody.HttpBody) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *filesLargeUploadDownloadServer) Recv() (*UploadFileRequest, error) {
+	m := new(UploadFileRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+var _Files_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "graphpb.testpb.Files",
+	HandlerType: (*FilesServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "UploadDownload",
+			Handler:    _Files_UploadDownload_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "LargeUploadDownload",
+			Handler:       _Files_LargeUploadDownload_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "github.com/afking/graphpb/testpb/test.proto",
 }

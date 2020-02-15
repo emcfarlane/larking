@@ -40,10 +40,9 @@ func (p variables) Less(i, j int) bool { return p[i].name < p[j].name }
 func (p variables) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 type path struct {
-	segments  map[string]*path // maps constants to path routes
-	variables variables        // sorted array of variables
-	//variables map[string]*variable // maps key=vale names to path variables
-	methods map[string]*method // maps http methods to grpc methods
+	segments  map[string]*path   // maps constants to path routes
+	variables variables          // sorted array of variables
+	methods   map[string]*method // maps http methods to grpc methods
 }
 
 func (p *path) findVariable(name string) (*variable, bool) {
@@ -182,8 +181,8 @@ func (p *path) parseRule(
 
 			keyVals := keys.vals()
 			valVals := vals.vals()
-			varLookup := strings.Join(keyVals, ".") + "=" +
-				strings.Join(valVals, "")
+			//varLookup := strings.Join(keyVals, ".") + "=" +
+			varLookup := strings.Join(valVals, "")
 
 			fds := fieldPath(fieldDescs, keyVals...)
 			if fds == nil {
@@ -452,17 +451,14 @@ func (v *variable) index(s string) int {
 }
 
 func (p *path) match(s, method string) (*method, params, error) {
-	fmt.Println("SEARCHING FOR", s)
-	// /some/request/path VERB
-	// variables can eat multiple
 
 	// Depth first search preferring path segments over variables.
+	// Variables split the search tree:
+	//     /path/{variable/*}/to/{end/**} VERB
 	type node struct {
-		i int // segment index
-		//path   *path // path cursor
-		variable *variable //
-
-		captured bool
+		i        int       // segment index
+		variable *variable // variable at index
+		captured bool      // variable matched
 	}
 	var stack []node
 	var captures []string

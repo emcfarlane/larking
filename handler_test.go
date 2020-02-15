@@ -8,12 +8,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
-	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -22,19 +19,16 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
+	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 	"github.com/afking/graphpb/grpc/reflection"
-	"github.com/afking/graphpb/mock_testpb"
 	"github.com/afking/graphpb/testpb"
 )
 
 func TestMessageServer(t *testing.T) {
 
 	// Create test server.
-	//var ts = new(struct{ testpb.MessagingServer }) // override each test
-	ctrl := gomock.NewController(&mockReporter{T: t, id: getGID()})
-	defer ctrl.Finish()
-
-	ms := mock_testpb.NewMockMessagingServer(ctrl)
+	ms := &testpb.UnimplementedMessagingServer{}
+	fs := &testpb.UnimplementedFilesServer{}
 
 	overrides := make(map[string]func(context.Context, proto.Message, string) (proto.Message, error))
 	gs := grpc.NewServer(
@@ -48,13 +42,7 @@ func TestMessageServer(t *testing.T) {
 				req interface{},
 				info *grpc.UnaryServerInfo,
 				handler grpc.UnaryHandler,
-			) (_ interface{}, err error) {
-				defer func() {
-					if r := recover(); r != nil {
-						err = status.Errorf(codes.Internal, "%s", r)
-					}
-				}()
-
+			) (interface{}, error) {
 				md, ok := metadata.FromIncomingContext(ctx)
 				if !ok {
 					return handler(ctx, req) // default
@@ -74,6 +62,7 @@ func TestMessageServer(t *testing.T) {
 		),
 	)
 	testpb.RegisterMessagingServer(gs, ms)
+	testpb.RegisterFilesServer(gs, fs)
 	reflection.Register(gs)
 
 	lis, err := net.Listen("tcp", "localhost:0")
@@ -107,13 +96,19 @@ func TestMessageServer(t *testing.T) {
 		// TODO: trailers?
 	}
 
+	type want struct {
+		statusCode int
+		body       []byte
+		// TODO: headers
+	}
+
 	// TODO: compare http.Response output
 	tests := []struct {
-		name       string
-		req        *http.Request
-		in         in
-		out        out
-		statusCode int
+		name string
+		req  *http.Request
+		in   in
+		out  out
+		want want
 	}{{
 		name: "first",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/messages/name/hello", nil),
@@ -124,7 +119,10 @@ func TestMessageServer(t *testing.T) {
 		out: out{
 			msg: &testpb.Message{Text: "hello, world!"},
 		},
-		statusCode: 200,
+		want: want{
+			statusCode: 200,
+			body:       []byte(`{"text":"hello, world!"}`),
+		},
 	}, {
 		name: "sub.subfield",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/messages/123456?revision=2&sub.subfield=foo", nil),
@@ -141,7 +139,10 @@ func TestMessageServer(t *testing.T) {
 		out: out{
 			msg: &testpb.Message{Text: "hello, query params!"},
 		},
-		statusCode: 200,
+		want: want{
+			statusCode: 200,
+			body:       []byte(`{"text":"hello, query params!"}`),
+		},
 	}, {
 		name: "additional_bindings",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/users/usr_123/messages/msg_123?revision=2", nil),
@@ -156,7 +157,10 @@ func TestMessageServer(t *testing.T) {
 		out: out{
 			msg: &testpb.Message{Text: "hello, additional bindings!"},
 		},
-		statusCode: 200,
+		want: want{
+			statusCode: 200,
+			body:       []byte(`{"text":"hello, additional bindings!"}`),
+		},
 	}, {
 		name: "patch",
 		req: httptest.NewRequest(http.MethodPatch, "/v1/messages/msg_123", strings.NewReader(
@@ -172,13 +176,49 @@ func TestMessageServer(t *testing.T) {
 			},
 		},
 		out: out{
-			msg: &testpb.Message{Text: "hello, additional bindings!"},
+			msg: &testpb.Message{Text: "hello, patch!"},
 		},
-		statusCode: 200,
+		want: want{
+			statusCode: 200,
+			body:       []byte(`{"text":"hello, patch!"}`),
+		},
 	}, {
-		name:       "404",
-		req:        httptest.NewRequest(http.MethodGet, "/error404", nil),
-		statusCode: 404,
+		name: "404",
+		req:  httptest.NewRequest(http.MethodGet, "/error404", nil),
+		want: want{
+			statusCode: 404,
+			body:       []byte(`{"code":5, "message":"not found"}`),
+		},
+	}, {
+		name: "cat.jpg",
+		req: func() *http.Request {
+			r := httptest.NewRequest(
+				http.MethodPost, "/files/cat.jpg",
+				strings.NewReader("cat"),
+			)
+			r.Header.Set("Content-Type", "image/jpeg")
+			return r
+		}(),
+		in: in{
+			method: "/graphpb.testpb.Files/UploadDownload",
+			msg: &testpb.UploadFileRequest{
+				Filename: "cat.jpg",
+				File: &httpbody.HttpBody{
+					ContentType: "image/jpeg",
+					Data:        []byte("cat"),
+				},
+			},
+		},
+		out: out{
+			msg: &httpbody.HttpBody{
+				ContentType: "image/jpeg",
+				Data:        []byte("cat"),
+			},
+		},
+		want: want{
+			statusCode: 200,
+			body:       []byte("cat"),
+		},
 	}}
 
 	opts := cmp.Options{protocmp.Transform()}
@@ -214,26 +254,15 @@ func TestMessageServer(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if tt.statusCode != resp.StatusCode {
-				t.Errorf("expected %d got %d", tt.statusCode, resp.StatusCode)
-				t.Fatal(string(b))
+			if sc := tt.want.statusCode; sc != resp.StatusCode {
+				t.Errorf("expected %d got %d", tt.want.statusCode, resp.StatusCode)
+			}
+
+			if !bytes.Equal(b, tt.want.body) {
+				t.Errorf("body %s != %s", b, tt.want.body)
 			}
 		})
 	}
-}
-
-type mockReporter struct {
-	T  *testing.T
-	id uint64
-}
-
-func (x mockReporter) Helper()                                   { x.T.Helper() }
-func (x mockReporter) Errorf(format string, args ...interface{}) { x.T.Errorf(format, args...) }
-func (x *mockReporter) Fatalf(format string, args ...interface{}) {
-	if getGID() != x.id {
-		panic(fmt.Sprintf(format, args...))
-	}
-	x.T.Fatalf(format, args...)
 }
 
 func unaryServerTestInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (_ interface{}, err error) {
@@ -253,22 +282,4 @@ func streamServerTestInterceptor(srv interface{}, stream grpc.ServerStream, info
 		}
 	}()
 	return handler(srv, stream)
-}
-
-type protoMatches struct {
-	msg  proto.Message
-	opts []cmp.Option
-}
-
-func (p protoMatches) Matches(x interface{}) bool { return cmp.Diff(p.msg, x, p.opts...) == "" }
-func (p protoMatches) String() string             { return fmt.Sprint(p.msg) }
-
-// :(
-func getGID() uint64 {
-	b := make([]byte, 64)
-	b = b[:runtime.Stack(b, false)]
-	b = bytes.TrimPrefix(b, []byte("goroutine "))
-	b = b[:bytes.IndexByte(b, ' ')]
-	n, _ := strconv.ParseUint(string(b), 10, 64)
-	return n
 }

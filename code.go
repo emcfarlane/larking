@@ -32,5 +32,3 @@ func HTTPStatusCode(c codes.Code) int {
 	}
 	return codeToHTTPStatus[c]
 }
-
-//func Error(c code.Code, msg string) status.Status

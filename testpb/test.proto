@@ -3,6 +3,7 @@ syntax = "proto3";
 package graphpb.testpb;
 
 import "google/api/annotations.proto";
+import "google/api/httpbody.proto";
 
 option go_package = "github.com/afking/graphpb/testpb;testpb";
 
@@ -70,4 +71,28 @@ message GetMessageRequestTwo {
 message UpdateMessageRequestOne {
   string message_id = 1; // Mapped to the URL
   Message message = 2;   // Mapped to the body
+}
+
+service Files {
+  // HTTP | gRPC
+  // -----|-----
+  // `POST /files/cat.jpg <body>` | `UploadDownload(filename: "cat.jpg", file: {
+  // content_type: "image/jpeg", data: <body>})"`
+  rpc UploadDownload(UploadFileRequest) returns (google.api.HttpBody) {
+    option (google.api.http) = {
+      post : "/files/{filename}"
+      body : "file"
+    };
+  }
+  rpc LargeUploadDownload(stream UploadFileRequest)
+      returns (stream google.api.HttpBody) {
+    option (google.api.http) = {
+      post : "/files/large/{filename}"
+      body : "file"
+    };
+  }
+}
+message UploadFileRequest {
+  string filename = 1;
+  google.api.HttpBody file = 2;
 }
