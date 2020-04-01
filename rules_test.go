@@ -12,12 +12,13 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	//"google.golang.org/genproto/googleapis/api/httpbody" // TODO
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 	"github.com/afking/graphpb/grpc/reflection"
@@ -29,14 +30,21 @@ func TestMessageServer(t *testing.T) {
 	// Create test server.
 	ms := &testpb.UnimplementedMessagingServer{}
 	fs := &testpb.UnimplementedFilesServer{}
+	js := &testpb.UnimplementedWellKnownServer{}
 
 	overrides := make(map[string]func(context.Context, proto.Message, string) (proto.Message, error))
 	gs := grpc.NewServer(
 		grpc.StreamInterceptor(
-			streamServerTestInterceptor,
+			func(
+				srv interface{},
+				stream grpc.ServerStream,
+				info *grpc.StreamServerInfo,
+				handler grpc.StreamHandler,
+			) (err error) {
+				return handler(srv, stream)
+			},
 		),
 		grpc.UnaryInterceptor(
-			//unaryServerTestInterceptor,
 			func(
 				ctx context.Context,
 				req interface{},
@@ -63,6 +71,7 @@ func TestMessageServer(t *testing.T) {
 	)
 	testpb.RegisterMessagingServer(gs, ms)
 	testpb.RegisterFilesServer(gs, fs)
+	testpb.RegisterWellKnownServer(gs, js)
 	reflection.Register(gs)
 
 	lis, err := net.Listen("tcp", "localhost:0")
@@ -187,7 +196,7 @@ func TestMessageServer(t *testing.T) {
 		req:  httptest.NewRequest(http.MethodGet, "/error404", nil),
 		want: want{
 			statusCode: 404,
-			body:       []byte(`{"code":5, "message":"not found"}`),
+			body:       []byte(`{"code":5,"message":"not found"}`),
 		},
 	}, {
 		name: "cat.jpg",
@@ -218,6 +227,27 @@ func TestMessageServer(t *testing.T) {
 		want: want{
 			statusCode: 200,
 			body:       []byte("cat"),
+		},
+	}, {
+		name: "wellknown_timestamp",
+		req:  httptest.NewRequest(http.MethodGet, "/v1/wellknown/timestamp/2017-01-15T01:30:15.01Z", nil),
+		in: in{
+			method: "/v1/wellknown/timestamp/2017-01-15T01:30:15.01Z",
+			msg: &testpb.Scalars{
+				KnownType: &testpb.Scalars_Timestamp{
+					Timestamp: &timestamppb.Timestamp{
+						Seconds: 100,
+						Nanos:   9,
+					},
+				},
+			},
+		},
+		out: out{
+			msg: &emptypb.Empty{},
+		},
+		want: want{
+			statusCode: 200,
+			body:       []byte(`{}`),
 		},
 	}}
 
@@ -263,23 +293,4 @@ func TestMessageServer(t *testing.T) {
 			}
 		})
 	}
-}
-
-func unaryServerTestInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (_ interface{}, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = status.Errorf(codes.Internal, "%s", r)
-		}
-	}()
-	return handler(ctx, req)
-}
-
-// StreamServerInterceptor returns a new streaming server interceptor for panic recovery.
-func streamServerTestInterceptor(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = status.Errorf(codes.Internal, "%s", r)
-		}
-	}()
-	return handler(srv, stream)
 }

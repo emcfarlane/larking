@@ -4,6 +4,10 @@ package graphpb.testpb;
 
 import "google/api/annotations.proto";
 import "google/api/httpbody.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+// import "google/protobuf/field_mask.proto";
+import "google/protobuf/empty.proto";
 
 option go_package = "github.com/afking/graphpb/testpb;testpb";
 
@@ -95,4 +99,26 @@ service Files {
 message UploadFileRequest {
   string filename = 1;
   google.api.HttpBody file = 2;
+}
+
+// Valid a-z A-Z 0-9 . - _ ~ ! $ & ' ( ) * + , ; = : @
+service WellKnown {
+  // HTTP | gRPC
+  // -----|-----
+  // `GET /v1/wellknown/timestamp/2017-01-15T01:30:15.01Z` |
+  // `Check(Timestamp{...})`
+  rpc Check(Scalars) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      get : "/v1/wellknown/timestamp/{timestamp}"
+      additional_bindings {get : "/v1/wellknown/duration/{duration}"}
+    };
+  }
+}
+
+message Scalars {
+  oneof known_type {
+    google.protobuf.Timestamp timestamp = 1;
+    google.protobuf.Duration duration = 2;
+  }
+  // google.protobuf.FieldMask mask = 9; // TODO
 }

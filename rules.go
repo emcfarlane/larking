@@ -15,11 +15,10 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	_ "google.golang.org/protobuf/types/descriptorpb"
 
-	"github.com/afking/graphpb/grpc/codes"
-	"github.com/afking/graphpb/grpc/status"
-
 	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
 	_ "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
+	"github.com/afking/graphpb/grpc/codes"
+	"github.com/afking/graphpb/grpc/status"
 )
 
 // getExtensionHTTP
@@ -124,7 +123,7 @@ func (p *path) parseRule(
 		return fmt.Errorf("unsupported pattern %v", v)
 	}
 
-	l := &lexer{
+	l := lexer{
 		state: lexSegment,
 		input: tmpl,
 	}
@@ -257,6 +256,47 @@ func (p *path) parseRule(
 
 	return nil
 }
+
+type protoFile int
+
+const (
+	unknown protoFile = iota
+	anyProto
+	timestampProto
+	durationProto
+	wrappersProto
+	structProto
+	fieldMaskProto
+	emptyProto
+)
+
+var wellKnownJSONScalarTypes = map[protoreflect.FullName]protoFile{
+	//"google.protobuf.Any":         anyProto,
+	"google.protobuf.Timestamp":   timestampProto,
+	"google.protobuf.Duration":    durationProto,
+	"google.protobuf.BoolValue":   wrappersProto,
+	"google.protobuf.Int32Value":  wrappersProto,
+	"google.protobuf.Int64Value":  wrappersProto,
+	"google.protobuf.UInt32Value": wrappersProto,
+	"google.protobuf.UInt64Value": wrappersProto,
+	"google.protobuf.FloatValue":  wrappersProto,
+	"google.protobuf.DoubleValue": wrappersProto,
+	"google.protobuf.BytesValue":  wrappersProto,
+	"google.protobuf.StringValue": wrappersProto,
+	//"google.protobuf.Struct":      structProto,
+	//"google.protobuf.ListValue":   structProto,
+	"google.protobuf.Value":     structProto,
+	"google.protobuf.FieldMask": fieldMaskProto, // Query values
+	//"google.protobuf.Empty":       emptyProto,
+}
+
+// wellKnownType exports known types for json decoding
+// https://github.com/protocolbuffers/protobuf-go/blob/d037755d51bc456237589295f966da868ee6dd35/internal/detectknown/detect.go
+func wellKnownType(s protoreflect.FullName) protoFile {
+	return wellKnownJSONScalarTypes[s]
+}
+
+// TODO: implement well known type parsing
 
 type param struct {
 	fds []protoreflect.FieldDescriptor

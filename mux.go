@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -20,8 +19,8 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 
-	_ "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
-	_ "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
+	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
+	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 	rpb "github.com/afking/graphpb/grpc/reflection/v1alpha"
 	"github.com/afking/graphpb/grpc/status"
 )
@@ -47,31 +46,77 @@ func NewMux(ccs ...*grpc.ClientConn) (*Mux, error) {
 
 // resolver implements protodesc.Resolver.
 type resolver struct {
+	files  protoregistry.Files
 	stream rpb.ServerReflection_ServerReflectionInfoClient
 }
 
-var isStdFileDescriptor = map[string]bool{
-	"google/api/annotations.proto": true,
-	"google/api/httpbody.proto":    true,
+//var isStdFileDescriptor = map[string]bool{
+//	"google/api/annotations.proto": true,
+//	"google/api/httpbody.proto":    true,
+//}
+
+func newResolver(stream rpb.ServerReflection_ServerReflectionInfoClient) (*resolver, error) {
+	r := &resolver{stream: stream}
+
+	if err := r.files.RegisterFile(annotations.File_google_api_annotations_proto); err != nil {
+		return nil, err
+	}
+	if err := r.files.RegisterFile(annotations.File_google_api_http_proto); err != nil {
+		return nil, err
+	}
+	if err := r.files.RegisterFile(httpbody.File_google_api_httpbody_proto); err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 func (r *resolver) FindFileByPath(path string) (protoreflect.FileDescriptor, error) {
-	// Standard library? Might not be safe to load locally.
-	if isStdFileDescriptor[path] {
-		return protoregistry.GlobalFiles.FindFileByPath(path)
+	if fd, err := r.files.FindFileByPath(path); err == nil {
+		return fd, nil // found file
 	}
 
-	// TODO: load remote fds recursively.
-	return nil, fmt.Errorf("MISSING PATH %s", path)
+	// TODO: locking?
+	if err := r.stream.Send(&rpb.ServerReflectionRequest{
+		MessageRequest: &rpb.ServerReflectionRequest_FileByFilename{
+			FileByFilename: path,
+		},
+	}); err != nil {
+		return nil, err
+	}
+
+	fdr, err := r.stream.Recv()
+	if err != nil {
+		return nil, err
+	}
+	fdbs := fdr.GetFileDescriptorResponse().GetFileDescriptorProto()
+
+	var f protoreflect.FileDescriptor
+	for _, fdb := range fdbs {
+		fdp := &descriptorpb.FileDescriptorProto{}
+		if err := proto.Unmarshal(fdb, fdp); err != nil {
+			return nil, err
+		}
+
+		file, err := protodesc.NewFile(fdp, r)
+		if err != nil {
+			return nil, err
+		}
+		// TODO: check duplicate file registry
+		if err := r.files.RegisterFile(file); err != nil {
+			return nil, err
+		}
+		if file.Path() == path {
+			f = file
+		}
+	}
+	if f == nil {
+		return nil, fmt.Errorf("missing file descriptor %s", path)
+	}
+	return f, nil
 }
 
 func (r *resolver) FindDescriptorByName(fullname protoreflect.FullName) (protoreflect.Descriptor, error) {
-	// TODO: is it safe to load all locally?
-	desc, err := protoregistry.GlobalFiles.FindDescriptorByName(fullname)
-	if err == nil {
-		return desc, nil
-	}
-	return nil, fmt.Errorf("MISSING NAME %s %v", fullname, err)
+	return r.files.FindDescriptorByName(fullname)
 }
 
 func (m *Mux) createHandler(cc *grpc.ClientConn) error {
@@ -98,7 +143,7 @@ func (m *Mux) createHandler(cc *grpc.ClientConn) error {
 	}
 	// TODO: check r.GetErrorResponse()?
 
-	fdbs := make(map[uint32][]byte)
+	fds := make(map[string]*descriptorpb.FileDescriptorProto)
 	for _, svc := range r.GetListServicesResponse().GetService() {
 		fmt.Println("GOT SERVICES!", svc)
 		if err := stream.Send(&rpb.ServerReflectionRequest{
@@ -115,34 +160,28 @@ func (m *Mux) createHandler(cc *grpc.ClientConn) error {
 		}
 
 		fdbb := fdr.GetFileDescriptorResponse().GetFileDescriptorProto()
+
 		for _, fdb := range fdbb {
-			//fmt.Println("GOT FD", string(fdb))
-			h := fnv.New32a()
-			h.Write(fdb)
-			fdbs[h.Sum32()] = fdb
+			fd := &descriptorpb.FileDescriptorProto{}
+			if err := proto.Unmarshal(fdb, fd); err != nil {
+				return err
+			}
+			fds[fd.GetName()] = fd
 		}
 	}
 
-	// Unmarshal file descriptors.
-	fds := make(map[string]*descriptorpb.FileDescriptorProto)
-	for _, b := range fdbs {
-		fd := &descriptorpb.FileDescriptorProto{}
-
-		if err := proto.Unmarshal(b, fd); err != nil {
-			return err
-		}
-		fds[fd.GetName()] = fd
+	rslvr, err := newResolver(stream)
+	if err != nil {
+		return err
 	}
-
-	rslvr := &resolver{stream}
 
 	for _, fd := range fds {
-		fd, err := protodesc.NewFile(fd, rslvr)
+		file, err := protodesc.NewFile(fd, rslvr)
 		if err != nil {
 			return err
 		}
 
-		if err := m.processFile(cc, fd); err != nil {
+		if err := m.processFile(cc, file); err != nil {
 			return err
 		}
 	}
@@ -277,6 +316,10 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	accept := r.Header.Get("Accept")
 	acceptEncoding := r.Header.Get("Accept-Encoding")
 
+	if fRsp, ok := w.(http.Flusher); ok {
+		defer fRsp.Flush()
+	}
+
 	var resp io.Writer
 	switch acceptEncoding {
 	case "gzip":
@@ -324,9 +367,6 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	if fRsp, ok := w.(http.Flusher); ok {
-		fRsp.Flush()
-	}
 	return nil
 }
 

@@ -6,7 +6,7 @@ import (
 	"github.com/afking/graphpb/grpc/codes"
 )
 
-var codeToHTTPStatus = []int{
+var codeToHTTPStatus = [...]int{
 	http.StatusOK,                  // 0
 	http.StatusRequestTimeout,      // 1
 	http.StatusInternalServerError, // 2

@@ -5,10 +5,12 @@ package testpb
 import (
 	context "context"
 
-	httpbody "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 	grpc "google.golang.org/grpc"
-	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
+	codes "github.com/afking/graphpb/grpc/codes"
+	status "github.com/afking/graphpb/grpc/status"
+
+	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -381,5 +383,85 @@ var _Files_serviceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
+	Metadata: "github.com/afking/graphpb/testpb/test.proto",
+}
+
+// WellKnownClient is the client API for WellKnown service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type WellKnownClient interface {
+	// HTTP | gRPC
+	// -----|-----
+	// `GET /v1/wellknown/timestamp/2017-01-15T01:30:15.01Z` |
+	// `Check(Timestamp{...})`
+	Check(ctx context.Context, in *Scalars, opts ...grpc.CallOption) (*empty.Empty, error)
+}
+
+type wellKnownClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewWellKnownClient(cc *grpc.ClientConn) WellKnownClient {
+	return &wellKnownClient{cc}
+}
+
+func (c *wellKnownClient) Check(ctx context.Context, in *Scalars, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/graphpb.testpb.WellKnown/Check", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// WellKnownServer is the server API for WellKnown service.
+type WellKnownServer interface {
+	// HTTP | gRPC
+	// -----|-----
+	// `GET /v1/wellknown/timestamp/2017-01-15T01:30:15.01Z` |
+	// `Check(Timestamp{...})`
+	Check(context.Context, *Scalars) (*empty.Empty, error)
+}
+
+// UnimplementedWellKnownServer can be embedded to have forward compatible implementations.
+type UnimplementedWellKnownServer struct {
+}
+
+func (*UnimplementedWellKnownServer) Check(context.Context, *Scalars) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Check not implemented")
+}
+
+func RegisterWellKnownServer(s *grpc.Server, srv WellKnownServer) {
+	s.RegisterService(&_WellKnown_serviceDesc, srv)
+}
+
+func _WellKnown_Check_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Scalars)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WellKnownServer).Check(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/graphpb.testpb.WellKnown/Check",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WellKnownServer).Check(ctx, req.(*Scalars))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _WellKnown_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "graphpb.testpb.WellKnown",
+	HandlerType: (*WellKnownServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Check",
+			Handler:    _WellKnown_Check_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "github.com/afking/graphpb/testpb/test.proto",
 }
