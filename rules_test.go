@@ -15,12 +15,16 @@ import (
 	//"google.golang.org/genproto/googleapis/api/httpbody" // TODO
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
+	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/rpc/status"
 	"github.com/afking/graphpb/grpc/reflection"
 	"github.com/afking/graphpb/testpb"
 )
@@ -107,7 +111,8 @@ func TestMessageServer(t *testing.T) {
 
 	type want struct {
 		statusCode int
-		body       []byte
+		body       []byte        // either
+		msg        proto.Message // or
 		// TODO: headers
 	}
 
@@ -130,7 +135,7 @@ func TestMessageServer(t *testing.T) {
 		},
 		want: want{
 			statusCode: 200,
-			body:       []byte(`{"text":"hello, world!"}`),
+			msg:        &testpb.Message{Text: "hello, world!"},
 		},
 	}, {
 		name: "sub.subfield",
@@ -150,7 +155,7 @@ func TestMessageServer(t *testing.T) {
 		},
 		want: want{
 			statusCode: 200,
-			body:       []byte(`{"text":"hello, query params!"}`),
+			msg:        &testpb.Message{Text: "hello, query params!"},
 		},
 	}, {
 		name: "additional_bindings",
@@ -168,7 +173,7 @@ func TestMessageServer(t *testing.T) {
 		},
 		want: want{
 			statusCode: 200,
-			body:       []byte(`{"text":"hello, additional bindings!"}`),
+			msg:        &testpb.Message{Text: "hello, additional bindings!"},
 		},
 	}, {
 		name: "patch",
@@ -189,14 +194,14 @@ func TestMessageServer(t *testing.T) {
 		},
 		want: want{
 			statusCode: 200,
-			body:       []byte(`{"text":"hello, patch!"}`),
+			msg:        &testpb.Message{Text: "hello, patch!"},
 		},
 	}, {
 		name: "404",
 		req:  httptest.NewRequest(http.MethodGet, "/error404", nil),
 		want: want{
 			statusCode: 404,
-			body:       []byte(`{"code":5,"message":"not found"}`),
+			msg:        &status.Status{Code: 5, Message: "not found"},
 		},
 	}, {
 		name: "cat.jpg",
@@ -229,17 +234,44 @@ func TestMessageServer(t *testing.T) {
 			body:       []byte("cat"),
 		},
 	}, {
-		name: "wellknown_timestamp",
-		req:  httptest.NewRequest(http.MethodGet, "/v1/wellknown/timestamp/2017-01-15T01:30:15.01Z", nil),
+		name: "wellknown_scalars",
+		req: httptest.NewRequest(
+			http.MethodGet,
+			"/v1/wellknown?"+
+				"timestamp=\"2017-01-15T01:30:15.01Z\"&"+
+				"duration=\"3.000001s\"&"+
+				"bool_value=true&"+
+				"int32_value=1&"+
+				"int64_value=2&"+
+				"uint32_value=3&"+
+				"uint64_value=4&"+
+				"float_value=5.5&"+
+				"double_value=6.6&"+
+				"bytes_value=aGVsbG8&"+ // base64URL
+				"string_value=hello",
+			//"fieldmask=\"user.displayName,photo\"&"+
+			nil,
+		),
 		in: in{
-			method: "/v1/wellknown/timestamp/2017-01-15T01:30:15.01Z",
+			method: "/graphpb.testpb.WellKnown/Check",
 			msg: &testpb.Scalars{
-				KnownType: &testpb.Scalars_Timestamp{
-					Timestamp: &timestamppb.Timestamp{
-						Seconds: 100,
-						Nanos:   9,
-					},
+				Timestamp: &timestamppb.Timestamp{
+					Seconds: 1484443815,
+					Nanos:   10000000,
 				},
+				Duration: &durationpb.Duration{
+					Seconds: 3,
+					Nanos:   1000,
+				},
+				BoolValue:   &wrapperspb.BoolValue{Value: true},
+				Int32Value:  &wrapperspb.Int32Value{Value: 1},
+				Int64Value:  &wrapperspb.Int64Value{Value: 2},
+				Uint32Value: &wrapperspb.UInt32Value{Value: 3},
+				Uint64Value: &wrapperspb.UInt64Value{Value: 4},
+				FloatValue:  &wrapperspb.FloatValue{Value: 5.5},
+				DoubleValue: &wrapperspb.DoubleValue{Value: 6.6},
+				BytesValue:  &wrapperspb.BytesValue{Value: []byte("hello")},
+				StringValue: &wrapperspb.StringValue{Value: "hello"},
 			},
 		},
 		out: out{
@@ -247,7 +279,7 @@ func TestMessageServer(t *testing.T) {
 		},
 		want: want{
 			statusCode: 200,
-			body:       []byte(`{}`),
+			msg:        &emptypb.Empty{},
 		},
 	}}
 
@@ -286,10 +318,33 @@ func TestMessageServer(t *testing.T) {
 
 			if sc := tt.want.statusCode; sc != resp.StatusCode {
 				t.Errorf("expected %d got %d", tt.want.statusCode, resp.StatusCode)
+				var msg status.Status
+				if err := protojson.Unmarshal(b, &msg); err != nil {
+					t.Error(err, string(b))
+					return
+				}
+				t.Error("status.code", msg.Code)
+				t.Error("status.message", msg.Message)
+				return
 			}
 
-			if !bytes.Equal(b, tt.want.body) {
-				t.Errorf("body %s != %s", b, tt.want.body)
+			if tt.want.body != nil {
+				if !bytes.Equal(b, tt.want.body) {
+					t.Errorf("body %s != %s", tt.want.body, b)
+				}
+			}
+
+			if tt.want.msg != nil {
+				msg := proto.Clone(tt.want.msg)
+				if err := protojson.Unmarshal(b, msg); err != nil {
+					t.Error(err, string(b))
+					return
+				}
+
+				diff := cmp.Diff(msg, tt.want.msg, opts...)
+				if diff != "" {
+					t.Error(diff)
+				}
 			}
 		})
 	}

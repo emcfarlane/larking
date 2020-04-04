@@ -9,11 +9,16 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	_ "google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
 	_ "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
@@ -56,8 +61,7 @@ func (p *path) findVariable(name string) (*variable, bool) {
 func newPath() *path {
 	return &path{
 		segments: make(map[string]*path),
-		//variables: make(map[string]*variable),
-		methods: make(map[string]*method),
+		methods:  make(map[string]*method),
 	}
 }
 
@@ -257,47 +261,6 @@ func (p *path) parseRule(
 	return nil
 }
 
-type protoFile int
-
-const (
-	unknown protoFile = iota
-	anyProto
-	timestampProto
-	durationProto
-	wrappersProto
-	structProto
-	fieldMaskProto
-	emptyProto
-)
-
-var wellKnownJSONScalarTypes = map[protoreflect.FullName]protoFile{
-	//"google.protobuf.Any":         anyProto,
-	"google.protobuf.Timestamp":   timestampProto,
-	"google.protobuf.Duration":    durationProto,
-	"google.protobuf.BoolValue":   wrappersProto,
-	"google.protobuf.Int32Value":  wrappersProto,
-	"google.protobuf.Int64Value":  wrappersProto,
-	"google.protobuf.UInt32Value": wrappersProto,
-	"google.protobuf.UInt64Value": wrappersProto,
-	"google.protobuf.FloatValue":  wrappersProto,
-	"google.protobuf.DoubleValue": wrappersProto,
-	"google.protobuf.BytesValue":  wrappersProto,
-	"google.protobuf.StringValue": wrappersProto,
-	//"google.protobuf.Struct":      structProto,
-	//"google.protobuf.ListValue":   structProto,
-	"google.protobuf.Value":     structProto,
-	"google.protobuf.FieldMask": fieldMaskProto, // Query values
-	//"google.protobuf.Empty":       emptyProto,
-}
-
-// wellKnownType exports known types for json decoding
-// https://github.com/protocolbuffers/protobuf-go/blob/d037755d51bc456237589295f966da868ee6dd35/internal/detectknown/detect.go
-func wellKnownType(s protoreflect.FullName) protoFile {
-	return wellKnownJSONScalarTypes[s]
-}
-
-// TODO: implement well known type parsing
-
 type param struct {
 	fds []protoreflect.FieldDescriptor
 	val protoreflect.Value
@@ -395,6 +358,93 @@ func parseParam(fds []protoreflect.FieldDescriptor, raw []byte) (param, error) {
 		}
 		return param{fds, protoreflect.ValueOfEnum(enumVal.Number())}, nil
 
+	case protoreflect.MessageKind:
+		// Well known JSON scalars are decoded to message types.
+		md := fd.Message()
+		switch md.FullName() {
+		case "google.protobuf.Timestamp":
+			var msg timestamppb.Timestamp
+			if err := protojson.Unmarshal(raw, &msg); err != nil {
+				return param{}, err
+			}
+			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+		case "google.protobuf.Duration":
+			var msg durationpb.Duration
+			if err := protojson.Unmarshal(raw, &msg); err != nil {
+				return param{}, err
+			}
+			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+		case "google.protobuf.BoolValue":
+			var msg wrapperspb.BoolValue
+			if err := protojson.Unmarshal(raw, &msg); err != nil {
+				return param{}, err
+			}
+			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+		case "google.protobuf.Int32Value":
+			var msg wrapperspb.Int32Value
+			if err := protojson.Unmarshal(raw, &msg); err != nil {
+				return param{}, err
+			}
+			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+		case "google.protobuf.Int64Value":
+			var msg wrapperspb.Int64Value
+			if err := protojson.Unmarshal(raw, &msg); err != nil {
+				return param{}, err
+			}
+			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+		case "google.protobuf.UInt32Value":
+			var msg wrapperspb.UInt32Value
+			if err := protojson.Unmarshal(raw, &msg); err != nil {
+				return param{}, err
+			}
+			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+		case "google.protobuf.UInt64Value":
+			var msg wrapperspb.UInt64Value
+			if err := protojson.Unmarshal(raw, &msg); err != nil {
+				return param{}, err
+			}
+			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+		case "google.protobuf.FloatValue":
+			var msg wrapperspb.FloatValue
+			if err := protojson.Unmarshal(raw, &msg); err != nil {
+				return param{}, err
+			}
+			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+		case "google.protobuf.DoubleValue":
+			var msg wrapperspb.DoubleValue
+			if err := protojson.Unmarshal(raw, &msg); err != nil {
+				return param{}, err
+			}
+			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+		case "google.protobuf.BytesValue":
+			if n := len(raw); n > 0 && (raw[0] != '"' || raw[n-1] != '"') {
+				raw = []byte(strconv.Quote(string(raw)))
+			}
+			var msg wrapperspb.BytesValue
+			if err := protojson.Unmarshal(raw, &msg); err != nil {
+				return param{}, err
+			}
+			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+		case "google.protobuf.StringValue":
+			if n := len(raw); n > 0 && (raw[0] != '"' || raw[n-1] != '"') {
+				raw = []byte(strconv.Quote(string(raw)))
+			}
+			var msg wrapperspb.StringValue
+			if err := protojson.Unmarshal(raw, &msg); err != nil {
+				return param{}, err
+			}
+			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+
+		//case "google.protobuf.FieldMask": // TODO
+		//	var msg fieldmaskpb.FieldMask
+		//	if err := protojson.Unmarshal(raw, &msg); err != nil {
+		//		return param{}, err
+		//	}
+		//	return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+		default:
+			return param{}, fmt.Errorf("unexpected message type %s", md.FullName())
+		}
+
 	default:
 		return param{}, fmt.Errorf("unknown param type %s", kind)
 
@@ -422,7 +472,6 @@ func (ps params) set(m proto.Message) error {
 			// IsList()
 			// IsMap()
 		}
-
 	}
 	return nil
 }

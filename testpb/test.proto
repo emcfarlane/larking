@@ -8,6 +8,7 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 // import "google/protobuf/field_mask.proto";
 import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
 
 option go_package = "github.com/afking/graphpb/testpb;testpb";
 
@@ -109,16 +110,22 @@ service WellKnown {
   // `Check(Timestamp{...})`
   rpc Check(Scalars) returns (google.protobuf.Empty) {
     option (google.api.http) = {
-      get : "/v1/wellknown/timestamp/{timestamp}"
-      additional_bindings {get : "/v1/wellknown/duration/{duration}"}
+      get : "/v1/wellknown"
     };
   }
 }
 
 message Scalars {
-  oneof known_type {
-    google.protobuf.Timestamp timestamp = 1;
-    google.protobuf.Duration duration = 2;
-  }
-  // google.protobuf.FieldMask mask = 9; // TODO
+  google.protobuf.Timestamp timestamp = 1;
+  google.protobuf.Duration duration = 2;
+  google.protobuf.BoolValue bool_value = 3;
+  google.protobuf.Int32Value int32_value = 4;
+  google.protobuf.Int64Value int64_value = 5;
+  google.protobuf.UInt32Value uint32_value = 6;
+  google.protobuf.UInt64Value uint64_value = 7;
+  google.protobuf.FloatValue float_value = 8;
+  google.protobuf.DoubleValue double_value = 9;
+  google.protobuf.BytesValue bytes_value = 10;
+  google.protobuf.StringValue string_value = 11;
+  // TODO google.protobuf.FieldMask mask = 12;
 }

@@ -213,7 +213,6 @@ func (m *Mux) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) e
 				return cc.Invoke(ctx, method, args, reply) // TODO: grpc.ClientOpts
 			}
 
-			//fmt.Println("prule", rule)
 			if err := m.path.parseRule(rule, md, invoke); err != nil {
 				return err
 			}
@@ -236,7 +235,7 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	// TODO: fix the body marshalling
 	argsDesc := method.desc.Input()
 	replyDesc := method.desc.Output()
-	fmt.Printf("\n%s -> %s\n", argsDesc, replyDesc)
+	fmt.Printf("\n%s -> %s\n", argsDesc.FullName(), replyDesc.FullName())
 
 	args := dynamicpb.NewMessage(argsDesc)
 	reply := dynamicpb.NewMessage(replyDesc)
@@ -253,7 +252,6 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return err
 			}
-
 		default:
 			body = r.Body
 		}
@@ -264,11 +262,6 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-
-		//switch contentType {
-		//case
-		//default: // "application/json"
-		//}
 
 		cur := args.ProtoReflect()
 		for _, fd := range method.body {
@@ -303,6 +296,7 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	params = append(params, queryParams...)
+	fmt.Println("queryParams", len(queryParams), queryParams)
 
 	if err := params.set(args); err != nil {
 		return err
@@ -336,11 +330,10 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		cur = cur.Mutable(fd).Message()
 	}
 	fmt.Println("cur resp:", accept, cur.Descriptor().FullName())
-	fullname := cur.Descriptor().FullName()
 
 	msg := cur.Interface()
 
-	switch fullname {
+	switch cur.Descriptor().FullName() {
 	case "google.api.HttpBody":
 		rfl := msg.ProtoReflect()
 		fds := rfl.Descriptor().Fields()

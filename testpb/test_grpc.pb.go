@@ -4,13 +4,11 @@ package testpb
 
 import (
 	context "context"
-
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	httpbody "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 	grpc "google.golang.org/grpc"
 	codes "github.com/afking/graphpb/grpc/codes"
 	status "github.com/afking/graphpb/grpc/status"
-
-	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
