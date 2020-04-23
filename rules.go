@@ -2,7 +2,6 @@ package graphpb
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -71,7 +70,7 @@ type method struct {
 	vars    [][]protoreflect.FieldDescriptor // variables on path
 	hasBody bool                             // body="*" or body="field.name" or body="" for no body
 	resp    []protoreflect.FieldDescriptor   // body=[""|"*"]
-	invoke  invoker
+	name    string                           // /{ServiceName}/{MethodName}
 }
 
 func fieldPath(fieldDescs protoreflect.FieldDescriptors, names ...string) []protoreflect.FieldDescriptor {
@@ -99,12 +98,10 @@ func fieldPath(fieldDescs protoreflect.FieldDescriptors, names ...string) []prot
 	return fds
 }
 
-type invoker func(ctx context.Context, args, reply proto.Message) error
-
 func (p *path) parseRule(
 	rule *annotations.HttpRule,
 	desc protoreflect.MethodDescriptor,
-	invoke invoker,
+	name string,
 ) error {
 	var tmpl, verb string
 	switch v := rule.Pattern.(type) {
@@ -184,7 +181,6 @@ func (p *path) parseRule(
 
 			keyVals := keys.vals()
 			valVals := vals.vals()
-			//varLookup := strings.Join(keyVals, ".") + "=" +
 			varLookup := strings.Join(valVals, "")
 
 			fds := fieldPath(fieldDescs, keyVals...)
@@ -219,9 +215,9 @@ func (p *path) parseRule(
 	}
 
 	m := &method{
-		desc:   desc,
-		vars:   vars,
-		invoke: invoke,
+		desc: desc,
+		vars: vars,
+		name: name,
 	}
 	switch rule.Body {
 	case "*":
@@ -253,7 +249,7 @@ func (p *path) parseRule(
 			return fmt.Errorf("nested rules") // TODO: errors...
 		}
 
-		if err := p.parseRule(addRule, desc, invoke); err != nil {
+		if err := p.parseRule(addRule, desc, name); err != nil {
 			return err
 		}
 	}

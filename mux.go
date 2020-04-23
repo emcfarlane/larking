@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
@@ -28,12 +31,19 @@ import (
 type Mux struct {
 	processed map[protoreflect.FullName]bool
 	path      *path
+
+	// TODO: copy on write?
+	mu      sync.Mutex
+	conns   map[*grpc.ClientConn][]string
+	methods map[string][]*grpc.ClientConn
 }
 
 func NewMux(ccs ...*grpc.ClientConn) (*Mux, error) {
 	m := &Mux{
 		processed: make(map[protoreflect.FullName]bool),
 		path:      newPath(),
+		conns:     make(map[*grpc.ClientConn][]string),
+		methods:   make(map[string][]*grpc.ClientConn),
 	}
 
 	for _, cc := range ccs {
@@ -49,11 +59,6 @@ type resolver struct {
 	files  protoregistry.Files
 	stream rpb.ServerReflection_ServerReflectionInfoClient
 }
-
-//var isStdFileDescriptor = map[string]bool{
-//	"google/api/annotations.proto": true,
-//	"google/api/httpbody.proto":    true,
-//}
 
 func newResolver(stream rpb.ServerReflection_ServerReflectionInfoClient) (*resolver, error) {
 	r := &resolver{stream: stream}
@@ -175,22 +180,34 @@ func (m *Mux) createHandler(cc *grpc.ClientConn) error {
 		return err
 	}
 
+	var methods []string
 	for _, fd := range fds {
 		file, err := protodesc.NewFile(fd, rslvr)
 		if err != nil {
 			return err
 		}
 
-		if err := m.processFile(cc, file); err != nil {
+		ms, err := m.processFile(cc, file)
+		if err != nil {
+			// TODO: partial dregister
 			return err
 		}
+		methods = append(methods, ms...)
 	}
 
+	// Update
+	m.mu.Lock()
+	m.conns[cc] = methods
+	for _, method := range methods {
+		m.methods[method] = append(m.methods[method], cc)
+	}
+	m.mu.Unlock()
 	return nil
 }
 
-func (m *Mux) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) error {
-	fmt.Println("processFile", fd.Name())
+func (m *Mux) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) ([]string, error) {
+	//fmt.Println("processFile", fd.Name())
+	var methods []string
 
 	sds := fd.Services()
 	for i := 0; i < sds.Len(); i++ {
@@ -209,16 +226,14 @@ func (m *Mux) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) e
 			}
 
 			method := fmt.Sprintf("/%s/%s", name, md.Name())
-			invoke := func(ctx context.Context, args, reply proto.Message) error {
-				return cc.Invoke(ctx, method, args, reply) // TODO: grpc.ClientOpts
+			if err := m.path.parseRule(rule, md, method); err != nil {
+				// TODO: partial service registration?
+				return nil, err
 			}
-
-			if err := m.path.parseRule(rule, md, invoke); err != nil {
-				return err
-			}
+			methods = append(methods, method)
 		}
 	}
-	return nil
+	return methods, nil
 }
 
 func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
@@ -231,6 +246,15 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	fmt.Println("FOUND", r.URL.Path, method, params)
+
+	m.mu.Lock()
+	ccs := m.methods[method.name]
+	if len(ccs) == 0 {
+		m.mu.Unlock()
+		return fmt.Errorf("missing connections")
+	}
+	cc := ccs[rand.Intn(len(ccs))]
+	m.mu.Unlock()
 
 	// TODO: fix the body marshalling
 	argsDesc := method.desc.Input()
@@ -302,8 +326,13 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// TODO: header metadata.
-	if err := method.invoke(r.Context(), args, reply); err != nil {
+	// TODO: pass headers.
+	ctx := metadata.AppendToOutgoingContext(
+		r.Context(),
+		"authentication", r.Header.Get("authentication"),
+	)
+
+	if err := cc.Invoke(ctx, method.name, args, reply); err != nil {
 		return err
 	}
 
