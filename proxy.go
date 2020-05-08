@@ -1,15 +1,32 @@
 package graphpb
 
 import (
+	"io"
+	"sync"
+
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/dynamicpb"
 )
+
+func isStreamError(err error) bool {
+	switch err {
+	case nil:
+		return false
+	case io.EOF:
+		return false
+	case context.Canceled:
+		return false
+	}
+	return true
+}
 
 // StreamHandler returns a gRPC stream handler to proxy gRPC requests.
 func (m *Mux) StreamHandler() grpc.StreamHandler {
 	return func(srv interface{}, stream grpc.ServerStream) error {
-		// TODO: implement
-		name, _ := grpc.MethodFromServerStream(stream)
+		ctx := stream.Context()
+		name, _ := grpc.Method(ctx)
 
 		mc, err := m.pickMethodConn(name)
 		if err != nil {
@@ -23,90 +40,74 @@ func (m *Mux) StreamHandler() grpc.StreamHandler {
 		args := dynamicpb.NewMessage(argsDesc)
 		reply := dynamicpb.NewMessage(replyDesc)
 
-		if err := stream.SendMsg(args); err != nil {
+		if err := stream.RecvMsg(args); err != nil {
 			return err
 		}
 
-		if err := stream.RecvMsg(reply); err != nil {
+		md, _ := metadata.FromIncomingContext(ctx)
+		ctx = metadata.NewOutgoingContext(ctx, md)
+
+		sd := &grpc.StreamDesc{
+			ServerStreams: mc.desc.IsStreamingServer(),
+			ClientStreams: mc.desc.IsStreamingClient(),
+		}
+
+		clientStream, err := mc.cc.NewStream(ctx, sd, name)
+		if err != nil {
 			return err
 		}
+
+		if err := clientStream.SendMsg(args); err != nil {
+			return err
+		}
+
+		var inErr error
+		var wg sync.WaitGroup
+		if sd.ClientStreams {
+			wg.Add(1)
+			go func() {
+				for {
+					if inErr = stream.RecvMsg(args); inErr != nil {
+						break
+					}
+
+					if inErr = clientStream.SendMsg(args); inErr != nil {
+						break
+					}
+				}
+				wg.Done()
+			}()
+		}
+
+		var outErr error
+		for {
+			if outErr = clientStream.RecvMsg(reply); outErr != nil {
+				break
+			}
+
+			if outErr = stream.SendMsg(reply); outErr != nil {
+				break
+			}
+
+			if !sd.ServerStreams {
+				break
+			}
+		}
+
+		if isStreamError(outErr) {
+			return outErr
+		}
+
+		if sd.ClientStreams {
+			wg.Wait()
+			if isStreamError(inErr) {
+				return inErr
+			}
+		}
+
+		trailer := clientStream.Trailer()
+		stream.SetTrailer(trailer)
 
 		return nil
 	}
 }
-
-//func (m *Mux) proxyGRPC(w http.ResponseWriter, r *http.Request) error {
-//	if !strings.HasPrefix(r.URL.Path, "/") {
-//		r.URL.Path = "/" + r.URL.Path
-//	}
-//
-//	d, err := httputil.DumpRequest(r, true)
-//	if err != nil {
-//		return err
-//	}
-//	fmt.Println(string(d))
-//
-//	name := r.URL.Path
-//
-//	m.mu.Lock()
-//	ccs := m.methods[name]
-//	if len(ccs) == 0 {
-//		m.mu.Unlock()
-//		return fmt.Errorf("missing connections")
-//	}
-//	cc := ccs[rand.Intn(len(ccs))]
-//	m.mu.Unlock()
-//
-//	md := make(metadata.MD)
-//	if grpcTimeout := r.Header.Get("grpc-timeout"); grpcTimeout != "" {
-//		md["grpc-timeout"] = []string{grpcTimeout}
-//	}
-//	// TODO: handle encoding...
-//	//if grpcEncoding := r.Header.Get("grpc-encoding"); grpcEncoding
-//	if authorization := r.Header.Get("authorization"); authorization != "" {
-//		md["authorization"] = []string{authorization}
-//	}
-//
-//	ctx := metadata.NewOutgoingContext(r.Context(), md)
-//
-//	// Decode body
-//
-//	if err := cc.Invoke(ctx, name, args, reply); err != nil {
-//		return err
-//	}
-//
-//	// Encode body
-//
-//	return nil
-//}
-//
-//func (m *Mux) serveGRPC(w http.ResponseWriter, r *http.Request) {
-//	fl, ok := w.(http.Flusher)
-//	if !ok {
-//		panic("gRPC requires a ResponseWriter supporting http.Flusher")
-//	}
-//
-//	err := m.proxyGRPC(w, r)
-//
-//	// Flush headers and body forces seperation of trailers.
-//	fl.Flush()
-//
-//	st, _ := status.FromError(err)
-//	h := w.Header()
-//	h.Set("Grpc-Status", fmt.Sprintf("%d", st.Code()))
-//	if m := st.Message(); m != "" {
-//		h.Set("Grpc-Message", url.QueryEscape(m))
-//	}
-//
-//	if p := st.Proto(); p != nil && len(p.Details) > 0 {
-//		stBytes, err := proto.Marshal(p)
-//		if err != nil {
-//			panic(err)
-//		}
-//
-//		stBin := base64.RawStdEncoding.EncodeToString(stBytes)
-//		h.Set("Grpc-Status-Details-Bin", stBin)
-//	}
-//
-//	// TODO: custom trailers.
-//}
