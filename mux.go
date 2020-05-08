@@ -1,32 +1,35 @@
 package graphpb
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
-	"strings"
 	"sync"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
-	"google.golang.org/protobuf/types/dynamicpb"
 
 	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
 	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
+	"github.com/afking/graphpb/grpc/codes"
 	rpb "github.com/afking/graphpb/grpc/reflection/v1alpha"
 	"github.com/afking/graphpb/grpc/status"
 )
+
+type methodDesc struct {
+	name string
+	desc protoreflect.MethodDescriptor
+}
+
+type methodConn struct {
+	methodDesc
+	cc *grpc.ClientConn
+}
 
 type Mux struct {
 	processed map[protoreflect.FullName]bool
@@ -34,16 +37,17 @@ type Mux struct {
 
 	// TODO: copy on write?
 	mu      sync.Mutex
-	conns   map[*grpc.ClientConn][]string
-	methods map[string][]*grpc.ClientConn
+	conns   map[*grpc.ClientConn][]methodDesc
+	methods map[string][]methodConn //*grpc.ClientConn
+	//methodDescs map[string]protoreflect.MethodDescriptor
 }
 
 func NewMux(ccs ...*grpc.ClientConn) (*Mux, error) {
 	m := &Mux{
 		processed: make(map[protoreflect.FullName]bool),
 		path:      newPath(),
-		conns:     make(map[*grpc.ClientConn][]string),
-		methods:   make(map[string][]*grpc.ClientConn),
+		conns:     make(map[*grpc.ClientConn][]methodDesc),
+		methods:   make(map[string][]methodConn), //*grpc.ClientConn),
 	}
 
 	for _, cc := range ccs {
@@ -180,7 +184,7 @@ func (m *Mux) createHandler(cc *grpc.ClientConn) error {
 		return err
 	}
 
-	var methods []string
+	var methods []methodDesc
 	for _, fd := range fds {
 		file, err := protodesc.NewFile(fd, rslvr)
 		if err != nil {
@@ -199,15 +203,17 @@ func (m *Mux) createHandler(cc *grpc.ClientConn) error {
 	m.mu.Lock()
 	m.conns[cc] = methods
 	for _, method := range methods {
-		m.methods[method] = append(m.methods[method], cc)
+		m.methods[method.name] = append(
+			m.methods[method.name], methodConn{method, cc},
+		)
 	}
 	m.mu.Unlock()
 	return nil
 }
 
-func (m *Mux) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) ([]string, error) {
+func (m *Mux) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) ([]methodDesc, error) {
 	//fmt.Println("processFile", fd.Name())
-	var methods []string
+	var methods []methodDesc
 
 	sds := fd.Services()
 	for i := 0; i < sds.Len(); i++ {
@@ -230,180 +236,37 @@ func (m *Mux) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) (
 				// TODO: partial service registration?
 				return nil, err
 			}
-			methods = append(methods, method)
+			methods = append(methods, methodDesc{
+				name: method,
+				desc: md,
+			})
 		}
 	}
 	return methods, nil
 }
 
-func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
-	if !strings.HasPrefix(r.URL.Path, "/") {
-		r.URL.Path = "/" + r.URL.Path
-	}
-
-	method, params, err := m.path.match(r.URL.Path, r.Method)
-	if err != nil {
-		return err
-	}
-	fmt.Println("FOUND", r.URL.Path, method, params)
-
+func (m *Mux) pickMethodConn(name string) (methodConn, error) {
 	m.mu.Lock()
-	ccs := m.methods[method.name]
-	if len(ccs) == 0 {
-		m.mu.Unlock()
-		return fmt.Errorf("missing connections")
+	defer m.mu.Unlock()
+
+	mcs := m.methods[name]
+	if len(mcs) == 0 {
+		return methodConn{}, status.Errorf(
+			codes.Unimplemented,
+			fmt.Sprintf("method %s not implemented", name),
+		)
 	}
-	cc := ccs[rand.Intn(len(ccs))]
-	m.mu.Unlock()
-
-	// TODO: fix the body marshalling
-	argsDesc := method.desc.Input()
-	replyDesc := method.desc.Output()
-	fmt.Printf("\n%s -> %s\n", argsDesc.FullName(), replyDesc.FullName())
-
-	args := dynamicpb.NewMessage(argsDesc)
-	reply := dynamicpb.NewMessage(replyDesc)
-
-	if method.hasBody {
-		// TODO: handler should decide what to select on.
-		contentType := r.Header.Get("Content-Type")
-		contentEncoding := r.Header.Get("Content-Encoding")
-
-		var body io.ReadCloser
-		switch contentEncoding {
-		case "gzip":
-			body, err = gzip.NewReader(r.Body)
-			if err != nil {
-				return err
-			}
-		default:
-			body = r.Body
-		}
-		defer body.Close()
-
-		// TODO: mux options.
-		b, err := ioutil.ReadAll(io.LimitReader(body, 1024*1024*2))
-		if err != nil {
-			return err
-		}
-
-		cur := args.ProtoReflect()
-		for _, fd := range method.body {
-			cur = cur.Mutable(fd).Message()
-		}
-		fmt.Println("cur:", contentType, cur.Descriptor().FullName())
-		fullname := cur.Descriptor().FullName()
-
-		msg := cur.Interface()
-		fmt.Printf("body %s %T %v\n", body, msg, method.body)
-
-		switch fullname {
-		case "google.api.HttpBody":
-			rfl := msg.ProtoReflect()
-			fds := rfl.Descriptor().Fields()
-			fdContentType := fds.ByName(protoreflect.Name("content_type"))
-			fdData := fds.ByName(protoreflect.Name("data"))
-			rfl.Set(fdContentType, protoreflect.ValueOfString(contentType))
-			rfl.Set(fdData, protoreflect.ValueOfBytes(b))
-			// TODO: extensions?
-
-		default:
-			// TODO: contentType check?
-			if err := protojson.Unmarshal(b, msg); err != nil {
-				return err
-			}
-		}
-	}
-
-	queryParams, err := method.parseQueryParams(r.URL.Query())
-	if err != nil {
-		return err
-	}
-	params = append(params, queryParams...)
-	fmt.Println("queryParams", len(queryParams), queryParams)
-
-	if err := params.set(args); err != nil {
-		return err
-	}
-
-	// TODO: pass headers.
-	ctx := metadata.AppendToOutgoingContext(
-		r.Context(),
-		"authentication", r.Header.Get("authentication"),
-	)
-
-	if err := cc.Invoke(ctx, method.name, args, reply); err != nil {
-		return err
-	}
-
-	accept := r.Header.Get("Accept")
-	acceptEncoding := r.Header.Get("Accept-Encoding")
-
-	if fRsp, ok := w.(http.Flusher); ok {
-		defer fRsp.Flush()
-	}
-
-	var resp io.Writer
-	switch acceptEncoding {
-	case "gzip":
-		gRsp := gzip.NewWriter(w)
-		defer gRsp.Close()
-		resp = gRsp
-
-	default:
-		resp = w
-	}
-
-	cur := reply.ProtoReflect()
-	for _, fd := range method.resp {
-		cur = cur.Mutable(fd).Message()
-	}
-	fmt.Println("cur resp:", accept, cur.Descriptor().FullName())
-
-	msg := cur.Interface()
-
-	switch cur.Descriptor().FullName() {
-	case "google.api.HttpBody":
-		rfl := msg.ProtoReflect()
-		fds := rfl.Descriptor().Fields()
-		fdContentType := fds.ByName(protoreflect.Name("content_type"))
-		fdData := fds.ByName(protoreflect.Name("data"))
-		pContentType := rfl.Get(fdContentType)
-		pData := rfl.Get(fdData)
-
-		w.Header().Set("Content-Type", pContentType.String())
-		if _, err := io.Copy(resp, bytes.NewReader(pData.Bytes())); err != nil {
-			return err
-		}
-
-	default:
-		// TODO: contentType check?
-		b, err := protojson.Marshal(msg)
-		if err != nil {
-			return err
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		if _, err := io.Copy(resp, bytes.NewReader(b)); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	mc := mcs[rand.Intn(len(mcs))]
+	return mc, nil
 }
 
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if err := m.serveHTTP(w, r); err != nil {
-		// TODO: check accepts json?
+	//contentType := r.Header.Get("Content-Type")
+	//if r.Method == "POST" && r.ProtoMajor == 2 &&
+	//	strings.HasPrefix(contentType, "application/grpc") {
+	//	m.serveGRPC(w, r)
+	//	return
+	//}
 
-		s, _ := status.FromError(err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(HTTPStatusCode(s.Code()))
-
-		b, err := protojson.Marshal(s.Proto())
-		if err != nil {
-			panic(err) // ...
-		}
-		w.Write(b)
-	}
+	m.serveHTTP(w, r)
 }

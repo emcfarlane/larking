@@ -2,19 +2,24 @@ package graphpb
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	_ "google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -643,4 +648,183 @@ searchLoop:
 	}
 
 	return m, params, nil
+}
+
+func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
+	fmt.Println("METHOD", r.Method)
+	fmt.Println("URL", r.URL)
+
+	if !strings.HasPrefix(r.URL.Path, "/") {
+		r.URL.Path = "/" + r.URL.Path
+	}
+
+	//d, err := httputil.DumpRequest(r, true)
+	//if err != nil {
+	//	return err
+	//}
+	//fmt.Println(string(d))
+
+	for k, v := range r.Header {
+		fmt.Println(k, v)
+	}
+
+	method, params, err := m.path.match(r.URL.Path, r.Method)
+	if err != nil {
+		return err
+	}
+	fmt.Println("FOUND", r.URL.Path, method, params)
+
+	mc, err := m.pickMethodConn(method.name)
+	if err != nil {
+		return err
+	}
+
+	// TODO: fix the body marshalling
+	argsDesc := method.desc.Input()
+	replyDesc := method.desc.Output()
+	fmt.Printf("\n%s -> %s\n", argsDesc.FullName(), replyDesc.FullName())
+
+	args := dynamicpb.NewMessage(argsDesc)
+	reply := dynamicpb.NewMessage(replyDesc)
+
+	if method.hasBody {
+		// TODO: handler should decide what to select on.
+		contentType := r.Header.Get("Content-Type")
+		contentEncoding := r.Header.Get("Content-Encoding")
+
+		var body io.ReadCloser
+		switch contentEncoding {
+		case "gzip":
+			body, err = gzip.NewReader(r.Body)
+			if err != nil {
+				return err
+			}
+		default:
+			body = r.Body
+		}
+		defer body.Close()
+
+		// TODO: mux options.
+		b, err := ioutil.ReadAll(io.LimitReader(body, 1024*1024*2))
+		if err != nil {
+			return err
+		}
+
+		cur := args.ProtoReflect()
+		for _, fd := range method.body {
+			cur = cur.Mutable(fd).Message()
+		}
+		fmt.Println("cur:", contentType, cur.Descriptor().FullName())
+		fullname := cur.Descriptor().FullName()
+
+		msg := cur.Interface()
+		fmt.Printf("body %s %T %v\n", body, msg, method.body)
+
+		switch fullname {
+		case "google.api.HttpBody":
+			rfl := msg.ProtoReflect()
+			fds := rfl.Descriptor().Fields()
+			fdContentType := fds.ByName(protoreflect.Name("content_type"))
+			fdData := fds.ByName(protoreflect.Name("data"))
+			rfl.Set(fdContentType, protoreflect.ValueOfString(contentType))
+			rfl.Set(fdData, protoreflect.ValueOfBytes(b))
+			// TODO: extensions?
+
+		default:
+			// TODO: contentType check?
+			if err := protojson.Unmarshal(b, msg); err != nil {
+				return err
+			}
+		}
+	}
+
+	queryParams, err := method.parseQueryParams(r.URL.Query())
+	if err != nil {
+		return err
+	}
+	params = append(params, queryParams...)
+	fmt.Println("queryParams", len(queryParams), queryParams)
+
+	if err := params.set(args); err != nil {
+		return err
+	}
+
+	// TODO: pass headers.
+	ctx := metadata.AppendToOutgoingContext(
+		r.Context(),
+		"authentication", r.Header.Get("authentication"),
+	)
+
+	if err := mc.cc.Invoke(ctx, method.name, args, reply); err != nil {
+		return err
+	}
+
+	accept := r.Header.Get("Accept")
+	acceptEncoding := r.Header.Get("Accept-Encoding")
+
+	if fRsp, ok := w.(http.Flusher); ok {
+		defer fRsp.Flush()
+	}
+
+	var resp io.Writer
+	switch acceptEncoding {
+	case "gzip":
+		gRsp := gzip.NewWriter(w)
+		defer gRsp.Close()
+		resp = gRsp
+
+	default:
+		resp = w
+	}
+
+	cur := reply.ProtoReflect()
+	for _, fd := range method.resp {
+		cur = cur.Mutable(fd).Message()
+	}
+	fmt.Println("cur resp:", accept, cur.Descriptor().FullName())
+
+	msg := cur.Interface()
+
+	switch cur.Descriptor().FullName() {
+	case "google.api.HttpBody":
+		rfl := msg.ProtoReflect()
+		fds := rfl.Descriptor().Fields()
+		fdContentType := fds.ByName(protoreflect.Name("content_type"))
+		fdData := fds.ByName(protoreflect.Name("data"))
+		pContentType := rfl.Get(fdContentType)
+		pData := rfl.Get(fdData)
+
+		w.Header().Set("Content-Type", pContentType.String())
+		if _, err := io.Copy(resp, bytes.NewReader(pData.Bytes())); err != nil {
+			return err
+		}
+
+	default:
+		// TODO: contentType check?
+		b, err := protojson.Marshal(msg)
+		if err != nil {
+			return err
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := io.Copy(resp, bytes.NewReader(b)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	if err := m.proxyHTTP(w, r); err != nil {
+		s, _ := status.FromError(err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(HTTPStatusCode(s.Code()))
+
+		b, err := protojson.Marshal(s.Proto())
+		if err != nil {
+			panic(err) // ...
+		}
+		w.Write(b)
+	}
 }

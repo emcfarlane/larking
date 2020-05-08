@@ -82,6 +82,8 @@ func TestMessageServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
+	defer lis.Close()
+
 	go gs.Serve(lis)
 	defer gs.Stop()
 
