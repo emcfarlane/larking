@@ -1,8 +1,10 @@
-WIP: graphpb
-============
+# [WIP] GraphPB
 
-Dynamic GRPC Gateway proxy.
+Reflective gRPC gateway proxy.
 
+- [Transcoding protobuf descriptors REST/HTTP to gRPC](https://cloud.google.com/endpoints/docs/grpc/transcoding)
+- [Follows Google API Design principles](https://cloud.google.com/apis/design)
+- [Dynamically load descriptors via gRPC server reflection](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md)
 
 ### Debugging
 
