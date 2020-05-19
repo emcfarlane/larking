@@ -1,11 +1,14 @@
 package graphpb
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"sync"
+	"sync/atomic"
 
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
@@ -31,31 +34,55 @@ type methodConn struct {
 	cc *grpc.ClientConn
 }
 
-type Mux struct {
-	processed map[protoreflect.FullName]bool
-	path      *path
+type connList struct {
+	descs  []methodDesc
+	fdHash []byte
+}
 
-	// TODO: copy on write?
-	mu      sync.Mutex
-	conns   map[*grpc.ClientConn][]methodDesc
-	methods map[string][]methodConn //*grpc.ClientConn
-	//methodDescs map[string]protoreflect.MethodDescriptor
+type state struct {
+	path    *path
+	conns   map[*grpc.ClientConn]connList
+	methods map[string][]methodConn
+}
+
+type Mux struct {
+	mu    sync.Mutex
+	state atomic.Value
 }
 
 func NewMux(ccs ...*grpc.ClientConn) (*Mux, error) {
-	m := &Mux{
-		processed: make(map[protoreflect.FullName]bool),
-		path:      newPath(),
-		conns:     make(map[*grpc.ClientConn][]methodDesc),
-		methods:   make(map[string][]methodConn), //*grpc.ClientConn),
+	s := &state{
+		path:    newPath(),
+		conns:   make(map[*grpc.ClientConn]connList),
+		methods: make(map[string][]methodConn),
 	}
 
+	ctx := context.Background()
+
+	var ss []stream
 	for _, cc := range ccs {
-		if err := m.createHandler(cc); err != nil {
+		c := rpb.NewServerReflectionClient(cc)
+
+		// TODO: watch the stream. When it is recreated refresh the service
+		// methods and recreate the mux if needed.
+		stream, err := c.ServerReflectionInfo(ctx, grpc.WaitForReady(true))
+		if err != nil {
 			return nil, err
 		}
+
+		if err := s.createHandler(cc, stream); err != nil {
+			return nil, err
+		}
+
+		ss = append(ss, stream)
 	}
-	return m, nil
+
+	m := Mux{}
+	m.state.Store(s)
+
+	// TODO: setup connection watch.
+
+	return &m, nil
 }
 
 // resolver implements protodesc.Resolver.
@@ -84,7 +111,6 @@ func (r *resolver) FindFileByPath(path string) (protoreflect.FileDescriptor, err
 		return fd, nil // found file
 	}
 
-	// TODO: locking?
 	if err := r.stream.Send(&rpb.ServerReflectionRequest{
 		MessageRequest: &rpb.ServerReflectionRequest_FileByFilename{
 			FileByFilename: path,
@@ -128,17 +154,12 @@ func (r *resolver) FindDescriptorByName(fullname protoreflect.FullName) (protore
 	return r.files.FindDescriptorByName(fullname)
 }
 
-func (m *Mux) createHandler(cc *grpc.ClientConn) error {
+func (s *state) createHandler(
+	cc *grpc.ClientConn,
+	stream rpb.ServerReflection_ServerReflectionInfoClient,
+	//ctx context.Context, cc *grpc.ClientConn
+) error {
 	// TODO: async fetch and mux creation.
-
-	c := rpb.NewServerReflectionClient(cc)
-
-	// TODO: watch the stream. When it is recreated refresh the service
-	// methods and recreate the mux if needed.
-	stream, err := c.ServerReflectionInfo(context.Background(), grpc.WaitForReady(true))
-	if err != nil {
-		return err
-	}
 
 	if err := stream.Send(&rpb.ServerReflectionRequest{
 		MessageRequest: &rpb.ServerReflectionRequest_ListServices{},
@@ -152,9 +173,11 @@ func (m *Mux) createHandler(cc *grpc.ClientConn) error {
 	}
 	// TODO: check r.GetErrorResponse()?
 
+	// File descriptors hash for detecting updates. TODO: sort fds?
+	h := sha256.New()
+
 	fds := make(map[string]*descriptorpb.FileDescriptorProto)
 	for _, svc := range r.GetListServicesResponse().GetService() {
-		fmt.Println("GOT SERVICES!", svc)
 		if err := stream.Send(&rpb.ServerReflectionRequest{
 			MessageRequest: &rpb.ServerReflectionRequest_FileContainingSymbol{
 				FileContainingSymbol: svc.GetName(),
@@ -176,6 +199,35 @@ func (m *Mux) createHandler(cc *grpc.ClientConn) error {
 				return err
 			}
 			fds[fd.GetName()] = fd
+
+			h.Write(fdb)
+		}
+	}
+
+	fdHash := h.Sum(nil)
+
+	// Check if previous connection exists.
+	if cl, ok := s.conns[cc]; ok {
+		if bytes.Equal(cl.fdHash, fdHash) {
+			return nil // nothing to do
+		}
+
+		// Drop methods on client conns.
+		for _, md := range cl.descs {
+			mcs := s.methods[md.name]
+
+			for i := len(mcs) - 1; i >= 0; i-- {
+				mc := mcs[i]
+				if mc.cc == cc {
+					mcs = append(mcs[:i], mcs[i+1:]...)
+				}
+			}
+			if len(mcs) == 0 {
+				delete(s.methods, md.name)
+				s.path.delRule(md.name)
+			} else {
+				s.methods[md.name] = mcs
+			}
 		}
 	}
 
@@ -191,28 +243,28 @@ func (m *Mux) createHandler(cc *grpc.ClientConn) error {
 			return err
 		}
 
-		ms, err := m.processFile(cc, file)
+		ms, err := s.processFile(cc, file)
 		if err != nil {
-			// TODO: partial dregister
+			// TODO: partial dregister?
 			return err
 		}
 		methods = append(methods, ms...)
 	}
 
-	// Update
-	m.mu.Lock()
-	m.conns[cc] = methods
+	// Update methods list.
+	s.conns[cc] = connList{
+		descs:  methods,
+		fdHash: fdHash,
+	}
 	for _, method := range methods {
-		m.methods[method.name] = append(
-			m.methods[method.name], methodConn{method, cc},
+		s.methods[method.name] = append(
+			s.methods[method.name], methodConn{method, cc},
 		)
 	}
-	m.mu.Unlock()
 	return nil
 }
 
-func (m *Mux) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) ([]methodDesc, error) {
-	//fmt.Println("processFile", fd.Name())
+func (s *state) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) ([]methodDesc, error) {
 	var methods []methodDesc
 
 	sds := fd.Services()
@@ -232,7 +284,7 @@ func (m *Mux) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) (
 			}
 
 			method := fmt.Sprintf("/%s/%s", name, md.Name())
-			if err := m.path.parseRule(rule, md, method); err != nil {
+			if err := s.path.addRule(rule, md, method); err != nil {
 				// TODO: partial service registration?
 				return nil, err
 			}
@@ -245,11 +297,10 @@ func (m *Mux) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) (
 	return methods, nil
 }
 
-func (m *Mux) pickMethodConn(name string) (methodConn, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *Mux) loadState() *state { return m.state.Load().(*state) }
 
-	mcs := m.methods[name]
+func (s *state) pickMethodConn(name string) (methodConn, error) {
+	mcs := s.methods[name]
 	if len(mcs) == 0 {
 		return methodConn{}, status.Errorf(
 			codes.Unimplemented,

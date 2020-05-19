@@ -8,6 +8,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/dynamicpb"
+
+	"github.com/afking/graphpb/grpc/codes"
+	rpb "github.com/afking/graphpb/grpc/reflection/v1alpha"
+	"github.com/afking/graphpb/grpc/status"
 )
 
 func isStreamError(err error) bool {
@@ -27,8 +31,9 @@ func (m *Mux) StreamHandler() grpc.StreamHandler {
 	return func(srv interface{}, stream grpc.ServerStream) error {
 		ctx := stream.Context()
 		name, _ := grpc.Method(ctx)
+		s := m.loadState()
 
-		mc, err := m.pickMethodConn(name)
+		mc, err := s.pickMethodConn(name)
 		if err != nil {
 			return err
 		}
@@ -109,5 +114,123 @@ func (m *Mux) StreamHandler() grpc.StreamHandler {
 		stream.SetTrailer(trailer)
 
 		return nil
+	}
+}
+
+type serverReflectionServer struct {
+	m *Mux
+	s *grpc.Server
+}
+
+// RegisterReflectionServer registers the server reflection service for multiple
+// proxied gRPC servers. Each individual reflection stream is merged to provide
+// a consistent view at the point of stream creation.
+func (m *Mux) RegisterReflectionServer(s *grpc.Server) {
+	rpb.RegisterServerReflectionServer(s, &serverReflectionServer{
+		m: m,
+		s: s,
+	})
+}
+
+// ServerReflectionInfo is the reflection service handler.
+func (s *serverReflectionServer) ServerReflectionInfo(stream rpb.ServerReflection_ServerReflectionInfoServer) error {
+
+	//ss := s.m.loadState()
+
+	for {
+		in, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		out := &rpb.ServerReflectionResponse{
+			ValidHost:       in.Host,
+			OriginalRequest: in,
+		}
+		/*switch req := in.MessageRequest.(type) {
+		case *rpb.ServerReflectionRequest_FileByFilename:
+			b, err := s.fileDescEncodingByFilename(req.FileByFilename)
+			if err != nil {
+				out.MessageResponse = &rpb.ServerReflectionResponse_ErrorResponse{
+					ErrorResponse: &rpb.ErrorResponse{
+						ErrorCode:    int32(codes.NotFound),
+						ErrorMessage: err.Error(),
+					},
+				}
+			} else {
+				out.MessageResponse = &rpb.ServerReflectionResponse_FileDescriptorResponse{
+					FileDescriptorResponse: &rpb.FileDescriptorResponse{FileDescriptorProto: [][]byte{b}},
+				}
+			}
+		case *rpb.ServerReflectionRequest_FileContainingSymbol:
+			b, err := s.fileDescEncodingContainingSymbol(req.FileContainingSymbol)
+			if err != nil {
+				out.MessageResponse = &rpb.ServerReflectionResponse_ErrorResponse{
+					ErrorResponse: &rpb.ErrorResponse{
+						ErrorCode:    int32(codes.NotFound),
+						ErrorMessage: err.Error(),
+					},
+				}
+			} else {
+				out.MessageResponse = &rpb.ServerReflectionResponse_FileDescriptorResponse{
+					FileDescriptorResponse: &rpb.FileDescriptorResponse{FileDescriptorProto: [][]byte{b}},
+				}
+			}
+		case *rpb.ServerReflectionRequest_FileContainingExtension:
+			typeName := req.FileContainingExtension.ContainingType
+			extNum := req.FileContainingExtension.ExtensionNumber
+			b, err := s.fileDescEncodingContainingExtension(typeName, extNum)
+			if err != nil {
+				out.MessageResponse = &rpb.ServerReflectionResponse_ErrorResponse{
+					ErrorResponse: &rpb.ErrorResponse{
+						ErrorCode:    int32(codes.NotFound),
+						ErrorMessage: err.Error(),
+					},
+				}
+			} else {
+				out.MessageResponse = &rpb.ServerReflectionResponse_FileDescriptorResponse{
+					FileDescriptorResponse: &rpb.FileDescriptorResponse{FileDescriptorProto: [][]byte{b}},
+				}
+			}
+		case *rpb.ServerReflectionRequest_AllExtensionNumbersOfType:
+			extNums, err := s.allExtensionNumbersForTypeName(req.AllExtensionNumbersOfType)
+			if err != nil {
+				out.MessageResponse = &rpb.ServerReflectionResponse_ErrorResponse{
+					ErrorResponse: &rpb.ErrorResponse{
+						ErrorCode:    int32(codes.NotFound),
+						ErrorMessage: err.Error(),
+					},
+				}
+			} else {
+				out.MessageResponse = &rpb.ServerReflectionResponse_AllExtensionNumbersResponse{
+					AllExtensionNumbersResponse: &rpb.ExtensionNumberResponse{
+						BaseTypeName:    req.AllExtensionNumbersOfType,
+						ExtensionNumber: extNums,
+					},
+				}
+			}
+		case *rpb.ServerReflectionRequest_ListServices:
+			svcNames, _ := s.getSymbols()
+			serviceResponses := make([]*rpb.ServiceResponse, len(svcNames))
+			for i, n := range svcNames {
+				serviceResponses[i] = &rpb.ServiceResponse{
+					Name: n,
+				}
+			}
+			out.MessageResponse = &rpb.ServerReflectionResponse_ListServicesResponse{
+				ListServicesResponse: &rpb.ListServiceResponse{
+					Service: serviceResponses,
+				},
+			}
+		default:*/
+		return status.Errorf(codes.InvalidArgument, "invalid MessageRequest: %v", in.MessageRequest)
+		//}
+
+		if err := stream.Send(out); err != nil {
+			return err
+		}
 	}
 }

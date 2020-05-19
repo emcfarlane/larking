@@ -103,7 +103,70 @@ func fieldPath(fieldDescs protoreflect.FieldDescriptors, names ...string) []prot
 	return fds
 }
 
-func (p *path) parseRule(
+func (p *path) alive() bool {
+	return len(p.methods) != 0 ||
+		len(p.variables) != 0 ||
+		len(p.segments) != 0
+}
+
+// clone deep clones the path tree.
+func (p *path) clone() *path {
+	pc := newPath()
+
+	for k, s := range p.segments {
+		pc.segments[k] = s.clone()
+	}
+
+	pc.variables = make(variables, len(p.variables))
+	for i, v := range p.variables {
+		pc.variables[i] = &variable{
+			name: v.name, // RO
+			toks: v.toks, // RO
+			next: v.next.clone(),
+		}
+	}
+
+	for k, m := range p.methods {
+		pc.methods[k] = m // RO
+	}
+
+	return pc
+}
+
+// delRule deletes the HTTP rule to the path.
+func (p *path) delRule(name string) bool {
+	// dfs
+	for k, s := range p.segments {
+		if ok := s.delRule(name); ok {
+			if !s.alive() {
+				delete(p.segments, k)
+			}
+			return ok
+		}
+	}
+
+	for i, v := range p.variables {
+		if ok := v.next.delRule(name); ok {
+			if !v.next.alive() {
+				p.variables = append(
+					p.variables[:i], p.variables[i+1:]...,
+				)
+			}
+			return ok
+		}
+	}
+
+	for k, m := range p.methods {
+		if m.name == name {
+			delete(p.methods, k)
+			return true
+		}
+	}
+	return false
+}
+
+// addRule adds the HTTP rule to the path.
+func (p *path) addRule(
 	rule *annotations.HttpRule,
 	desc protoreflect.MethodDescriptor,
 	name string,
@@ -254,7 +317,7 @@ func (p *path) parseRule(
 			return fmt.Errorf("nested rules") // TODO: errors...
 		}
 
-		if err := p.parseRule(addRule, desc, name); err != nil {
+		if err := p.addRule(addRule, desc, name); err != nil {
 			return err
 		}
 	}
@@ -651,9 +714,6 @@ searchLoop:
 }
 
 func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
-	fmt.Println("METHOD", r.Method)
-	fmt.Println("URL", r.URL)
-
 	if !strings.HasPrefix(r.URL.Path, "/") {
 		r.URL.Path = "/" + r.URL.Path
 	}
@@ -668,13 +728,15 @@ func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
 		fmt.Println(k, v)
 	}
 
-	method, params, err := m.path.match(r.URL.Path, r.Method)
+	s := m.loadState()
+
+	method, params, err := s.path.match(r.URL.Path, r.Method)
 	if err != nil {
 		return err
 	}
 	fmt.Println("FOUND", r.URL.Path, method, params)
 
-	mc, err := m.pickMethodConn(method.name)
+	mc, err := s.pickMethodConn(method.name)
 	if err != nil {
 		return err
 	}
