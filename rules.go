@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 
+	"google.golang.org/genproto/googleapis/api/annotations"
+	_ "google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -24,8 +26,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
-	_ "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
+	//"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
+	//_ "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 	"github.com/afking/graphpb/grpc/codes"
 	"github.com/afking/graphpb/grpc/status"
 )
@@ -188,7 +190,10 @@ func (p *path) addRule(
 	case *annotations.HttpRule_Patch:
 		verb = http.MethodPatch
 		tmpl = v.Patch
-	default: // TODO: custom  method support
+	case *annotations.HttpRule_Custom:
+		verb = v.Custom.Kind
+		tmpl = v.Custom.Path
+	default:
 		return fmt.Errorf("unsupported pattern %v", v)
 	}
 
@@ -310,7 +315,7 @@ func (p *path) addRule(
 	}
 
 	cursor.methods[verb] = m // register method
-	fmt.Println("Registered", verb, tmpl)
+	//fmt.Println("Registered", verb, tmpl)
 
 	for _, addRule := range rule.AdditionalBindings {
 		if len(addRule.AdditionalBindings) != 0 {
@@ -564,7 +569,7 @@ func (m *method) parseQueryParams(values url.Values) (params, error) {
 
 func (v *variable) index(s string) int {
 	var i int
-	fmt.Println("\tlen(v.toks)", len(v.toks))
+	//fmt.Println("\tlen(v.toks)", len(v.toks))
 	for _, tok := range v.toks {
 		if i == len(s) {
 			return -1
@@ -576,25 +581,25 @@ func (v *variable) index(s string) int {
 				return -1
 			}
 			i += 1
-			fmt.Println("\ttokenSlash", i)
+			//fmt.Println("\ttokenSlash", i)
 
 		case tokenStar:
 			i = strings.Index(s[i:], "/")
 			if i == -1 {
 				i = len(s)
 			}
-			fmt.Println("\ttokenStar", i)
+			//fmt.Println("\ttokenStar", i)
 
 		case tokenStarStar:
 			i = len(s)
-			fmt.Println("\ttokenStarStar", i)
+			//fmt.Println("\ttokenStarStar", i)
 
 		case tokenValue:
 			if !strings.HasPrefix(s[i:], tok.val) {
 				return -1
 			}
 			i += len(tok.val)
-			fmt.Println("\ttokenValue", i)
+			//fmt.Println("\ttokenValue", i)
 
 		default:
 			panic(":(")
@@ -628,8 +633,8 @@ searchLoop:
 		}
 
 		segment := s[i:j]
-		fmt.Println("------------------")
-		fmt.Println(segment, path.segments)
+		//fmt.Println("------------------")
+		//fmt.Println(segment, path.segments)
 
 		// Push path variables to stack.
 		for _, v := range path.variables {
@@ -644,20 +649,20 @@ searchLoop:
 		if nextPath, ok := path.segments[segment]; ok {
 			path = nextPath
 			i = j
-			fmt.Println("segment", segment)
+			//fmt.Println("segment", segment)
 
 			continue
 		}
-		fmt.Println("segment fault", segment, len(stack))
+		//fmt.Println("segment fault", segment, len(stack))
 
 		for k := len(stack) - 1; k >= 0; k-- {
 			n := stack[k]
 			stack = stack[:k] // pop
-			fmt.Println("len(stack)", len(stack))
+			//fmt.Println("len(stack)", len(stack))
 
 			// pop
 			if n.captured {
-				fmt.Println("pop", n.variable.name, captures[len(captures)-1])
+				//fmt.Println("pop", n.variable.name, captures[len(captures)-1])
 				captures = captures[:len(captures)-1]
 				continue
 			}
@@ -665,7 +670,7 @@ searchLoop:
 			i = n.i
 			l := n.variable.index(s[i+1:]) // check
 			if l == -1 {
-				fmt.Println("pop", n.variable.name, "<nil>")
+				//fmt.Println("pop", n.variable.name, "<nil>")
 				continue
 			}
 			j = i + l + 1
@@ -673,15 +678,15 @@ searchLoop:
 			// method check
 			if j == len(s) {
 				if _, ok := n.variable.next.methods[method]; !ok {
-					fmt.Println("skipping on method", method)
+					//fmt.Println("skipping on method", method)
 					continue
 				}
 			}
 
 			// push
-			fmt.Println("indexing", i, j, s, len(s))
+			//fmt.Println("indexing", i, j, s, len(s))
 			raw := s[i+1 : j]
-			fmt.Println("push", n.variable.name, raw)
+			//fmt.Println("push", n.variable.name, raw)
 			n.captured = true
 			captures = append(captures, raw)
 			path = n.variable.next //
@@ -713,115 +718,59 @@ searchLoop:
 	return m, params, nil
 }
 
-func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
-	if !strings.HasPrefix(r.URL.Path, "/") {
-		r.URL.Path = "/" + r.URL.Path
-	}
+func (m *method) decodeRequestArgs(args proto.Message, r *http.Request) error {
+	contentType := r.Header.Get("Content-Type")
+	contentEncoding := r.Header.Get("Content-Encoding")
 
-	//d, err := httputil.DumpRequest(r, true)
-	//if err != nil {
-	//	return err
-	//}
-	//fmt.Println(string(d))
-
-	for k, v := range r.Header {
-		fmt.Println(k, v)
-	}
-
-	s := m.loadState()
-
-	method, params, err := s.path.match(r.URL.Path, r.Method)
-	if err != nil {
-		return err
-	}
-	fmt.Println("FOUND", r.URL.Path, method, params)
-
-	mc, err := s.pickMethodConn(method.name)
-	if err != nil {
-		return err
-	}
-
-	// TODO: fix the body marshalling
-	argsDesc := method.desc.Input()
-	replyDesc := method.desc.Output()
-	fmt.Printf("\n%s -> %s\n", argsDesc.FullName(), replyDesc.FullName())
-
-	args := dynamicpb.NewMessage(argsDesc)
-	reply := dynamicpb.NewMessage(replyDesc)
-
-	if method.hasBody {
-		// TODO: handler should decide what to select on.
-		contentType := r.Header.Get("Content-Type")
-		contentEncoding := r.Header.Get("Content-Encoding")
-
-		var body io.ReadCloser
-		switch contentEncoding {
-		case "gzip":
-			body, err = gzip.NewReader(r.Body)
-			if err != nil {
-				return err
-			}
-		default:
-			body = r.Body
-		}
-		defer body.Close()
-
-		// TODO: mux options.
-		b, err := ioutil.ReadAll(io.LimitReader(body, 1024*1024*2))
+	var body io.ReadCloser
+	switch contentEncoding {
+	case "gzip":
+		var err error
+		body, err = gzip.NewReader(r.Body)
 		if err != nil {
 			return err
 		}
 
-		cur := args.ProtoReflect()
-		for _, fd := range method.body {
-			cur = cur.Mutable(fd).Message()
-		}
-		fmt.Println("cur:", contentType, cur.Descriptor().FullName())
-		fullname := cur.Descriptor().FullName()
-
-		msg := cur.Interface()
-		fmt.Printf("body %s %T %v\n", body, msg, method.body)
-
-		switch fullname {
-		case "google.api.HttpBody":
-			rfl := msg.ProtoReflect()
-			fds := rfl.Descriptor().Fields()
-			fdContentType := fds.ByName(protoreflect.Name("content_type"))
-			fdData := fds.ByName(protoreflect.Name("data"))
-			rfl.Set(fdContentType, protoreflect.ValueOfString(contentType))
-			rfl.Set(fdData, protoreflect.ValueOfBytes(b))
-			// TODO: extensions?
-
-		default:
-			// TODO: contentType check?
-			if err := protojson.Unmarshal(b, msg); err != nil {
-				return err
-			}
-		}
+	default:
+		body = r.Body
 	}
+	defer body.Close()
 
-	queryParams, err := method.parseQueryParams(r.URL.Query())
+	// TODO: mux options.
+	b, err := ioutil.ReadAll(io.LimitReader(body, 1024*1024*2))
 	if err != nil {
 		return err
 	}
-	params = append(params, queryParams...)
-	fmt.Println("queryParams", len(queryParams), queryParams)
 
-	if err := params.set(args); err != nil {
-		return err
+	cur := args.ProtoReflect()
+	for _, fd := range m.body {
+		cur = cur.Mutable(fd).Message()
 	}
+	fullname := cur.Descriptor().FullName()
 
-	// TODO: pass headers.
-	ctx := metadata.AppendToOutgoingContext(
-		r.Context(),
-		"authentication", r.Header.Get("authentication"),
-	)
+	msg := cur.Interface()
 
-	if err := mc.cc.Invoke(ctx, method.name, args, reply); err != nil {
-		return err
+	switch fullname {
+	case "google.api.HttpBody":
+		rfl := msg.ProtoReflect()
+		fds := rfl.Descriptor().Fields()
+		fdContentType := fds.ByName(protoreflect.Name("content_type"))
+		fdData := fds.ByName(protoreflect.Name("data"))
+		rfl.Set(fdContentType, protoreflect.ValueOfString(contentType))
+		rfl.Set(fdData, protoreflect.ValueOfBytes(b))
+		// TODO: extensions?
+
+	default:
+		// TODO: contentType check?
+		if err := protojson.Unmarshal(b, msg); err != nil {
+			return err
+		}
 	}
+	return nil
+}
 
-	accept := r.Header.Get("Accept")
+func (m *method) encodeResponseReply(reply proto.Message, w http.ResponseWriter, r *http.Request) error {
+	//accept := r.Header.Get("Accept")
 	acceptEncoding := r.Header.Get("Accept-Encoding")
 
 	if fRsp, ok := w.(http.Flusher); ok {
@@ -840,10 +789,9 @@ func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	cur := reply.ProtoReflect()
-	for _, fd := range method.resp {
+	for _, fd := range m.resp {
 		cur = cur.Mutable(fd).Message()
 	}
-	fmt.Println("cur resp:", accept, cur.Descriptor().FullName())
 
 	msg := cur.Interface()
 
@@ -877,16 +825,86 @@ func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
+	if !strings.HasPrefix(r.URL.Path, "/") {
+		r.URL.Path = "/" + r.URL.Path
+	}
+
+	//d, err := httputil.DumpRequest(r, true)
+	//if err != nil {
+	//	return err
+	//}
+	//fmt.Println(string(d))
+
+	//for k, v := range r.Header {
+	//	fmt.Println(k, v)
+	//}
+
+	s := m.loadState()
+
+	method, params, err := s.path.match(r.URL.Path, r.Method)
+	if err != nil {
+		return err
+	}
+
+	mc, err := s.pickMethodConn(method.name)
+	if err != nil {
+		return err
+	}
+
+	// TODO: fix the body marshalling
+	argsDesc := method.desc.Input()
+	replyDesc := method.desc.Output()
+	//fmt.Printf("\n%s -> %s\n", argsDesc.FullName(), replyDesc.FullName())
+
+	args := dynamicpb.NewMessage(argsDesc)
+	reply := dynamicpb.NewMessage(replyDesc)
+
+	if method.hasBody {
+		// TODO: handler should decide what to select on.
+		if err := method.decodeRequestArgs(args, r); err != nil {
+			return err
+		}
+	}
+
+	queryParams, err := method.parseQueryParams(r.URL.Query())
+	if err != nil {
+		return err
+	}
+	params = append(params, queryParams...)
+	//fmt.Println("queryParams", len(queryParams), queryParams)
+
+	if err := params.set(args); err != nil {
+		return err
+	}
+
+	// TODO: pass headers.
+	ctx := metadata.AppendToOutgoingContext(
+		r.Context(),
+		"authentication", r.Header.Get("authentication"),
+	)
+
+	if err := mc.cc.Invoke(ctx, method.name, args, reply); err != nil {
+		return err
+	}
+
+	return method.encodeResponseReply(reply, w, r)
+}
+
+func encError(w http.ResponseWriter, err error) {
+	s, _ := status.FromError(err)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(HTTPStatusCode(s.Code()))
+
+	b, err := protojson.Marshal(s.Proto())
+	if err != nil {
+		panic(err) // ...
+	}
+	w.Write(b)
+}
+
 func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := m.proxyHTTP(w, r); err != nil {
-		s, _ := status.FromError(err)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(HTTPStatusCode(s.Code()))
-
-		b, err := protojson.Marshal(s.Proto())
-		if err != nil {
-			panic(err) // ...
-		}
-		w.Write(b)
+		encError(w, err)
 	}
 }

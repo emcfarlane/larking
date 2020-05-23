@@ -59,7 +59,7 @@ func NewMux(ccs ...*grpc.ClientConn) (*Mux, error) {
 
 	ctx := context.Background()
 
-	var ss []stream
+	//var ss []stream
 	for _, cc := range ccs {
 		c := rpb.NewServerReflectionClient(cc)
 
@@ -74,7 +74,7 @@ func NewMux(ccs ...*grpc.ClientConn) (*Mux, error) {
 			return nil, err
 		}
 
-		ss = append(ss, stream)
+		//ss = append(ss, stream)
 	}
 
 	m := Mux{}
