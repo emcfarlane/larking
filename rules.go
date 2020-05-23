@@ -26,8 +26,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	//"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
-	//_ "github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 	"github.com/afking/graphpb/grpc/codes"
 	"github.com/afking/graphpb/grpc/status"
 )
@@ -241,7 +239,7 @@ func (p *path) addRule(
 					tokenValue,
 				}, []tokenType{})
 			} else {
-				vals = []token{token{
+				vals = []token{{
 					typ: tokenStar,
 					val: "*",
 				}} // default

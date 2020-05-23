@@ -38,8 +38,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	//spb "google.golang.org/genproto/googleapis/rpc/status"
-	spb "github.com/afking/graphpb/google.golang.org/genproto/googleapis/rpc/status"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
 	//"google.golang.org/grpc/codes"
 	"github.com/afking/graphpb/grpc/codes"
 )

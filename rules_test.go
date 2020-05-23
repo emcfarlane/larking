@@ -12,7 +12,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	//"google.golang.org/genproto/googleapis/api/httpbody" // TODO
+	"google.golang.org/genproto/googleapis/api/httpbody"
+	"google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -23,8 +24,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
-	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/rpc/status"
 	"github.com/afking/graphpb/grpc/reflection"
 	"github.com/afking/graphpb/testpb"
 )

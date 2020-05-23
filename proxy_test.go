@@ -6,14 +6,13 @@ import (
 	"net"
 	"testing"
 
-	//"google.golang.org/genproto/googleapis/api/httpbody" // TODO
 	"github.com/google/go-cmp/cmp"
+	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 	"github.com/afking/graphpb/grpc/reflection"
 	"github.com/afking/graphpb/testpb"
 )

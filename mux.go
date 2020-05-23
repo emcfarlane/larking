@@ -10,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"google.golang.org/genproto/googleapis/api/annotations"
+	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
@@ -17,8 +19,8 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
-	"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
+	//"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
+	//"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 	"github.com/afking/graphpb/grpc/codes"
 	rpb "github.com/afking/graphpb/grpc/reflection/v1alpha"
 	"github.com/afking/graphpb/grpc/status"
