@@ -9,9 +9,9 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/dynamicpb"
 
-	"github.com/afking/graphpb/grpc/codes"
-	rpb "github.com/afking/graphpb/grpc/reflection/v1alpha"
-	"github.com/afking/graphpb/grpc/status"
+	"github.com/emcfarlane/graphpb/grpc/codes"
+	rpb "github.com/emcfarlane/graphpb/grpc/reflection/v1alpha"
+	"github.com/emcfarlane/graphpb/grpc/status"
 )
 
 func isStreamError(err error) bool {

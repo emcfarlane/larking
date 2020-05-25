@@ -13,8 +13,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"github.com/afking/graphpb/grpc/reflection"
-	"github.com/afking/graphpb/testpb"
+	"github.com/emcfarlane/graphpb/grpc/reflection"
+	"github.com/emcfarlane/graphpb/testpb"
 )
 
 type override struct {

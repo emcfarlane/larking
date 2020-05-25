@@ -232,7 +232,7 @@ var _Messaging_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "github.com/afking/graphpb/testpb/test.proto",
+	Metadata: "github.com/emcfarlane/graphpb/testpb/test.proto",
 }
 
 // FilesClient is the client API for Files service.
@@ -381,7 +381,7 @@ var _Files_serviceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "github.com/afking/graphpb/testpb/test.proto",
+	Metadata: "github.com/emcfarlane/graphpb/testpb/test.proto",
 }
 
 // WellKnownClient is the client API for WellKnown service.
@@ -461,5 +461,5 @@ var _WellKnown_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "github.com/afking/graphpb/testpb/test.proto",
+	Metadata: "github.com/emcfarlane/graphpb/testpb/test.proto",
 }

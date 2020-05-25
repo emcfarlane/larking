@@ -40,7 +40,7 @@ import (
 
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	//"google.golang.org/grpc/codes"
-	"github.com/afking/graphpb/grpc/codes"
+	"github.com/emcfarlane/graphpb/grpc/codes"
 )
 
 func statusRawProto(s *Status) *spb.Status { return s.s }

@@ -1,4 +1,4 @@
-module github.com/afking/graphpb
+module github.com/emcfarlane/graphpb
 
 go 1.12
 

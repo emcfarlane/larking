@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/afking/graphpb/testpb"
+	"github.com/emcfarlane/graphpb/testpb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"

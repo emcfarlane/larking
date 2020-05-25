@@ -5,8 +5,8 @@ package grpc_reflection_v1alpha
 import (
 	context "context"
 
-	codes "github.com/afking/graphpb/grpc/codes"
-	status "github.com/afking/graphpb/grpc/status"
+	codes "github.com/emcfarlane/graphpb/grpc/codes"
+	status "github.com/emcfarlane/graphpb/grpc/status"
 	grpc "google.golang.org/grpc"
 )
 

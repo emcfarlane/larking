@@ -24,8 +24,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/afking/graphpb/grpc/reflection"
-	"github.com/afking/graphpb/testpb"
+	"github.com/emcfarlane/graphpb/grpc/reflection"
+	"github.com/emcfarlane/graphpb/testpb"
 )
 
 func TestMessageServer(t *testing.T) {

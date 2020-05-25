@@ -19,11 +19,11 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	//"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/annotations"
-	//"github.com/afking/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
-	"github.com/afking/graphpb/grpc/codes"
-	rpb "github.com/afking/graphpb/grpc/reflection/v1alpha"
-	"github.com/afking/graphpb/grpc/status"
+	//"github.com/emcfarlane/graphpb/google.golang.org/genproto/googleapis/api/annotations"
+	//"github.com/emcfarlane/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
+	"github.com/emcfarlane/graphpb/grpc/codes"
+	rpb "github.com/emcfarlane/graphpb/grpc/reflection/v1alpha"
+	"github.com/emcfarlane/graphpb/grpc/status"
 )
 
 type methodDesc struct {

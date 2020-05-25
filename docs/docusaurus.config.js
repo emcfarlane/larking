@@ -1,10 +1,10 @@
 module.exports = {
   title : 'graphpb',
   tagline : 'Reflective protobuffer APIs',
-  url : 'https://afking.github.io',
+  url : 'https://emcfarlane.github.io',
   baseUrl : '/graphpb/',
   favicon : 'img/favicon.ico',
-  organizationName : 'afking',
+  organizationName : 'emcfarlane',
   projectName : 'graphpb',
   themeConfig : {
     navbar : {
@@ -21,7 +21,7 @@ module.exports = {
           position : 'right',
         },
         {
-          href : 'https://github.com/afking/graphpb',
+          href : 'https://github.com/emcfarlane/graphpb',
           label : 'GitHub',
           position : 'right',
         },

@@ -51,7 +51,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	rpb "github.com/afking/graphpb/grpc/reflection/v1alpha"
+	rpb "github.com/emcfarlane/graphpb/grpc/reflection/v1alpha"
 )
 
 type serverReflectionServer struct {

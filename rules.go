@@ -26,8 +26,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/afking/graphpb/grpc/codes"
-	"github.com/afking/graphpb/grpc/status"
+	"github.com/emcfarlane/graphpb/grpc/codes"
+	"github.com/emcfarlane/graphpb/grpc/status"
 )
 
 // getExtensionHTTP
