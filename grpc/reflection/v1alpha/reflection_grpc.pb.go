@@ -4,10 +4,9 @@ package grpc_reflection_v1alpha
 
 import (
 	context "context"
-
-	codes "github.com/emcfarlane/graphpb/grpc/codes"
-	status "github.com/emcfarlane/graphpb/grpc/status"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
