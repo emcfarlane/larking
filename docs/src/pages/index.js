@@ -12,8 +12,8 @@ const features = [
     imageUrl: "img/grpc-icon-color.png",
     description: (
       <>
-        Supports any gRPC services implementing reflection. Protobuffer
-        introspection dynamically reloeads on new server deployments.
+        Supports gRPC servers that implement reflection. Protobuffer
+        introspection dynamically reloads on new server deployments.
       </>
     ),
   },
@@ -51,19 +51,6 @@ function Feature({ imageUrl, title, description }) {
     </div>
   );
 }
-//<!--<h1 className="hero__title">{siteConfig.title}</h1>
-//<p className="hero__subtitle">{siteConfig.tagline}</p>!-->
-//<div className={styles.buttons}>
-//  <Link
-//    className={classnames(
-//      "button button--outline button--secondary button--lg",
-//      styles.getStarted
-//    )}
-//    to={useBaseUrl("docs/doc1")}
-//  >
-//    Get Started
-//  </Link>
-//</div>
 
 function Home() {
   const context = useDocusaurusContext();
@@ -74,16 +61,16 @@ function Home() {
         <div className="container">
           <div className="row">
             <div className="col">
-              <div className="heroTagline">Reflective protobuffer APIs</div>
+              <div className="hero-tag-line">Reflective protobuffer APIs</div>
               <Link
                 className="button button--outline button--secondary button--lg"
-                to={useBaseUrl("docs/doc1")}
+                to={useBaseUrl("docs/intro")}
               >
                 Get Started
               </Link>
             </div>
             <div className="col">
-              <img className="heroLogo" src="img/GraphPB_hero.png" />
+              <img className="hero-logo" src="img/GraphPB_hero.png" />
             </div>
           </div>
         </div>

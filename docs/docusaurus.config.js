@@ -8,42 +8,27 @@ module.exports = {
   projectName: "graphpb",
   themeConfig: {
     navbar: {
-      title: "graphpb",
+      title: "GraphPB",
       logo: {
-        alt: "graphpb",
+        alt: "GraphPB",
         src: "img/logo_one.svg",
       },
       links: [
         {
-          to: "docs/doc1",
-          activeBasePath: "docs",
+          to: "docs/intro",
+          activeBasePath: "intro",
           label: "Docs",
-          position: "right",
+          position: "left",
         },
         {
           href: "https://github.com/emcfarlane/graphpb",
-          label: "GitHub",
           position: "right",
+          className: ["header-github", "header-logo"],
         },
       ],
     },
     footer: {
       style: "dark",
-      links: [
-        {
-          title: "Docs",
-          items: [
-            {
-              label: "Style Guide",
-              to: "docs/doc1",
-            },
-            {
-              label: "Second Doc",
-              to: "docs/doc2",
-            },
-          ],
-        },
-      ],
       copyright: `Copyright © ${new Date().getFullYear()} Edward McFarlane. Built with Docusaurus.`,
     },
   },
