@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_docker//container:container.bzl", "container_image")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["main.go"],
+    importpath = "github.com/emcfarlane/graphpb/cmd/graphpb",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "graphpb",
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
+)
+
+container_image(
+    name = "image",
+    base = "@distroless//image",
+    entrypoint = ["/graphpb"],
+    files = [":graphpb"],
+    visibility = ["//visibility:public"],
+)

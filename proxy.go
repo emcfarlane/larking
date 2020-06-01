@@ -7,11 +7,13 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/dynamicpb"
 
-	"github.com/emcfarlane/graphpb/grpc/codes"
 	rpb "github.com/emcfarlane/graphpb/grpc/reflection/v1alpha"
-	"github.com/emcfarlane/graphpb/grpc/status"
 )
 
 func isStreamError(err error) bool {
@@ -117,6 +119,7 @@ func (m *Mux) StreamHandler() grpc.StreamHandler {
 	}
 }
 
+// TODO: fetch type on a per stream basis
 type serverReflectionServer struct {
 	m *Mux
 	s *grpc.Server
@@ -130,6 +133,74 @@ func (m *Mux) RegisterReflectionServer(s *grpc.Server) {
 		m: m,
 		s: s,
 	})
+}
+
+// fileDescEncodingByFilename finds the file descriptor for given filename,
+// does marshalling on it and returns the marshalled result.
+func (s *serverReflectionServer) fileDescEncodingByFilename(name string) ([]byte, error) {
+	fd, err := protoregistry.GlobalFiles.FindFileByPath(name)
+	if err != nil {
+		return nil, err
+	}
+	return proto.Marshal(protodesc.ToFileDescriptorProto(fd))
+}
+
+// fileDescEncodingContainingSymbol finds the file descriptor containing the given symbol,
+// does marshalling on it and returns the marshalled result.
+// The given symbol can be a type, a service or a method.
+func (s *serverReflectionServer) fileDescEncodingContainingSymbol(name string) ([]byte, error) {
+	fullname := protoreflect.FullName(name)
+	d, err := protoregistry.GlobalFiles.FindDescriptorByName(fullname)
+	if err != nil {
+		return nil, err
+	}
+	fd := d.ParentFile()
+	return proto.Marshal(protodesc.ToFileDescriptorProto(fd))
+}
+
+// fileDescEncodingContainingExtension finds the file descriptor containing given extension,
+// does marshalling on it and returns the marshalled result.
+func (s *serverReflectionServer) fileDescEncodingContainingExtension(typeName string, extNum int32) ([]byte, error) {
+	fullname := protoreflect.FullName(typeName)
+	fieldnumber := protoreflect.FieldNumber(extNum)
+	ext, err := protoregistry.GlobalTypes.FindExtensionByNumber(fullname, fieldnumber)
+	if err != nil {
+		return nil, err
+	}
+
+	extd := ext.TypeDescriptor()
+	d, err := protoregistry.GlobalFiles.FindDescriptorByName(extd.FullName())
+	if err != nil {
+		return nil, err
+	}
+	fd := d.ParentFile()
+
+	return proto.Marshal(protodesc.ToFileDescriptorProto(fd))
+}
+
+// allExtensionNumbersForTypeName returns all extension numbers for the given type.
+func (s *serverReflectionServer) allExtensionNumbersForTypeName(name string) ([]int32, error) {
+	fullname := protoreflect.FullName(name)
+	_, err := protoregistry.GlobalFiles.FindDescriptorByName(fullname)
+	if err != nil {
+		return nil, err
+	}
+
+	n := protoregistry.GlobalTypes.NumExtensionsByMessage(fullname)
+	if n == 0 {
+		return nil, nil
+	}
+
+	extNums := make([]int32, 0, n)
+	protoregistry.GlobalTypes.RangeExtensionsByMessage(
+		fullname,
+		func(et protoreflect.ExtensionType) bool {
+			ed := et.TypeDescriptor().Descriptor()
+			extNums = append(extNums, int32(ed.Number()))
+			return true
+		},
+	)
+	return extNums, nil
 }
 
 // ServerReflectionInfo is the reflection service handler.
@@ -213,21 +284,24 @@ func (s *serverReflectionServer) ServerReflectionInfo(stream rpb.ServerReflectio
 				}
 			}
 		case *rpb.ServerReflectionRequest_ListServices:
-			svcNames, _ := s.getSymbols()
-			serviceResponses := make([]*rpb.ServiceResponse, len(svcNames))
-			for i, n := range svcNames {
-				serviceResponses[i] = &rpb.ServiceResponse{
-					Name: n,
-				}
+			svcInfo := s.s.GetServiceInfo()
+			serviceResponses := make([]*rpb.ServiceResponse, 0, len(svcInfo))
+			for svcName := range svcInfo {
+				serviceResponses = append(serviceResponses, &rpb.ServiceResponse{
+					Name: svcName,
+				})
 			}
+			sort.Slice(serviceResponses, func(i, j int) bool {
+				return serviceResponses[i].Name < serviceResponses[j].Name
+			})
 			out.MessageResponse = &rpb.ServerReflectionResponse_ListServicesResponse{
 				ListServicesResponse: &rpb.ListServiceResponse{
 					Service: serviceResponses,
 				},
 			}
-		default:*/
-		return status.Errorf(codes.InvalidArgument, "invalid MessageRequest: %v", in.MessageRequest)
-		//}
+		default:
+			return status.Errorf(codes.InvalidArgument, "invalid MessageRequest: %v", in.MessageRequest)
+		}*/
 
 		if err := stream.Send(out); err != nil {
 			return err

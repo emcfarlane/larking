@@ -17,4 +17,6 @@ Regenerate protoc buffers:
 graphpb$ protoc -I=. --go_out=:. --go-grpc_out=:. grpc/reflection/v1alpha/*.proto
 
 src$ protoc -I=github.com/googleapis/googleapis -I=. --go_out=. --go-grpc_out=. github.com/emcfarlane/graphpb/testpb/*.proto
+
+bazel run //:gazelle -- update-repos -from_file=go.mod
 ```
