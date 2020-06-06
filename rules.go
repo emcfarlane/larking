@@ -778,6 +778,7 @@ func (m *method) encodeResponseReply(reply proto.Message, w http.ResponseWriter,
 	var resp io.Writer
 	switch acceptEncoding {
 	case "gzip":
+		w.Header().Set("Content-Encoding", "gzip")
 		gRsp := gzip.NewWriter(w)
 		defer gRsp.Close()
 		resp = gRsp
