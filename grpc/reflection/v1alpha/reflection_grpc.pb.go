@@ -9,17 +9,13 @@ import (
 	status "google.golang.org/grpc/status"
 )
 
-// Reference imports to suppress errors if they are not otherwise used.
-var _ context.Context
-var _ grpc.ClientConn
-
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion4
+const _ = grpc.SupportPackageIsVersion6
 
 // ServerReflectionClient is the client API for ServerReflection service.
 //
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ServerReflectionClient interface {
 	// The reflection service is structured as a bidirectional stream, ensuring
 	// all related requests go to a single server.
@@ -27,10 +23,10 @@ type ServerReflectionClient interface {
 }
 
 type serverReflectionClient struct {
-	cc *grpc.ClientConn
+	cc grpc.ClientConnInterface
 }
 
-func NewServerReflectionClient(cc *grpc.ClientConn) ServerReflectionClient {
+func NewServerReflectionClient(cc grpc.ClientConnInterface) ServerReflectionClient {
 	return &serverReflectionClient{cc}
 }
 
@@ -66,19 +62,23 @@ func (x *serverReflectionServerReflectionInfoClient) Recv() (*ServerReflectionRe
 }
 
 // ServerReflectionServer is the server API for ServerReflection service.
+// All implementations must embed UnimplementedServerReflectionServer
+// for forward compatibility
 type ServerReflectionServer interface {
 	// The reflection service is structured as a bidirectional stream, ensuring
 	// all related requests go to a single server.
 	ServerReflectionInfo(ServerReflection_ServerReflectionInfoServer) error
+	mustEmbedUnimplementedServerReflectionServer()
 }
 
-// UnimplementedServerReflectionServer can be embedded to have forward compatible implementations.
+// UnimplementedServerReflectionServer must be embedded to have forward compatible implementations.
 type UnimplementedServerReflectionServer struct {
 }
 
 func (*UnimplementedServerReflectionServer) ServerReflectionInfo(ServerReflection_ServerReflectionInfoServer) error {
 	return status.Errorf(codes.Unimplemented, "method ServerReflectionInfo not implemented")
 }
+func (*UnimplementedServerReflectionServer) mustEmbedUnimplementedServerReflectionServer() {}
 
 func RegisterServerReflectionServer(s *grpc.Server, srv ServerReflectionServer) {
 	s.RegisterService(&_ServerReflection_serviceDesc, srv)

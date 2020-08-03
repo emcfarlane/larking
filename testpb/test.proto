@@ -32,6 +32,7 @@ service Messaging {
   rpc GetMessageTwo(GetMessageRequestTwo) returns (Message) {
     option (google.api.http) = {
       get : "/v1/messages/{message_id}"
+      additional_bindings {get : "/v1/users/{user_id}/messages"}
       additional_bindings {get : "/v1/users/{user_id}/messages/{message_id}"}
     };
   }

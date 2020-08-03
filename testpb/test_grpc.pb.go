@@ -11,17 +11,13 @@ import (
 	status "google.golang.org/grpc/status"
 )
 
-// Reference imports to suppress errors if they are not otherwise used.
-var _ context.Context
-var _ grpc.ClientConn
-
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion4
+const _ = grpc.SupportPackageIsVersion6
 
 // MessagingClient is the client API for Messaging service.
 //
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MessagingClient interface {
 	// HTTP | gRPC
 	// -----|-----
@@ -48,10 +44,10 @@ type MessagingClient interface {
 }
 
 type messagingClient struct {
-	cc *grpc.ClientConn
+	cc grpc.ClientConnInterface
 }
 
-func NewMessagingClient(cc *grpc.ClientConn) MessagingClient {
+func NewMessagingClient(cc grpc.ClientConnInterface) MessagingClient {
 	return &messagingClient{cc}
 }
 
@@ -92,6 +88,8 @@ func (c *messagingClient) UpdateMessageBody(ctx context.Context, in *Message, op
 }
 
 // MessagingServer is the server API for Messaging service.
+// All implementations must embed UnimplementedMessagingServer
+// for forward compatibility
 type MessagingServer interface {
 	// HTTP | gRPC
 	// -----|-----
@@ -115,9 +113,10 @@ type MessagingServer interface {
 	// `PATCH /v1/messages/123456 { "text": "Hi!" }` | `UpdateMessage(message_id:
 	// "123456" text: "Hi!")`
 	UpdateMessageBody(context.Context, *Message) (*Message, error)
+	mustEmbedUnimplementedMessagingServer()
 }
 
-// UnimplementedMessagingServer can be embedded to have forward compatible implementations.
+// UnimplementedMessagingServer must be embedded to have forward compatible implementations.
 type UnimplementedMessagingServer struct {
 }
 
@@ -133,6 +132,7 @@ func (*UnimplementedMessagingServer) UpdateMessage(context.Context, *UpdateMessa
 func (*UnimplementedMessagingServer) UpdateMessageBody(context.Context, *Message) (*Message, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateMessageBody not implemented")
 }
+func (*UnimplementedMessagingServer) mustEmbedUnimplementedMessagingServer() {}
 
 func RegisterMessagingServer(s *grpc.Server, srv MessagingServer) {
 	s.RegisterService(&_Messaging_serviceDesc, srv)
@@ -232,12 +232,12 @@ var _Messaging_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "github.com/emcfarlane/graphpb/testpb/test.proto",
+	Metadata: "testpb/test.proto",
 }
 
 // FilesClient is the client API for Files service.
 //
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type FilesClient interface {
 	// HTTP | gRPC
 	// -----|-----
@@ -248,10 +248,10 @@ type FilesClient interface {
 }
 
 type filesClient struct {
-	cc *grpc.ClientConn
+	cc grpc.ClientConnInterface
 }
 
-func NewFilesClient(cc *grpc.ClientConn) FilesClient {
+func NewFilesClient(cc grpc.ClientConnInterface) FilesClient {
 	return &filesClient{cc}
 }
 
@@ -296,6 +296,8 @@ func (x *filesLargeUploadDownloadClient) Recv() (*httpbody.HttpBody, error) {
 }
 
 // FilesServer is the server API for Files service.
+// All implementations must embed UnimplementedFilesServer
+// for forward compatibility
 type FilesServer interface {
 	// HTTP | gRPC
 	// -----|-----
@@ -303,9 +305,10 @@ type FilesServer interface {
 	// content_type: "image/jpeg", data: <body>})"`
 	UploadDownload(context.Context, *UploadFileRequest) (*httpbody.HttpBody, error)
 	LargeUploadDownload(Files_LargeUploadDownloadServer) error
+	mustEmbedUnimplementedFilesServer()
 }
 
-// UnimplementedFilesServer can be embedded to have forward compatible implementations.
+// UnimplementedFilesServer must be embedded to have forward compatible implementations.
 type UnimplementedFilesServer struct {
 }
 
@@ -315,6 +318,7 @@ func (*UnimplementedFilesServer) UploadDownload(context.Context, *UploadFileRequ
 func (*UnimplementedFilesServer) LargeUploadDownload(Files_LargeUploadDownloadServer) error {
 	return status.Errorf(codes.Unimplemented, "method LargeUploadDownload not implemented")
 }
+func (*UnimplementedFilesServer) mustEmbedUnimplementedFilesServer() {}
 
 func RegisterFilesServer(s *grpc.Server, srv FilesServer) {
 	s.RegisterService(&_Files_serviceDesc, srv)
@@ -381,12 +385,12 @@ var _Files_serviceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "github.com/emcfarlane/graphpb/testpb/test.proto",
+	Metadata: "testpb/test.proto",
 }
 
 // WellKnownClient is the client API for WellKnown service.
 //
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WellKnownClient interface {
 	// HTTP | gRPC
 	// -----|-----
@@ -396,10 +400,10 @@ type WellKnownClient interface {
 }
 
 type wellKnownClient struct {
-	cc *grpc.ClientConn
+	cc grpc.ClientConnInterface
 }
 
-func NewWellKnownClient(cc *grpc.ClientConn) WellKnownClient {
+func NewWellKnownClient(cc grpc.ClientConnInterface) WellKnownClient {
 	return &wellKnownClient{cc}
 }
 
@@ -413,21 +417,25 @@ func (c *wellKnownClient) Check(ctx context.Context, in *Scalars, opts ...grpc.C
 }
 
 // WellKnownServer is the server API for WellKnown service.
+// All implementations must embed UnimplementedWellKnownServer
+// for forward compatibility
 type WellKnownServer interface {
 	// HTTP | gRPC
 	// -----|-----
 	// `GET /v1/wellknown/timestamp/2017-01-15T01:30:15.01Z` |
 	// `Check(Timestamp{...})`
 	Check(context.Context, *Scalars) (*empty.Empty, error)
+	mustEmbedUnimplementedWellKnownServer()
 }
 
-// UnimplementedWellKnownServer can be embedded to have forward compatible implementations.
+// UnimplementedWellKnownServer must be embedded to have forward compatible implementations.
 type UnimplementedWellKnownServer struct {
 }
 
 func (*UnimplementedWellKnownServer) Check(context.Context, *Scalars) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Check not implemented")
 }
+func (*UnimplementedWellKnownServer) mustEmbedUnimplementedWellKnownServer() {}
 
 func RegisterWellKnownServer(s *grpc.Server, srv WellKnownServer) {
 	s.RegisterService(&_WellKnown_serviceDesc, srv)
@@ -461,5 +469,5 @@ var _WellKnown_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "github.com/emcfarlane/graphpb/testpb/test.proto",
+	Metadata: "testpb/test.proto",
 }

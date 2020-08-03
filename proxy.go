@@ -121,6 +121,7 @@ func (m *Mux) StreamHandler() grpc.StreamHandler {
 
 // TODO: fetch type on a per stream basis
 type serverReflectionServer struct {
+	rpb.UnimplementedServerReflectionServer
 	m *Mux
 	s *grpc.Server
 }

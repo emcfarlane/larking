@@ -159,7 +159,25 @@ func TestMessageServer(t *testing.T) {
 			msg:        &testpb.Message{Text: "hello, query params!"},
 		},
 	}, {
-		name: "additional_bindings",
+		name: "additional_bindings1",
+		req:  httptest.NewRequest(http.MethodGet, "/v1/users/usr_123/messages?message_id=msg_123&revision=2", nil),
+		in: in{
+			method: "/graphpb.testpb.Messaging/GetMessageTwo",
+			msg: &testpb.GetMessageRequestTwo{
+				MessageId: "msg_123",
+				Revision:  2,
+				UserId:    "usr_123",
+			},
+		},
+		out: out{
+			msg: &testpb.Message{Text: "hello, additional bindings!"},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &testpb.Message{Text: "hello, additional bindings!"},
+		},
+	}, {
+		name: "additional_bindings2",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/users/usr_123/messages/msg_123?revision=2", nil),
 		in: in{
 			method: "/graphpb.testpb.Messaging/GetMessageTwo",

@@ -41,6 +41,10 @@ type variable struct {
 	next *path
 }
 
+func (v *variable) String() string {
+	return fmt.Sprintf("%#v", v)
+}
+
 type variables []*variable
 
 func (p variables) Len() int           { return len(p) }
@@ -51,6 +55,34 @@ type path struct {
 	segments  map[string]*path   // maps constants to path routes
 	variables variables          // sorted array of variables
 	methods   map[string]*method // maps http methods to grpc methods
+}
+
+func (p *path) String() string {
+	var s, sp, sv, sm []string
+	for k, pp := range p.segments {
+		sp = append(sp, "\""+k+"\":"+pp.String())
+	}
+	if len(sp) > 0 {
+		sort.Strings(sp)
+		s = append(s, "segments{"+strings.Join(sp, ",")+"}")
+	}
+
+	for _, vv := range p.variables {
+		sv = append(sv, "\"{"+vv.name+"}\"->"+vv.next.String())
+	}
+	if len(sv) > 0 {
+		sort.Strings(sv)
+		s = append(s, "variables["+strings.Join(sv, ",")+"]")
+	}
+
+	for k, mm := range p.methods {
+		sm = append(sm, "\""+k+"\":"+mm.String())
+	}
+	if len(sm) > 0 {
+		sort.Strings(sm)
+		s = append(s, "methods{"+strings.Join(sm, ",")+"}")
+	}
+	return "path{" + strings.Join(s, ",") + "}"
 }
 
 func (p *path) findVariable(name string) (*variable, bool) {
@@ -76,6 +108,10 @@ type method struct {
 	hasBody bool                             // body="*" or body="field.name" or body="" for no body
 	resp    []protoreflect.FieldDescriptor   // body=[""|"*"]
 	name    string                           // /{ServiceName}/{MethodName}
+}
+
+func (m *method) String() string {
+	return m.name
 }
 
 func fieldPath(fieldDescs protoreflect.FieldDescriptors, names ...string) []protoreflect.FieldDescriptor {
@@ -606,114 +642,58 @@ func (v *variable) index(s string) int {
 	return i
 }
 
-func (p *path) match(s, method string) (*method, params, error) {
-
-	// Depth first search preferring path segments over variables.
-	// Variables split the search tree:
-	//     /path/{variable/*}/to/{end/**} VERB
-	type node struct {
-		i        int       // segment index
-		variable *variable // variable at index
-		captured bool      // variable matched
+// Depth first search preferring path segments over variables.
+// Variables split the search tree:
+//     /path/{variable/*}/to/{end/**} VERB
+func (p *path) match(route, method string) (*method, params, error) {
+	if len(route) == 0 {
+		if m, ok := p.methods[method]; ok {
+			return m, nil, nil
+		}
+		return nil, nil, status.Error(codes.NotFound, "not found")
 	}
-	var stack []node
-	var captures []string
 
-	path := p
+	j := strings.Index(route[1:], "/") + 1
+	if j == 0 {
+		j = len(route) // capture end of path
+	}
+	segment := route[:j]
 
-searchLoop:
-	for i := 0; i < len(s); {
-		j := strings.Index(s[i+1:], "/")
-		if j == -1 {
-			j = len(s) // capture end of path
-		} else {
-			j += i + 1
+	//fmt.Println("------------------")
+	//fmt.Println("~", segment, "~")
+
+	if next, ok := p.segments[segment]; ok {
+		if m, ps, err := next.match(route[j:], method); err == nil {
+			return m, ps, err
 		}
+	}
 
-		segment := s[i:j]
-		//fmt.Println("------------------")
-		//fmt.Println(segment, path.segments)
-
-		// Push path variables to stack.
-		for _, v := range path.variables {
-			stack = append(stack, node{
-				i, v, false,
-			})
-		}
-		//if len(path.variables) != 0 {
-		//	stack = append(stack, node{i, j, path, 0})
-		//}
-
-		if nextPath, ok := path.segments[segment]; ok {
-			path = nextPath
-			i = j
-			//fmt.Println("segment", segment)
-
+	for _, v := range p.variables {
+		l := v.index(route[1:]) + 1 // bump off /
+		if l == 0 {
 			continue
 		}
-		//fmt.Println("segment fault", segment, len(stack))
+		newRoute := route[l:]
 
-		for k := len(stack) - 1; k >= 0; k-- {
-			n := stack[k]
-			stack = stack[:k] // pop
-			//fmt.Println("len(stack)", len(stack))
-
-			// pop
-			if n.captured {
-				//fmt.Println("pop", n.variable.name, captures[len(captures)-1])
-				captures = captures[:len(captures)-1]
-				continue
-			}
-
-			i = n.i
-			l := n.variable.index(s[i+1:]) // check
-			if l == -1 {
-				//fmt.Println("pop", n.variable.name, "<nil>")
-				continue
-			}
-			j = i + l + 1
-
-			// method check
-			if j == len(s) {
-				if _, ok := n.variable.next.methods[method]; !ok {
-					//fmt.Println("skipping on method", method)
-					continue
-				}
-			}
-
-			// push
-			//fmt.Println("indexing", i, j, s, len(s))
-			raw := s[i+1 : j]
-			//fmt.Println("push", n.variable.name, raw)
-			n.captured = true
-			captures = append(captures, raw)
-			path = n.variable.next //
-			i = j
-			continue searchLoop
-		}
-
-		return nil, nil, status.Error(codes.NotFound, "not found")
-	}
-
-	m, ok := path.methods[method]
-	if !ok {
-		return nil, nil, status.Error(codes.NotFound, "not found")
-	}
-
-	if len(m.vars) != len(captures) {
-		panic(fmt.Sprintf("wft %d %d", len(m.vars), len(captures)))
-	}
-
-	params := make(params, len(m.vars))
-	for i, fds := range m.vars {
-		p, err := parseParam(fds, []byte(captures[i]))
+		//fmt.Println("variable", l, newRoute)
+		m, ps, err := v.next.match(newRoute, method)
 		if err != nil {
-			return nil, nil, err
+			continue
 		}
-		params[i] = p
+
+		capture := []byte(route[1:l])
+
+		//fmt.Println("capture", len(m.vars), len(ps))
+		fds := m.vars[len(m.vars)-len(ps)-1]
+		if p, err := parseParam(fds, capture); err != nil {
+			return nil, nil, err
+		} else {
+			ps = append(ps, p)
+		}
+		return m, ps, err
 	}
 
-	return m, params, nil
+	return nil, nil, status.Error(codes.NotFound, "not found")
 }
 
 func (m *method) decodeRequestArgs(args proto.Message, r *http.Request) error {
