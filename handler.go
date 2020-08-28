@@ -173,7 +173,7 @@ func (h *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 
 	ctx := metadata.NewIncomingContext(
 		r.Context(), metadata.Pairs(
-			"authentication", r.Header.Get("authentication"),
+			"authorization", r.Header.Get("authorization"),
 		),
 	)
 
