@@ -13,7 +13,7 @@ module.exports = {
         alt: "GraphPB",
         src: "img/logo_one.svg",
       },
-      links: [
+      items: [
         {
           to: "docs/intro",
           activeBasePath: "intro",
@@ -23,7 +23,7 @@ module.exports = {
         {
           href: "https://github.com/emcfarlane/graphpb",
           position: "right",
-          className: ["header-github", "header-logo"],
+          className: "header-github header-logo",
         },
       ],
     },

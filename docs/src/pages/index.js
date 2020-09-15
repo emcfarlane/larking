@@ -61,7 +61,7 @@ function Home() {
         <div className="container">
           <div className="row">
             <div className="col">
-              <div className="hero-tag-line">Reflective protobuffer APIs</div>
+              <div className="hero-tag-line">Reflective Protobuffer APIs</div>
               <Link
                 className="button button--outline button--secondary button--lg"
                 to={useBaseUrl("docs/intro")}
