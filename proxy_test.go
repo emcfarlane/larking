@@ -15,6 +15,7 @@ import (
 
 	"github.com/emcfarlane/graphpb/grpc/reflection"
 	"github.com/emcfarlane/graphpb/testpb"
+	"golang.org/x/sync/errgroup"
 )
 
 type override struct {
@@ -88,7 +89,16 @@ func TestGRPCProxy(t *testing.T) {
 	}
 	defer lis.Close()
 
-	go gs.Serve(lis)
+	var g errgroup.Group
+	defer func() {
+		if err := g.Wait(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	g.Go(func() error {
+		return gs.Serve(lis)
+	})
 	defer gs.Stop()
 
 	// Create the client.
@@ -113,7 +123,9 @@ func TestGRPCProxy(t *testing.T) {
 		grpc.UnknownServiceHandler(h.StreamHandler()),
 	)
 
-	go ts.Serve(lisProxy)
+	g.Go(func() error {
+		return ts.Serve(lisProxy)
+	})
 	defer ts.Stop()
 
 	cc, err := grpc.Dial(

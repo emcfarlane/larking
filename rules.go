@@ -16,7 +16,9 @@ import (
 
 	"google.golang.org/genproto/googleapis/api/annotations"
 	_ "google.golang.org/genproto/googleapis/api/httpbody"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -25,9 +27,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-
-	"github.com/emcfarlane/graphpb/grpc/codes"
-	"github.com/emcfarlane/graphpb/grpc/status"
 )
 
 // getExtensionHTTP
@@ -145,7 +144,7 @@ func (p *path) alive() bool {
 		len(p.segments) != 0
 }
 
-// clone deep clones the path tree.
+//nolint:unused // clone deep clones the path tree.
 func (p *path) clone() *path {
 	pc := newPath()
 
@@ -879,7 +878,7 @@ func encError(w http.ResponseWriter, err error) {
 	if err != nil {
 		panic(err) // ...
 	}
-	w.Write(b)
+	w.Write(b) //nolint
 }
 
 func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) {

@@ -83,13 +83,11 @@ func (s *serverReflectionServer) getSymbols() (svcNames []string, symbolIndex ma
 			file, ok := info.Metadata.(string)
 			if !ok {
 				panic(fmt.Sprintf("failed file %v", info))
-				continue
 			}
 
 			fd, err := protoregistry.GlobalFiles.FindFileByPath(file)
 			if err != nil {
 				panic(err)
-				continue
 			}
 
 			s.processFile(fd, processed)
