@@ -136,7 +136,7 @@ func (m *Mux) RegisterReflectionServer(s *grpc.Server) {
 	})
 }
 
-// fileDescEncodingByFilename finds the file descriptor for given filename,
+//nolint:unused // fileDescEncodingByFilename finds the file descriptor for given filename,
 // does marshalling on it and returns the marshalled result.
 func (s *serverReflectionServer) fileDescEncodingByFilename(name string) ([]byte, error) {
 	fd, err := protoregistry.GlobalFiles.FindFileByPath(name)
@@ -146,7 +146,7 @@ func (s *serverReflectionServer) fileDescEncodingByFilename(name string) ([]byte
 	return proto.Marshal(protodesc.ToFileDescriptorProto(fd))
 }
 
-// fileDescEncodingContainingSymbol finds the file descriptor containing the given symbol,
+//nolint:unused // fileDescEncodingContainingSymbol finds the file descriptor containing the given symbol,
 // does marshalling on it and returns the marshalled result.
 // The given symbol can be a type, a service or a method.
 func (s *serverReflectionServer) fileDescEncodingContainingSymbol(name string) ([]byte, error) {
@@ -159,7 +159,7 @@ func (s *serverReflectionServer) fileDescEncodingContainingSymbol(name string) (
 	return proto.Marshal(protodesc.ToFileDescriptorProto(fd))
 }
 
-// fileDescEncodingContainingExtension finds the file descriptor containing given extension,
+//nolint:unused // fileDescEncodingContainingExtension finds the file descriptor containing given extension,
 // does marshalling on it and returns the marshalled result.
 func (s *serverReflectionServer) fileDescEncodingContainingExtension(typeName string, extNum int32) ([]byte, error) {
 	fullname := protoreflect.FullName(typeName)
@@ -179,7 +179,7 @@ func (s *serverReflectionServer) fileDescEncodingContainingExtension(typeName st
 	return proto.Marshal(protodesc.ToFileDescriptorProto(fd))
 }
 
-// allExtensionNumbersForTypeName returns all extension numbers for the given type.
+//nolint:unused // allExtensionNumbersForTypeName returns all extension numbers for the given type.
 func (s *serverReflectionServer) allExtensionNumbersForTypeName(name string) ([]int32, error) {
 	fullname := protoreflect.FullName(name)
 	_, err := protoregistry.GlobalFiles.FindDescriptorByName(fullname)

@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
-	"sync"
 	"sync/atomic"
 
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -21,9 +22,7 @@ import (
 
 	//"github.com/emcfarlane/graphpb/google.golang.org/genproto/googleapis/api/annotations"
 	//"github.com/emcfarlane/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
-	"github.com/emcfarlane/graphpb/grpc/codes"
 	rpb "github.com/emcfarlane/graphpb/grpc/reflection/v1alpha"
-	"github.com/emcfarlane/graphpb/grpc/status"
 )
 
 type methodDesc struct {
@@ -48,7 +47,7 @@ type state struct {
 }
 
 type Mux struct {
-	mu    sync.Mutex
+	// mu    sync.Mutex TODO: add connection watch.
 	state atomic.Value
 }
 
@@ -202,7 +201,9 @@ func (s *state) createHandler(
 			}
 			fds[fd.GetName()] = fd
 
-			h.Write(fdb)
+			if _, err := h.Write(fdb); err != nil {
+				return err
+			}
 		}
 	}
 

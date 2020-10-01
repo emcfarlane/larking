@@ -17,7 +17,7 @@ import (
 type handlerMethod struct {
 	inType protoreflect.MessageType
 	unary  grpc.UnaryHandler
-	stream grpc.StreamHandler
+	//stream grpc.StreamHandler TODO: streaming
 }
 
 // Handler implements a http handler that wraps a gprc service implementation

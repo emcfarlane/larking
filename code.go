@@ -3,7 +3,7 @@ package graphpb
 import (
 	"net/http"
 
-	"github.com/emcfarlane/graphpb/grpc/codes"
+	"google.golang.org/grpc/codes"
 )
 
 var codeToHTTPStatus = [...]int{

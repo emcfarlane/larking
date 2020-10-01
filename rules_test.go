@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
@@ -83,7 +84,16 @@ func TestMessageServer(t *testing.T) {
 	}
 	defer lis.Close()
 
-	go gs.Serve(lis)
+	var g errgroup.Group
+	defer func() {
+		if err := g.Wait(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	g.Go(func() error {
+		return gs.Serve(lis)
+	})
 	defer gs.Stop()
 
 	// Create client.
