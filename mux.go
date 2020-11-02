@@ -20,8 +20,6 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	//"github.com/emcfarlane/graphpb/google.golang.org/genproto/googleapis/api/annotations"
-	//"github.com/emcfarlane/graphpb/google.golang.org/genproto/googleapis/api/httpbody"
 	rpb "github.com/emcfarlane/graphpb/grpc/reflection/v1alpha"
 )
 

@@ -41,11 +41,13 @@ go_library(
         "mux.go",
         "proxy.go",
         "rules.go",
+        "server.go",
     ],
     importpath = "github.com/emcfarlane/graphpb",
     visibility = ["//visibility:public"],
     deps = [
         "//grpc/reflection/v1alpha:go_default_library",
+        "@com_github_soheilhy_cmux//:go_default_library",
         "@go_googleapis//google/api:annotations_go_proto",
         "@go_googleapis//google/api:httpbody_go_proto",
         "@org_golang_google_grpc//:go_default_library",
