@@ -315,12 +315,5 @@ func (s *state) pickMethodConn(name string) (methodConn, error) {
 }
 
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	//contentType := r.Header.Get("Content-Type")
-	//if r.Method == "POST" && r.ProtoMajor == 2 &&
-	//	strings.HasPrefix(contentType, "application/grpc") {
-	//	m.serveGRPC(w, r)
-	//	return
-	//}
-
 	m.serveHTTP(w, r)
 }

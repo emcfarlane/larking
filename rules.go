@@ -3,12 +3,14 @@ package graphpb
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"sort"
 	"strconv"
@@ -16,6 +18,7 @@ import (
 
 	"google.golang.org/genproto/googleapis/api/annotations"
 	_ "google.golang.org/genproto/googleapis/api/httpbody"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -695,6 +698,31 @@ func (p *path) match(route, method string) (*method, params, error) {
 	return nil, nil, status.Error(codes.NotFound, "not found")
 }
 
+const httpHeaderPrefix = "http-"
+
+func newIncomingContext(ctx context.Context, header http.Header) context.Context {
+	md := make(metadata.MD, len(header))
+	for k, vs := range header {
+		md.Set(httpHeaderPrefix+k, vs...)
+	}
+	return metadata.NewIncomingContext(ctx, md)
+}
+
+func setOutgoingHeader(header http.Header, mds ...metadata.MD) {
+	for _, md := range mds {
+		for k, vs := range md {
+			if !strings.HasPrefix(k, httpHeaderPrefix) {
+				continue
+			}
+			k = k[len(httpHeaderPrefix):]
+			if len(k) == 0 {
+				continue
+			}
+			header[textproto.CanonicalMIMEHeaderKey(k)] = vs
+		}
+	}
+}
+
 func (m *method) decodeRequestArgs(args proto.Message, r *http.Request) error {
 	contentType := r.Header.Get("Content-Type")
 	contentEncoding := r.Header.Get("Content-Encoding")
@@ -746,13 +774,18 @@ func (m *method) decodeRequestArgs(args proto.Message, r *http.Request) error {
 	return nil
 }
 
-func (m *method) encodeResponseReply(reply proto.Message, w http.ResponseWriter, r *http.Request) error {
+func (m *method) encodeResponseReply(
+	reply proto.Message, w http.ResponseWriter, r *http.Request,
+	header, trailer metadata.MD,
+) error {
 	//accept := r.Header.Get("Accept")
 	acceptEncoding := r.Header.Get("Accept-Encoding")
 
 	if fRsp, ok := w.(http.Flusher); ok {
 		defer fRsp.Flush()
 	}
+
+	setOutgoingHeader(w.Header(), header, trailer)
 
 	var resp io.Writer
 	switch acceptEncoding {
@@ -856,17 +889,20 @@ func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// TODO: pass headers.
-	ctx := metadata.AppendToOutgoingContext(
-		r.Context(),
-		"authentication", r.Header.Get("authentication"),
-	)
+	ctx := newIncomingContext(r.Context(), r.Header)
 
-	if err := mc.cc.Invoke(ctx, method.name, args, reply); err != nil {
+	var header, trailer metadata.MD
+	if err := mc.cc.Invoke(
+		ctx,
+		method.name,
+		args, reply,
+		grpc.Header(&header),
+		grpc.Trailer(&trailer),
+	); err != nil {
 		return err
 	}
 
-	return method.encodeResponseReply(reply, w, r)
+	return method.encodeResponseReply(reply, w, r, header, trailer)
 }
 
 func encError(w http.ResponseWriter, err error) {

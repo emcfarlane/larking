@@ -143,6 +143,37 @@ func (h *Handler) RegisterService(sd protoreflect.ServiceDescriptor, srv interfa
 	return nil
 }
 
+// serverTransportStream captures server metadata in memory.
+type serverTransportStream struct {
+	method     string
+	sentHeader bool
+	header     metadata.MD
+	trailer    metadata.MD
+}
+
+func (s *serverTransportStream) Method() string {
+	return s.method
+}
+func (s *serverTransportStream) SetHeader(md metadata.MD) error {
+	if !s.sentHeader {
+		s.header = md
+	}
+	return nil
+
+}
+func (s *serverTransportStream) SendHeader(md metadata.MD) error {
+	if err := s.SetHeader(md); err != nil {
+		return err
+	}
+	s.sentHeader = true
+	return nil
+}
+func (s *serverTransportStream) SetTrailer(md metadata.MD) error {
+	s.sentHeader = true
+	s.trailer = md
+	return nil
+}
+
 func (h *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	if !strings.HasPrefix(r.URL.Path, "/") {
 		r.URL.Path = "/" + r.URL.Path
@@ -171,11 +202,11 @@ func (h *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	ctx := metadata.NewIncomingContext(
-		r.Context(), metadata.Pairs(
-			"authorization", r.Header.Get("authorization"),
-		),
-	)
+	ctx := newIncomingContext(r.Context(), r.Header)
+	stream := &serverTransportStream{
+		method: method.name,
+	}
+	ctx = grpc.NewContextWithServerTransportStream(ctx, stream)
 
 	// TODO: support streaming
 	var replyI interface{}
@@ -192,7 +223,7 @@ func (h *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	}
 	reply := replyI.(proto.Message)
 
-	return method.encodeResponseReply(reply, w, r)
+	return method.encodeResponseReply(reply, w, r, stream.header, stream.trailer)
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
