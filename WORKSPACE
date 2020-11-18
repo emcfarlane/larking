@@ -9,24 +9,22 @@ http_archive(
     ],
 )
 
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
-
-git_repository(
-    name = "com_google_protobuf",
-    commit = "09745575a923640154bcf307fba8aedff47f240a",
-    remote = "https://github.com/protocolbuffers/protobuf",
-    shallow_since = "1558721209 -0700",
-)
-
-load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
-
-protobuf_deps()
-
 load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 
 go_rules_dependencies()
 
 go_register_toolchains()
+
+http_archive(
+    name = "com_google_protobuf",
+    sha256 = "bf0e5070b4b99240183b29df78155eee335885e53a8af8683964579c214ad301",
+    strip_prefix = "protobuf-3.14.0",
+    urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.14.0.zip"],
+)
+
+load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
+
+protobuf_deps()
 
 http_archive(
     name = "bazel_gazelle",
@@ -73,6 +71,105 @@ container_pull(
     registry = "gcr.io",
     repository = "distroless/base",
 )
+
+#### EXAMPLES ####
+
+http_archive(
+    name = "googleapis",
+    sha256 = "",
+    strip_prefix = "googleapis-e3e7e7ddb0fecd7bc61ca03b5a9ddb29cc9b48d8",
+    urls = ["https://github.com/googleapis/googleapis/archive/e3e7e7ddb0fecd7bc61ca03b5a9ddb29cc9b48d8.tar.gz"],
+)
+
+load("@googleapis//:repository_rules.bzl", "switched_rules_by_language")
+
+http_archive(
+    name = "com_github_grpc_grpc",
+    sha256 = "0f330e4734f49d2bfdb9ad195b021720b5dd2e2a534cdf21c7ddc7f7eb42e170",
+    strip_prefix = "grpc-1.33.1",
+    urls = ["https://github.com/grpc/grpc/archive/v1.33.1.zip"],
+)
+
+load("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_deps")
+
+grpc_deps()
+
+load("@com_github_grpc_grpc//bazel:grpc_extra_deps.bzl", "grpc_extra_deps")
+
+grpc_extra_deps()
+
+switched_rules_by_language(
+    name = "com_google_googleapis_imports",
+    cc = True,
+    csharp = False,
+    gapic = False,
+    go = True,
+    grpc = True,
+    java = True,
+    nodejs = True,
+    php = False,
+    python = True,
+    ruby = False,
+)
+
+http_archive(
+    name = "rules_proto",
+    sha256 = "",
+    strip_prefix = "rules_proto-7e4afce6fe62dbff0a4a03450143146f9f2d7488",
+    urls = [
+        "https://github.com/bazelbuild/rules_proto/archive/7e4afce6fe62dbff0a4a03450143146f9f2d7488.tar.gz",
+    ],
+)
+
+load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_proto_toolchains")
+
+rules_proto_dependencies()
+
+rules_proto_toolchains()
+
+http_archive(
+    name = "io_grpc_grpc_java",
+    sha256 = "fa90de8a05f07111152e1ab45bf919ddbe9ad762b4b1dd89e4752f3c2ac16a1d",
+    strip_prefix = "grpc-java-1.33.1",
+    url = "https://github.com/grpc/grpc-java/archive/v1.33.1.zip",
+)
+
+RULES_JVM_EXTERNAL_TAG = "3.3"
+
+RULES_JVM_EXTERNAL_SHA = "d85951a92c0908c80bd8551002d66cb23c3434409c814179c0ff026b53544dab"
+
+http_archive(
+    name = "rules_jvm_external",
+    sha256 = RULES_JVM_EXTERNAL_SHA,
+    strip_prefix = "rules_jvm_external-%s" % RULES_JVM_EXTERNAL_TAG,
+    url = "https://github.com/bazelbuild/rules_jvm_external/archive/%s.zip" % RULES_JVM_EXTERNAL_TAG,
+)
+
+load("@rules_jvm_external//:defs.bzl", "maven_install")
+load("@io_grpc_grpc_java//:repositories.bzl", "IO_GRPC_GRPC_JAVA_ARTIFACTS")
+load("@io_grpc_grpc_java//:repositories.bzl", "IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS")
+
+maven_install(
+    artifacts = [
+        "com.google.api.grpc:grpc-google-cloud-pubsub-v1:0.1.24",
+        "com.google.api.grpc:proto-google-cloud-pubsub-v1:0.1.24",
+    ] + IO_GRPC_GRPC_JAVA_ARTIFACTS,
+    generate_compat_repositories = True,
+    override_targets = IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS,
+    repositories = [
+        "https://repo.maven.apache.org/maven2/",
+    ],
+)
+
+load("@maven//:compat.bzl", "compat_repositories")
+
+compat_repositories()
+
+load("@io_grpc_grpc_java//:repositories.bzl", "grpc_java_repositories")
+
+grpc_java_repositories()
+
+#### EXAMPLES ####
 
 go_repository(
     name = "co_honnef_go_tools",

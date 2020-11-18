@@ -74,6 +74,8 @@ func (s *Server) Serve(l net.Listener) error {
 }
 
 func (s *Server) Close() error {
-	close(s.closer)
+	if s.closer != nil {
+		close(s.closer)
+	}
 	return nil
 }
