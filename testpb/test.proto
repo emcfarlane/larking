@@ -58,7 +58,15 @@ service Messaging {
       body : "*"
     };
   }
+
+  rpc Action(Message) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post : "/v1/{text=action}:cancel"
+      body : "*"
+    };
+  }
 }
+
 message Message {
   string message_id = 1;
   string text = 2; // The resource content
@@ -82,8 +90,8 @@ message UpdateMessageRequestOne {
 service Files {
   // HTTP | gRPC
   // -----|-----
-  // `POST /files/cat.jpg <body>` | `UploadDownload(filename: "cat.jpg", file: {
-  // content_type: "image/jpeg", data: <body>})"`
+  // `POST /files/cat.jpg <body>` | `UploadDownload(filename: "cat.jpg", file:
+  // { content_type: "image/jpeg", data: <body>})"`
   rpc UploadDownload(UploadFileRequest) returns (google.api.HttpBody) {
     option (google.api.http) = {
       post : "/files/{filename}"
