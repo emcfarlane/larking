@@ -1,6 +1,7 @@
 package graphpb
 
 import (
+	"fmt"
 	"unicode"
 	"unicode/utf8"
 )
@@ -26,6 +27,7 @@ const (
 	tokenEqual         // =
 	tokenValue         // -_0-9a-zA-Z
 	tokenDot           // .
+	tokenVerb          // :
 	tokenEOF
 )
 
@@ -34,8 +36,11 @@ type token struct {
 	val string
 }
 
+func (t token) isErr() bool {
+	return t.typ == tokenError
+}
 func (t token) isEnd() bool {
-	return t.typ == tokenError || t.typ == tokenEOF
+	return t.isErr() || t.typ == tokenEOF
 }
 
 type tokens []token
@@ -137,7 +142,7 @@ func lexText(l *lexer) token {
 		switch {
 		case isValue(r):
 			continue
-		case r == '/', r == eof:
+		case r == '}', r == '/', r == eof:
 			l.backup()
 			l.state = lexSegment
 			return l.emit(tokenValue)
@@ -164,6 +169,23 @@ func lexFieldPath(l *lexer) token {
 	}
 }
 
+func lexVerb(l *lexer) token {
+	for {
+		r := l.next()
+		switch {
+		case isValue(r):
+			continue
+		case r == eof:
+			l.backup()
+			l.state = lexSegment
+			return l.emit(tokenValue)
+		default:
+			l.state = lexError
+			return l.emit(tokenValue)
+		}
+	}
+}
+
 func lexSegment(l *lexer) token {
 	r := l.next()
 	switch {
@@ -184,10 +206,14 @@ func lexSegment(l *lexer) token {
 		}
 		l.backup()
 		return l.emit(tokenStar)
+	case r == ':':
+		l.state = lexVerb
+		return l.emit(tokenVerb)
 	case r == eof:
 		l.state = lexEOF
 		return l.token()
 	default:
+		fmt.Println("HERE?", r)
 		l.state = lexError
 		return l.token()
 	}

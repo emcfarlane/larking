@@ -41,6 +41,7 @@ type MessagingClient interface {
 	// `PATCH /v1/messages/123456 { "text": "Hi!" }` | `UpdateMessage(message_id:
 	// "123456" text: "Hi!")`
 	UpdateMessageBody(ctx context.Context, in *Message, opts ...grpc.CallOption) (*Message, error)
+	Action(ctx context.Context, in *Message, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type messagingClient struct {
@@ -87,6 +88,15 @@ func (c *messagingClient) UpdateMessageBody(ctx context.Context, in *Message, op
 	return out, nil
 }
 
+func (c *messagingClient) Action(ctx context.Context, in *Message, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/graphpb.testpb.Messaging/Action", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessagingServer is the server API for Messaging service.
 // All implementations must embed UnimplementedMessagingServer
 // for forward compatibility
@@ -113,6 +123,7 @@ type MessagingServer interface {
 	// `PATCH /v1/messages/123456 { "text": "Hi!" }` | `UpdateMessage(message_id:
 	// "123456" text: "Hi!")`
 	UpdateMessageBody(context.Context, *Message) (*Message, error)
+	Action(context.Context, *Message) (*empty.Empty, error)
 	mustEmbedUnimplementedMessagingServer()
 }
 
@@ -131,6 +142,9 @@ func (*UnimplementedMessagingServer) UpdateMessage(context.Context, *UpdateMessa
 }
 func (*UnimplementedMessagingServer) UpdateMessageBody(context.Context, *Message) (*Message, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateMessageBody not implemented")
+}
+func (*UnimplementedMessagingServer) Action(context.Context, *Message) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Action not implemented")
 }
 func (*UnimplementedMessagingServer) mustEmbedUnimplementedMessagingServer() {}
 
@@ -210,6 +224,24 @@ func _Messaging_UpdateMessageBody_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Messaging_Action_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Message)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServer).Action(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/graphpb.testpb.Messaging/Action",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServer).Action(ctx, req.(*Message))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Messaging_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "graphpb.testpb.Messaging",
 	HandlerType: (*MessagingServer)(nil),
@@ -230,6 +262,10 @@ var _Messaging_serviceDesc = grpc.ServiceDesc{
 			MethodName: "UpdateMessageBody",
 			Handler:    _Messaging_UpdateMessageBody_Handler,
 		},
+		{
+			MethodName: "Action",
+			Handler:    _Messaging_Action_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "testpb/test.proto",
@@ -241,8 +277,8 @@ var _Messaging_serviceDesc = grpc.ServiceDesc{
 type FilesClient interface {
 	// HTTP | gRPC
 	// -----|-----
-	// `POST /files/cat.jpg <body>` | `UploadDownload(filename: "cat.jpg", file: {
-	// content_type: "image/jpeg", data: <body>})"`
+	// `POST /files/cat.jpg <body>` | `UploadDownload(filename: "cat.jpg", file:
+	// { content_type: "image/jpeg", data: <body>})"`
 	UploadDownload(ctx context.Context, in *UploadFileRequest, opts ...grpc.CallOption) (*httpbody.HttpBody, error)
 	LargeUploadDownload(ctx context.Context, opts ...grpc.CallOption) (Files_LargeUploadDownloadClient, error)
 }
@@ -301,8 +337,8 @@ func (x *filesLargeUploadDownloadClient) Recv() (*httpbody.HttpBody, error) {
 type FilesServer interface {
 	// HTTP | gRPC
 	// -----|-----
-	// `POST /files/cat.jpg <body>` | `UploadDownload(filename: "cat.jpg", file: {
-	// content_type: "image/jpeg", data: <body>})"`
+	// `POST /files/cat.jpg <body>` | `UploadDownload(filename: "cat.jpg", file:
+	// { content_type: "image/jpeg", data: <body>})"`
 	UploadDownload(context.Context, *UploadFileRequest) (*httpbody.HttpBody, error)
 	LargeUploadDownload(Files_LargeUploadDownloadServer) error
 	mustEmbedUnimplementedFilesServer()

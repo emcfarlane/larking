@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/genproto/googleapis/api/httpbody"
@@ -224,6 +225,22 @@ func TestMessageServer(t *testing.T) {
 		want: want{
 			statusCode: 200,
 			msg:        &testpb.Message{Text: "hello, patch!"},
+		},
+	}, {
+		name: "action",
+		req: httptest.NewRequest(http.MethodPost, "/v1/action:cancel", strings.NewReader(
+			`{ "message_id": "123" }`,
+		)),
+		in: in{
+			method: "/graphpb.testpb.Messaging/Action",
+			msg:    &testpb.Message{MessageId: "123", Text: "action"},
+		},
+		out: out{
+			msg: &empty.Empty{},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &empty.Empty{},
 		},
 	}, {
 		name: "404",

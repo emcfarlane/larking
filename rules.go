@@ -245,7 +245,6 @@ func (p *path) addRule(
 
 	var t token
 	for t = l.token(); !t.isEnd(); t = l.token() {
-		//fmt.Println("token", t)
 
 		switch t.typ {
 		case tokenSlash:
@@ -253,6 +252,20 @@ func (p *path) addRule(
 
 		case tokenValue:
 			val := "/" + t.val // Prefix for easier matching
+			next, ok := cursor.segments[val]
+			if !ok {
+				next = newPath()
+				cursor.segments[val] = next
+			}
+			cursor = next
+
+		case tokenVerb:
+			t = l.token()
+			if t.typ != tokenValue {
+				break
+			}
+			val := ":" + t.val
+
 			next, ok := cursor.segments[val]
 			if !ok {
 				next = newPath()
@@ -315,8 +328,14 @@ func (p *path) addRule(
 			cursor.variables = append(cursor.variables, v)
 			sort.Sort(cursor.variables)
 			cursor = v.next
+		default:
+			// TODO: error here?
+
 		}
 
+	}
+	if t.isErr() {
+		return fmt.Errorf("failed to parse %q", tmpl)
 	}
 
 	if _, ok := cursor.methods[verb]; ok {
