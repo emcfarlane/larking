@@ -203,6 +203,131 @@ func (p *path) delRule(name string) bool {
 	return false
 }
 
+type parser struct {
+	cursor *path
+	fields protoreflect.FieldDescriptors
+	vars   [][]protoreflect.FieldDescriptor
+}
+
+func (p *parser) parseFieldPath(keys tokens, t token) (parseFn, error) {
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("empty field path: %v %v", keys, t)
+	}
+
+	assign := func(vals tokens, t token) (parseFn, error) {
+		if t.typ != tokenVariableEnd {
+			return nil, fmt.Errorf("unexpected variable end")
+		}
+
+		keyVals := keys.vals()
+		valVals := vals.vals()
+		varLookup := strings.Join(valVals, "")
+
+		fds := fieldPath(p.fields, keyVals...)
+		if fds == nil {
+			return nil, fmt.Errorf("field not found %v", keys)
+		}
+
+		// TODO: validate tokens.
+		// TODO: field type checking.
+
+		p.vars = append(p.vars, fds)
+
+		if v, ok := p.cursor.findVariable(varLookup); ok {
+			p.cursor = v.next
+			return p.parseTemplate, nil
+		}
+
+		v := &variable{
+			name: varLookup,
+			toks: vals,
+			next: newPath(),
+		}
+		p.cursor.variables = append(p.cursor.variables, v)
+		sort.Sort(p.cursor.variables)
+		p.cursor = v.next
+
+		return p.parseTemplate, nil
+	}
+
+	if t.typ == tokenEqual {
+		return collect(
+			[]tokenType{tokenSlash, tokenStar, tokenStarStar, tokenValue},
+			nil,
+			assign,
+		), nil
+	}
+
+	// Default fields are assigned to "*".
+	return assign([]token{{
+		typ: tokenStar,
+		val: "*",
+	}}, t)
+}
+
+func (p *parser) parseSegments(t token) (parseFn, error) {
+	switch t.typ {
+	case tokenStar:
+		return nil, fmt.Errorf("token %q must be assigned to a variable", t.val)
+
+	case tokenStarStar:
+		return nil, fmt.Errorf("token %q must be assigned to a variable", t.val)
+
+	case tokenValue:
+		val := "/" + t.val // Prefix for easier matching
+		next, ok := p.cursor.segments[val]
+		if !ok {
+			next = newPath()
+			p.cursor.segments[val] = next
+		}
+		p.cursor = next
+		return p.parseTemplate, nil
+
+	case tokenVariableStart:
+		return collect(
+			[]tokenType{tokenValue},
+			[]tokenType{tokenDot},
+			p.parseFieldPath,
+		), nil
+
+	case tokenEOF:
+		return nil, fmt.Errorf("invalid path end %q", t.val)
+
+	default:
+		return nil, fmt.Errorf("unexpected %q", t)
+	}
+}
+
+func (p *parser) parseVerb(t token) (parseFn, error) {
+	switch t.typ {
+	case tokenValue:
+		val := ":" + t.val // Prefix for easier matching
+		next, ok := p.cursor.segments[val]
+		if !ok {
+			next = newPath()
+			p.cursor.segments[val] = next
+		}
+		p.cursor = next
+		return p.parseTemplate, nil
+
+	default:
+		return nil, fmt.Errorf("verb unexpected %q", t)
+	}
+}
+
+func (p *parser) parseTemplate(t token) (parseFn, error) {
+	switch t.typ {
+	case tokenSlash:
+		return p.parseSegments, nil
+	case tokenVerb:
+		return p.parseVerb, nil
+	case tokenEOF:
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("template unexpected %q", t)
+	}
+}
+
 // addRule adds the HTTP rule to the path.
 func (p *path) addRule(
 	rule *annotations.HttpRule,
@@ -233,118 +358,31 @@ func (p *path) addRule(
 		return fmt.Errorf("unsupported pattern %v", v)
 	}
 
-	l := lexer{
-		state: lexSegment,
-		input: tmpl,
-	}
-
 	msgDesc := desc.Input()
 	fieldDescs := msgDesc.Fields()
-	cursor := p // cursor
-	var vars [][]protoreflect.FieldDescriptor
 
-	var t token
-	for t = l.token(); !t.isEnd(); t = l.token() {
-
-		switch t.typ {
-		case tokenSlash:
-			continue
-
-		case tokenValue:
-			val := "/" + t.val // Prefix for easier matching
-			next, ok := cursor.segments[val]
-			if !ok {
-				next = newPath()
-				cursor.segments[val] = next
-			}
-			cursor = next
-
-		case tokenVerb:
-			t = l.token()
-			if t.typ != tokenValue {
-				break
-			}
-			val := ":" + t.val
-
-			next, ok := cursor.segments[val]
-			if !ok {
-				next = newPath()
-				cursor.segments[val] = next
-			}
-			cursor = next
-
-		case tokenVariableStart:
-
-			keys, tokNext := l.collect([]tokenType{
-				tokenValue,
-			}, []tokenType{
-				tokenDot,
-			})
-
-			var vals tokens
-			if tokNext.typ == tokenEqual {
-				vals, tokNext = l.collect([]tokenType{
-					tokenSlash,
-					tokenStar,
-					tokenStarStar,
-					tokenValue,
-				}, []tokenType{})
-			} else {
-				vals = []token{{
-					typ: tokenStar,
-					val: "*",
-				}} // default
-			}
-
-			if tokNext.typ != tokenVariableEnd {
-				// TODO: better error reporting.
-				return fmt.Errorf("unexpected token %+v", tokNext)
-			}
-
-			keyVals := keys.vals()
-			valVals := vals.vals()
-			varLookup := strings.Join(valVals, "")
-
-			fds := fieldPath(fieldDescs, keyVals...)
-			if fds == nil {
-				return fmt.Errorf("field not found %v", keys)
-			}
-
-			// TODO: validate tokens.
-			// TODO: field type checking.
-
-			vars = append(vars, fds)
-
-			if v, ok := p.findVariable(varLookup); ok {
-				cursor = v.next
-				continue
-			}
-
-			v := &variable{
-				name: varLookup,
-				toks: vals,
-				next: newPath(),
-			}
-			cursor.variables = append(cursor.variables, v)
-			sort.Sort(cursor.variables)
-			cursor = v.next
-		default:
-			// TODO: error here?
-
-		}
-
+	// Hold state for the parser.
+	pr := &parser{
+		cursor: p,
+		fields: fieldDescs,
 	}
-	if t.isErr() {
-		return fmt.Errorf("failed to parse %q", tmpl)
+	// Hold state for the lexer.
+	l := &lexer{
+		parse: pr.parseTemplate,
+		input: tmpl,
+	}
+	if err := lexTemplate(l); err != nil {
+		return err
 	}
 
+	cursor := pr.cursor
 	if _, ok := cursor.methods[verb]; ok {
 		return fmt.Errorf("duplicate rule %v", rule)
 	}
 
 	m := &method{
 		desc: desc,
-		vars: vars,
+		vars: pr.vars,
 		name: name,
 	}
 	switch rule.Body {
@@ -370,7 +408,6 @@ func (p *path) addRule(
 	}
 
 	cursor.methods[verb] = m // register method
-	//fmt.Println("Registered", verb, tmpl)
 
 	for _, addRule := range rule.AdditionalBindings {
 		if len(addRule.AdditionalBindings) != 0 {

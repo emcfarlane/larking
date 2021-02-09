@@ -327,6 +327,34 @@ func TestMessageServer(t *testing.T) {
 			statusCode: 200,
 			msg:        &emptypb.Empty{},
 		},
+	}, {
+		name: "variable_one",
+		req:  httptest.NewRequest(http.MethodGet, "/version/one", nil),
+		in: in{
+			method: "/graphpb.testpb.Messaging/VariableOne",
+			msg:    &testpb.Message{Text: "version"},
+		},
+		out: out{
+			msg: &empty.Empty{},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &empty.Empty{},
+		},
+	}, {
+		name: "variable_two",
+		req:  httptest.NewRequest(http.MethodGet, "/version/two", nil),
+		in: in{
+			method: "/graphpb.testpb.Messaging/VariableTwo",
+			msg:    &testpb.Message{Text: "version"},
+		},
+		out: out{
+			msg: &empty.Empty{},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &empty.Empty{},
+		},
 	}}
 
 	opts := cmp.Options{protocmp.Transform()}

@@ -36,6 +36,9 @@ type token struct {
 	val string
 }
 
+func (t token) String() string {
+	return fmt.Sprintf("(%d) %s", t.typ, t.val)
+}
 func (t token) isErr() bool {
 	return t.typ == tokenError
 }
@@ -53,19 +56,15 @@ func (toks tokens) vals() []string {
 	return ss
 }
 
-type stateFn func(l *lexer) token
+type stateFn func(l *lexer) error           // stateFn holds the state of the lexer.
+type parseFn func(t token) (parseFn, error) // parseFn holds the state of the parser.
 
 type lexer struct {
-	state stateFn
+	parse parseFn
 	input string
 	start int
 	pos   int
 	width int
-}
-
-// token returns the next token from the lexer
-func (l *lexer) token() token {
-	return l.state(l)
 }
 
 func typSet(typs ...tokenType) (set uint) {
@@ -76,18 +75,24 @@ func typSet(typs ...tokenType) (set uint) {
 }
 
 // collect groups tokens returning the group and the last oddball
-func (l *lexer) collect(allow, ignore []tokenType) (toks tokens, tok token) {
+func collect(allow, ignore []tokenType, tokenFn func(tokens, token) (parseFn, error)) parseFn {
 	allowed := typSet(allow...)
 	ignored := typSet(ignore...)
-	for tok = l.token(); ; tok = l.token() {
+
+	var ts tokens
+	var pFn parseFn
+	pFn = func(t token) (parseFn, error) {
 		switch {
-		case allowed&(1<<uint(tok.typ)) != 0:
-			toks = append(toks, tok)
-		case ignored&(1<<uint(tok.typ)) != 0:
+		case allowed&(1<<uint(t.typ)) != 0:
+			ts = append(ts, t)
+		case ignored&(1<<uint(t.typ)) != 0:
 		default:
-			return
+			return tokenFn(ts, t)
 		}
+		return pFn, nil
+
 	}
+	return pFn
 }
 
 const eof = -1
@@ -102,103 +107,136 @@ func (l *lexer) next() (r rune) {
 	return r
 }
 
+func (l *lexer) current() (r rune) {
+	if l.width == 0 {
+		return 0
+	}
+	r, _ = utf8.DecodeRuneInString(l.input[l.pos-l.width:])
+	return r
+}
+
 func (l *lexer) backup() {
 	l.pos -= l.width
 }
 
-func (l *lexer) emit(typ tokenType) token {
+func (l *lexer) acceptRun(isValid func(r rune) bool) int {
+	var i int
+	for isValid(l.next()) {
+		i++
+	}
+	l.backup()
+	return i
+}
+
+func (l *lexer) emit(typ tokenType) error {
 	tok := token{typ: typ, val: l.input[l.start:l.pos]}
+	parse, err := l.parse(tok)
+	if err != nil {
+		return err
+	}
+	l.parse = parse
 	l.start = l.pos
-	return tok
+	return nil
 }
 
-func lexEOF(l *lexer) token {
-	return token{typ: tokenEOF}
+func (l *lexer) emitAndRun(typ tokenType, nextState stateFn) error {
+	if err := l.emit(typ); err != nil {
+		return err
+	}
+	return nextState(l)
 }
 
-func lexError(l *lexer) token {
-	return token{typ: tokenError, val: l.input[l.pos-l.width : l.pos]}
+func (l *lexer) errUnexpected() error {
+	r := l.current()
+	return fmt.Errorf("%v:%v unexpected rune %q", l.pos-l.width, l.pos, r)
+}
+func (l *lexer) errShort() error {
+	r := l.current()
+	return fmt.Errorf("%v:%v short read %q", l.pos-l.width, l.pos, r)
+}
+
+func lexEOF(l *lexer) error {
+	return l.emit(tokenEOF)
+}
+func lexError(l *lexer) error {
+	return l.emit(tokenError)
 }
 
 func isValue(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsNumber(r) || r == '_' || r == '-'
 }
 
-func (l *lexer) chain(typOne, typTwo tokenType, next stateFn) token {
-	l.state = func(l *lexer) token {
-		l.state = next
-		return l.emit(typTwo)
+func lexFieldPath(l *lexer) error {
+	if i := l.acceptRun(isValue); i == 0 {
+		return l.errShort()
+	}
+	if err := l.emit(tokenValue); err != nil {
+		return err
 	}
 
-	l.pos -= l.width
-	tok := l.emit(typOne)
-	l.pos += l.width
-	return tok
-}
-
-func lexText(l *lexer) token {
-	for {
-		r := l.next()
-		switch {
-		case isValue(r):
-			continue
-		case r == '}', r == '/', r == eof:
-			l.backup()
-			l.state = lexSegment
-			return l.emit(tokenValue)
-		default:
-			l.state = lexError
-			return l.emit(tokenValue)
-		}
+	r := l.next()
+	if r == '.' {
+		return l.emitAndRun(tokenDot, lexFieldPath)
 	}
+	l.backup() // unknown
+	return nil
 }
 
-func lexFieldPath(l *lexer) token {
-	for {
-		r := l.next()
-		switch {
-		case isValue(r):
-			continue
-		case r == '.':
-			return l.chain(tokenValue, tokenDot, lexFieldPath)
-		case r == '=':
-			return l.chain(tokenValue, tokenEqual, lexSegment)
-		case r == '}':
-			return l.chain(tokenValue, tokenVariableEnd, lexSegment)
-		}
+func lexVerb(l *lexer) error {
+	if i := l.acceptRun(isValue); i == 0 {
+		return l.errShort()
 	}
-}
 
-func lexVerb(l *lexer) token {
-	for {
-		r := l.next()
-		switch {
-		case isValue(r):
-			continue
-		case r == eof:
-			l.backup()
-			l.state = lexSegment
-			return l.emit(tokenValue)
-		default:
-			l.state = lexError
-			return l.emit(tokenValue)
-		}
-	}
-}
-
-func lexSegment(l *lexer) token {
 	r := l.next()
 	switch {
-	case r == '/':
-		return l.emit(tokenSlash)
+	case r == eof:
+		l.backup()
+		return l.emitAndRun(tokenValue, lexEOF)
+	default:
+		l.backup()
+		return l.emitAndRun(tokenValue, lexError)
+	}
+}
+
+func lexVariable(l *lexer) error {
+	r := l.next()
+	if r != '{' {
+		return l.errUnexpected()
+	}
+	if err := l.emit(tokenVariableStart); err != nil {
+		return nil
+	}
+
+	if err := lexFieldPath(l); err != nil {
+		return err
+	}
+
+	r = l.next()
+	if r == '=' {
+		if err := l.emit(tokenEqual); err != nil {
+			return err
+		}
+
+		if err := lexSegments(l); err != nil {
+			return err
+		}
+		r = l.next()
+	}
+
+	if r != '}' {
+		return l.errUnexpected()
+	}
+	return l.emit(tokenVariableEnd)
+}
+
+func lexSegment(l *lexer) error {
+	r := l.next()
+	switch {
 	case unicode.IsLetter(r):
-		l.state = lexText
-		return l.token()
-	case r == '{':
-		l.state = lexFieldPath
-		return l.emit(tokenVariableStart)
-	case r == '}':
-		return l.emit(tokenVariableEnd)
+		if i := l.acceptRun(isValue); i == 0 {
+			return l.errShort()
+		}
+		return l.emit(tokenValue)
 	case r == '*':
 		rn := l.next()
 		if rn == '*' {
@@ -206,15 +244,43 @@ func lexSegment(l *lexer) token {
 		}
 		l.backup()
 		return l.emit(tokenStar)
-	case r == ':':
-		l.state = lexVerb
-		return l.emit(tokenVerb)
-	case r == eof:
-		l.state = lexEOF
-		return l.token()
+	case r == '{':
+		l.backup()
+		return lexVariable(l)
 	default:
-		fmt.Println("HERE?", r)
-		l.state = lexError
-		return l.token()
+		// What
+		return l.errUnexpected()
+	}
+}
+
+func lexSegments(l *lexer) error {
+	if err := lexSegment(l); err != nil {
+		return err
+	}
+	r := l.next()
+	if r == '/' {
+		return l.emitAndRun(tokenSlash, lexSegments)
+	}
+	l.backup() // unknown
+	return nil
+}
+
+func lexTemplate(l *lexer) error {
+	r := l.next()
+	if r != '/' {
+		return fmt.Errorf("unexpected token %q", r)
+	}
+	if err := l.emitAndRun(tokenSlash, lexSegments); err != nil {
+		return err
+	}
+
+	r = l.next()
+	switch {
+	case r == ':':
+		return l.emitAndRun(tokenVerb, lexVerb)
+	case r == eof:
+		return lexEOF(l)
+	default:
+		return l.errUnexpected()
 	}
 }
