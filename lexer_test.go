@@ -1,0 +1,68 @@
+package graphpb
+
+import (
+	"testing"
+)
+
+func TestLexer(t *testing.T) {
+	tests := []struct {
+		name    string
+		tmpl    string
+		want    tokens
+		wantErr bool
+	}{{
+		name: "one",
+		tmpl: "/v1/messages/{name=name/*}",
+		want: tokens{
+			{tokenSlash, "/"},
+			{tokenValue, "v1"},
+			{tokenSlash, "/"},
+			{tokenValue, "messages"},
+			{tokenSlash, "/"},
+			{tokenVariableStart, "{"},
+			{tokenValue, "name"},
+			{tokenEqual, "="},
+			{tokenValue, "name"},
+			{tokenSlash, "/"},
+			{tokenStar, "*"},
+			{tokenVariableEnd, "}"},
+			{tokenEOF, ""},
+		},
+	}}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var toks tokens
+			var parser parseFn
+			parser = func(t token) (parseFn, error) {
+				toks = append(toks, t)
+				return parser, nil
+			}
+
+			l := &lexer{
+				parse: parser,
+				input: tt.tmpl,
+			}
+			err := lexTemplate(l)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("wanted failure but succeeded")
+				}
+				return
+			}
+			if err != nil {
+				t.Error(err)
+			}
+			if n, m := len(tt.want), len(toks); n != m {
+				t.Errorf("mismatch length %v != %v:\n\t%v\n\t%v", n, m, tt.want, toks)
+				return
+			}
+			for i, want := range tt.want {
+				tok := toks[i]
+				if want != tok {
+					t.Errorf("%d: %v != %v", i, tok, want)
+				}
+			}
+		})
+	}
+}

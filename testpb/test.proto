@@ -65,6 +65,17 @@ service Messaging {
       body : "*"
     };
   }
+
+  rpc VariableOne(Message) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      get : "/{text}/one"
+    };
+  }
+  rpc VariableTwo(Message) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      get : "/{text}/two"
+    };
+  }
 }
 
 message Message {
