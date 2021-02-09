@@ -1,42 +1,64 @@
 package graphpb
 
 import (
-	"context"
+	"crypto/tls"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 type Server struct {
+	opts     *serverOptions
+	grpcOpts []grpc.ServerOption
+
 	mux    *Mux
 	closer chan struct{}
-	// TODO: server options, maybe maps to gRPC options
 }
 
-func NewServer(ctx context.Context, services []string) (*Server, error) {
-	var ccs []*grpc.ClientConn
-	for _, svc := range services {
-		cc, err := grpc.DialContext(
-			ctx, svc, grpc.WithInsecure(),
-		) // TODO: options config
-		if err != nil {
-			return nil, err
+//func NewServer(ctx context.Context, services []string) (*Server, error) {
+func NewServer(opts ...ServerOption) (*Server, error) {
+	//var ccs []*grpc.ClientConn
+	//for _, svc := range services {
+	//	cc, err := grpc.DialContext(
+	//		ctx, svc, grpc.WithInsecure(),
+	//	) // TODO: options config
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	ccs = append(ccs, cc)
+	//}
+	// Default
+	var grpcOpts []grpc.ServerOption
+	svrOpts := &defaultServerOptions
+	for _, opt := range opts {
+		if grpcOpt := opt.apply(svrOpts); grpcOpt != nil {
+			grpcOpts = append(grpcOpts, grpcOpt)
 		}
-		ccs = append(ccs, cc)
 	}
 
-	m, err := NewMux(ccs...)
+	m, err := NewMux()
 	if err != nil {
 		return nil, err
 	}
+	m.opts = svrOpts.muxOpts
+	grpcOpts = append(grpcOpts, grpc.UnknownServiceHandler(m.StreamHandler()))
 
 	return &Server{
-		mux:    m,
-		closer: make(chan struct{}),
+		opts:     svrOpts,
+		grpcOpts: grpcOpts,
+		mux:      m,
+		closer:   make(chan struct{}),
 	}, nil
+}
+
+func (s *Server) RegisterConn(cc *grpc.ClientConn) {
+	// TODO...
 }
 
 func (s *Server) Serve(l net.Listener) error {
@@ -48,16 +70,22 @@ func (s *Server) Serve(l net.Listener) error {
 	n := 3
 	errs := make(chan error, n)
 
-	gs := grpc.NewServer(
-		grpc.UnknownServiceHandler(s.mux.StreamHandler()),
-	)
+	gs := grpc.NewServer(s.grpcOpts...)
 	go func() { errs <- gs.Serve(grpcL) }()
 	defer gs.Stop()
 
 	hs := &http.Server{
-		Handler: s.mux,
+		Handler:   s.mux,
+		TLSConfig: s.opts.tlsConfig,
 	}
-	go func() { errs <- hs.Serve(httpL) }()
+	go func() {
+		if s.opts.tlsConfig != nil {
+			// TLSConfig must have the cert object.
+			errs <- hs.ServeTLS(httpL, "", "")
+		} else {
+			errs <- hs.Serve(httpL)
+		}
+	}()
 	defer hs.Close()
 
 	// TODO: metrics/debug http server...?
@@ -78,4 +106,35 @@ func (s *Server) Close() error {
 		close(s.closer)
 	}
 	return nil
+}
+
+const (
+	defaultServerMaxReceiveMessageSize = 1024 * 1024 * 4
+	defaultServerMaxSendMessageSize    = math.MaxInt32
+	defaultServerConnectionTimeout     = 120 * time.Second
+)
+
+type serverOptions struct {
+	tlsConfig *tls.Config
+	muxOpts   *muxOptions
+}
+
+var defaultServerOptions = serverOptions{
+	muxOpts: &defaultMuxOptions,
+}
+
+type ServerOption interface {
+	apply(*serverOptions) grpc.ServerOption
+}
+
+type serverOptionFunc func(s *serverOptions) grpc.ServerOption
+
+func (s serverOptionFunc) apply(opts *serverOptions) grpc.ServerOption { return s(opts) }
+
+func TLSCreds(c *tls.Config) ServerOption {
+	return serverOptionFunc(func(opts *serverOptions) grpc.ServerOption {
+		opts.tlsConfig = c
+		creds := credentials.NewTLS(c)
+		return grpc.Creds(creds)
+	})
 }

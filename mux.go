@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"sync/atomic"
+	"time"
 
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/genproto/googleapis/api/httpbody"
@@ -44,7 +45,24 @@ type state struct {
 	methods map[string][]methodConn
 }
 
+type muxOptions struct {
+	maxReceiveMessageSize int
+	maxSendMessageSize    int
+	connectionTimeout     time.Duration
+}
+
+type MuxOption interface {
+	apply(*muxOptions)
+}
+
+var defaultMuxOptions = muxOptions{
+	maxReceiveMessageSize: defaultServerMaxReceiveMessageSize,
+	maxSendMessageSize:    defaultServerMaxSendMessageSize,
+	connectionTimeout:     defaultServerConnectionTimeout,
+}
+
 type Mux struct {
+	opts *muxOptions
 	// mu    sync.Mutex TODO: add connection watch.
 	state atomic.Value
 }
