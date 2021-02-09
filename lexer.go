@@ -39,12 +39,6 @@ type token struct {
 func (t token) String() string {
 	return fmt.Sprintf("(%d) %s", t.typ, t.val)
 }
-func (t token) isErr() bool {
-	return t.typ == tokenError
-}
-func (t token) isEnd() bool {
-	return t.isErr() || t.typ == tokenEOF
-}
 
 type tokens []token
 
