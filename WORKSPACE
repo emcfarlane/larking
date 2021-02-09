@@ -9,7 +9,9 @@ http_archive(
     ],
 )
 
-load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
+load("@io_bazel_rules_go//go:deps.bzl", "go_host_sdk", "go_register_toolchains", "go_rules_dependencies")
+
+go_host_sdk(name = "go_sdk")
 
 go_rules_dependencies()
 
