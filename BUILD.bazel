@@ -71,6 +71,7 @@ go_test(
     name = "go_default_test",
     srcs = [
         "handler_test.go",
+        "lexer_test.go",
         "proxy_test.go",
         "rules_test.go",
     ],
@@ -81,6 +82,7 @@ go_test(
         "@com_github_google_go_cmp//cmp:go_default_library",
         "@go_googleapis//google/api:httpbody_go_proto",
         "@go_googleapis//google/rpc:status_go_proto",
+        "@io_bazel_rules_go//proto/wkt:empty_go_proto",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//metadata:go_default_library",
         "@org_golang_google_protobuf//encoding/protojson:go_default_library",
