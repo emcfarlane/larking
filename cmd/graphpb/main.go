@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/emcfarlane/graphpb"
+	"google.golang.org/grpc"
 )
 
 const defaultAddr = "localhost:6060" // default webserver address
@@ -35,17 +36,31 @@ func run() error {
 	}
 	defer l.Close()
 
-	ctx := context.TODO()
-	s, err := graphpb.NewServer(ctx, []string(services))
+	s, err := graphpb.NewServer()
 	if err != nil {
 		return err
+	}
+
+	ctx := context.Background()
+	mux := s.Mux()
+
+	// TODO:
+	for _, svc := range services {
+		cc, err := grpc.DialContext(ctx, svc, grpc.WithInsecure())
+		if err != nil {
+			return err
+		}
+
+		if err := mux.RegisterConn(ctx, cc); err != nil {
+			return err
+		}
 	}
 
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		s.Close()
+		s.Shutdown(ctx)
 	}()
 
 	return s.Serve(l)

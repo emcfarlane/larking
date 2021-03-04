@@ -147,7 +147,7 @@ func (p *path) alive() bool {
 		len(p.segments) != 0
 }
 
-//nolint:unused // clone deep clones the path tree.
+// clone deep clones the path tree.
 func (p *path) clone() *path {
 	pc := newPath()
 	if p == nil {
