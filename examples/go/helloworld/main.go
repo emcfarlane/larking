@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -21,6 +22,12 @@ var (
 
 type Server struct {
 	pb.UnimplementedGreeterServer
+}
+
+func (s *Server) SayHello(ctx context.Context, req *pb.HelloRequest) (*pb.HelloReply, error) {
+	return &pb.HelloReply{
+		Message: fmt.Sprintf("Hello, %s! <3 Go", req.Name),
+	}, nil
 }
 
 func (s *Server) serve(l net.Listener) error {

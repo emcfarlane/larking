@@ -1,11 +1,17 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
+    name = "rules_python",
+    sha256 = "b6d46438523a3ec0f3cead544190ee13223a52f6a6765a29eae7b7cc24cc83a0",
+    url = "https://github.com/bazelbuild/rules_python/releases/download/0.1.0/rules_python-0.1.0.tar.gz",
+)
+
+http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "4d838e2d70b955ef9dd0d0648f673141df1bc1d7ecf5c2d621dcc163f47dd38a",
+    sha256 = "52d0a57ea12139d727883c2fef03597970b89f2cc2a05722c42d1d7d41ec065b",
     urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.24.12/rules_go-v0.24.12.tar.gz",
-        "https://github.com/bazelbuild/rules_go/releases/download/v0.24.12/rules_go-v0.24.12.tar.gz",
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.24.13/rules_go-v0.24.13.tar.gz",
+        "https://github.com/bazelbuild/rules_go/releases/download/v0.24.13/rules_go-v0.24.13.tar.gz",
     ],
 )
 
@@ -78,7 +84,7 @@ container_pull(
 
 http_archive(
     name = "googleapis",
-    sha256 = "",
+    sha256 = "a3072ee03234f21645446921ace8cf12005700dffd33fcfeea547fb60d5f1b19",
     strip_prefix = "googleapis-e3e7e7ddb0fecd7bc61ca03b5a9ddb29cc9b48d8",
     urls = ["https://github.com/googleapis/googleapis/archive/e3e7e7ddb0fecd7bc61ca03b5a9ddb29cc9b48d8.tar.gz"],
 )
