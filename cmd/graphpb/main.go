@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -60,7 +61,9 @@ func run() error {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		s.Shutdown(ctx)
+		if err := s.Shutdown(ctx); err != nil {
+			log.Println(err)
+		}
 	}()
 
 	return s.Serve(l)
