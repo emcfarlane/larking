@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,11 +30,13 @@ type methodDesc struct {
 	desc protoreflect.MethodDescriptor
 }
 
+// RO
 type methodConn struct {
 	methodDesc
 	cc *grpc.ClientConn
 }
 
+// RO
 type connList struct {
 	descs  []methodDesc
 	fdHash []byte
@@ -45,15 +48,39 @@ type state struct {
 	methods map[string][]methodConn
 }
 
+func (s *state) clone() *state {
+	if s == nil {
+		return &state{
+			path:    newPath(),
+			conns:   make(map[*grpc.ClientConn]connList),
+			methods: make(map[string][]methodConn),
+		}
+	}
+
+	conns := make(map[*grpc.ClientConn]connList)
+	for conn, cl := range s.conns {
+		conns[conn] = cl
+	}
+
+	methods := make(map[string][]methodConn)
+	for method, mcs := range s.methods {
+		methods[method] = mcs
+	}
+
+	return &state{
+		path:    s.path.clone(),
+		conns:   conns,
+		methods: methods,
+	}
+}
+
 type muxOptions struct {
 	maxReceiveMessageSize int
 	maxSendMessageSize    int
 	connectionTimeout     time.Duration
 }
 
-type MuxOption interface {
-	apply(*muxOptions)
-}
+type MuxOption func(*muxOptions)
 
 var defaultMuxOptions = muxOptions{
 	maxReceiveMessageSize: defaultServerMaxReceiveMessageSize,
@@ -62,44 +89,54 @@ var defaultMuxOptions = muxOptions{
 }
 
 type Mux struct {
-	opts *muxOptions
-	// mu    sync.Mutex TODO: add connection watch.
-	state atomic.Value
+	opts  muxOptions
+	mu    sync.Mutex   // Lock to sync writers
+	state atomic.Value // Value of *state
 }
 
-func NewMux(ccs ...*grpc.ClientConn) (*Mux, error) {
-	s := &state{
-		path:    newPath(),
-		conns:   make(map[*grpc.ClientConn]connList),
-		methods: make(map[string][]methodConn),
+func NewMux(opts ...MuxOption) (*Mux, error) {
+	// Apply options.
+	var muxOpts = defaultMuxOptions
+	for _, opt := range opts {
+		opt(&muxOpts)
 	}
 
-	ctx := context.Background()
+	return &Mux{
+		opts: muxOpts,
+	}, nil
+}
 
-	//var ss []stream
-	for _, cc := range ccs {
-		c := rpb.NewServerReflectionClient(cc)
+func (m *Mux) RegisterConn(ctx context.Context, cc *grpc.ClientConn) error {
+	c := rpb.NewServerReflectionClient(cc)
 
-		// TODO: watch the stream. When it is recreated refresh the service
-		// methods and recreate the mux if needed.
-		stream, err := c.ServerReflectionInfo(ctx, grpc.WaitForReady(true))
-		if err != nil {
-			return nil, err
-		}
-
-		if err := s.createHandler(cc, stream); err != nil {
-			return nil, err
-		}
-
-		//ss = append(ss, stream)
+	// TODO: watch the stream. When it is recreated refresh the service
+	// methods and recreate the mux if needed.
+	stream, err := c.ServerReflectionInfo(ctx, grpc.WaitForReady(true))
+	if err != nil {
+		return err
 	}
 
-	m := Mux{}
-	m.state.Store(s)
+	// Load the state for writing.
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.loadState().clone()
 
-	// TODO: setup connection watch.
+	if err := s.createHandler(cc, stream); err != nil {
+		return err
+	}
 
-	return &m, nil
+	m.storeState(s)
+
+	return stream.CloseSend()
+}
+
+func (m *Mux) DropConn(ctx context.Context, cc *grpc.ClientConn) bool {
+	// Load the state for writing.
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.loadState().clone()
+
+	return s.removeHandler(cc)
 }
 
 // resolver implements protodesc.Resolver.
@@ -171,10 +208,36 @@ func (r *resolver) FindDescriptorByName(fullname protoreflect.FullName) (protore
 	return r.files.FindDescriptorByName(fullname)
 }
 
+func (s *state) removeHandler(cc *grpc.ClientConn) bool {
+	cl, ok := s.conns[cc]
+	if !ok {
+		return ok
+	}
+
+	// Drop methods on client conn.
+	for _, md := range cl.descs {
+		var mcs []methodConn
+
+		for _, mc := range s.methods[md.name] {
+			if mc.cc != cc {
+				mcs = append(mcs, mc)
+			}
+		}
+		if len(mcs) == 0 {
+			delete(s.methods, md.name)
+			s.path.delRule(md.name)
+		} else {
+			s.methods[md.name] = mcs
+		}
+	}
+	// Drop conn on client conn.
+	delete(s.conns, cc)
+	return ok
+}
+
 func (s *state) createHandler(
 	cc *grpc.ClientConn,
 	stream rpb.ServerReflection_ServerReflectionInfoClient,
-	//ctx context.Context, cc *grpc.ClientConn
 ) error {
 	// TODO: async fetch and mux creation.
 
@@ -231,23 +294,8 @@ func (s *state) createHandler(
 			return nil // nothing to do
 		}
 
-		// Drop methods on client conns.
-		for _, md := range cl.descs {
-			mcs := s.methods[md.name]
-
-			for i := len(mcs) - 1; i >= 0; i-- {
-				mc := mcs[i]
-				if mc.cc == cc {
-					mcs = append(mcs[:i], mcs[i+1:]...)
-				}
-			}
-			if len(mcs) == 0 {
-				delete(s.methods, md.name)
-				s.path.delRule(md.name)
-			} else {
-				s.methods[md.name] = mcs
-			}
-		}
+		// Drop and recreate below.
+		s.removeHandler(cc)
 	}
 
 	rslvr, err := newResolver(stream)
@@ -316,7 +364,11 @@ func (s *state) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor)
 	return methods, nil
 }
 
-func (m *Mux) loadState() *state { return m.state.Load().(*state) }
+func (m *Mux) loadState() *state {
+	s, _ := m.state.Load().(*state)
+	return s
+}
+func (m *Mux) storeState(s *state) { m.state.Store(s) }
 
 func (s *state) pickMethodConn(name string) (methodConn, error) {
 	mcs := s.methods[name]

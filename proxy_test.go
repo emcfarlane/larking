@@ -39,6 +39,44 @@ func (os overrides) fromContext(ctx context.Context) (override, bool) {
 	return h, ok
 }
 
+func (os overrides) StreamInterceptor() grpc.ServerOption {
+	return grpc.StreamInterceptor(
+		func(
+			srv interface{},
+			stream grpc.ServerStream,
+			info *grpc.StreamServerInfo,
+			handler grpc.StreamHandler,
+		) (err error) {
+			ctx := stream.Context()
+
+			h, ok := os.fromContext(ctx)
+			if !ok {
+				return handler(srv, stream) // default
+			}
+			return h.stream(stream, info.FullMethod)
+		},
+	)
+}
+
+func (os overrides) UnaryInterceptor() grpc.ServerOption {
+	return grpc.UnaryInterceptor(
+		func(
+			ctx context.Context,
+			req interface{},
+			info *grpc.UnaryServerInfo,
+			handler grpc.UnaryHandler,
+		) (interface{}, error) {
+			h, ok := os.fromContext(ctx)
+			if !ok {
+				return handler(ctx, req) // default
+			}
+
+			// TODO: reflection assert on handler types.
+			return h.unary(ctx, req.(proto.Message), info.FullMethod)
+		},
+	)
+}
+
 func TestGRPCProxy(t *testing.T) {
 	// Create test server.
 	ms := &testpb.UnimplementedMessagingServer{}
@@ -46,38 +84,8 @@ func TestGRPCProxy(t *testing.T) {
 
 	overrides := make(overrides)
 	gs := grpc.NewServer(
-		grpc.StreamInterceptor(
-			func(
-				srv interface{},
-				stream grpc.ServerStream,
-				info *grpc.StreamServerInfo,
-				handler grpc.StreamHandler,
-			) (err error) {
-				ctx := stream.Context()
-
-				h, ok := overrides.fromContext(ctx)
-				if !ok {
-					return handler(srv, stream) // default
-				}
-				return h.stream(stream, info.FullMethod)
-			},
-		),
-		grpc.UnaryInterceptor(
-			func(
-				ctx context.Context,
-				req interface{},
-				info *grpc.UnaryServerInfo,
-				handler grpc.UnaryHandler,
-			) (interface{}, error) {
-				h, ok := overrides.fromContext(ctx)
-				if !ok {
-					return handler(ctx, req) // default
-				}
-
-				// TODO: reflection assert on handler types.
-				return h.unary(ctx, req.(proto.Message), info.FullMethod)
-			},
-		),
+		overrides.StreamInterceptor(),
+		overrides.UnaryInterceptor(),
 	)
 	testpb.RegisterMessagingServer(gs, ms)
 	testpb.RegisterFilesServer(gs, fs)
@@ -108,8 +116,11 @@ func TestGRPCProxy(t *testing.T) {
 	}
 	defer conn.Close()
 
-	h, err := NewMux(conn)
+	h, err := NewMux()
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.RegisterConn(context.Background(), conn); err != nil {
 		t.Fatal(err)
 	}
 
@@ -271,7 +282,6 @@ func TestGRPCProxy(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// len(ins) == len(outs)
 			for ; i < len(tt.ins); i++ {
 				if err := s.SendMsg(tt.ins[i].msg); err != nil {
 					t.Fatal(err)

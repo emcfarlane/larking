@@ -150,6 +150,9 @@ func (p *path) alive() bool {
 //nolint:unused // clone deep clones the path tree.
 func (p *path) clone() *path {
 	pc := newPath()
+	if p == nil {
+		return pc
+	}
 
 	for k, s := range p.segments {
 		pc.segments[k] = s.clone()

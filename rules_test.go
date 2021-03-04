@@ -104,8 +104,11 @@ func TestMessageServer(t *testing.T) {
 	}
 	defer conn.Close()
 
-	h, err := NewMux(conn)
+	h, err := NewMux()
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.RegisterConn(context.Background(), conn); err != nil {
 		t.Fatal(err)
 	}
 
