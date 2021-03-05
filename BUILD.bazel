@@ -1,7 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("@bazel_gazelle//:def.bzl", "gazelle")
 
-# gazelle:prefix github.com/emcfarlane/graphpb
+# gazelle:prefix github.com/emcfarlane/larking
 # gazelle:proto disable
 gazelle(name = "gazelle")
 
@@ -18,12 +18,12 @@ load(
 container_bundle(
     name = "bundle",
     images = {
-        "bazel:graphpb": "//cmd/graphpb:image",
+        "bazel:larking": "//cmd/larking:image",
     },
 )
 
 container_push(
-    name = "gcr_graphpb",
+    name = "gcr_larking",
     format = "Docker",
     image = "//cmd/grapbpb:image",
     registry = "gcr.io",
@@ -43,7 +43,7 @@ go_library(
         "rules.go",
         "server.go",
     ],
-    importpath = "github.com/emcfarlane/graphpb",
+    importpath = "github.com/emcfarlane/larking",
     visibility = ["//visibility:public"],
     deps = [
         "//grpc/reflection/v1alpha:go_default_library",

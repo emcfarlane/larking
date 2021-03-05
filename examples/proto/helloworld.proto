@@ -4,7 +4,7 @@ option java_multiple_files = true;
 option java_package = "com.examples.helloworld";
 option java_outer_classname = "HelloWorldProto";
 option objc_class_prefix = "HLW";
-option go_package = "github.com/emcfarlane/graphpb/example/proto/helloworld;proto";
+option go_package = "github.com/emcfarlane/larking/example/proto/helloworld;proto";
 
 package helloworld;
 

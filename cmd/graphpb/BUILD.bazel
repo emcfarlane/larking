@@ -4,13 +4,13 @@ load("@io_bazel_rules_docker//container:container.bzl", "container_image")
 go_library(
     name = "go_default_library",
     srcs = ["main.go"],
-    importpath = "github.com/emcfarlane/graphpb/cmd/graphpb",
+    importpath = "github.com/emcfarlane/larking/cmd/larking",
     visibility = ["//visibility:private"],
     deps = ["//:go_default_library"],
 )
 
 go_binary(
-    name = "graphpb",
+    name = "larking",
     embed = [":go_default_library"],
     visibility = ["//visibility:public"],
 )
@@ -18,7 +18,7 @@ go_binary(
 container_image(
     name = "image",
     base = "@distroless//image",
-    entrypoint = ["/graphpb"],
-    files = [":graphpb"],
+    entrypoint = ["/larking"],
+    files = [":larking"],
     visibility = ["//visibility:public"],
 )

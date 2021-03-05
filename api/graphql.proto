@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package graphpb.api;
+package larking.api;
 
 // Relay GraphQL implementation
 // https://relay.dev/docs/en/graphql-server-specification.html

@@ -1,4 +1,4 @@
-package graphpb
+package larking
 
 import (
 	"context"
@@ -13,8 +13,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"github.com/emcfarlane/graphpb/grpc/reflection"
-	"github.com/emcfarlane/graphpb/testpb"
+	"github.com/emcfarlane/larking/grpc/reflection"
+	"github.com/emcfarlane/larking/testpb"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -176,7 +176,7 @@ func TestGRPCProxy(t *testing.T) {
 	}{{
 		name:   "unary_message",
 		desc:   unaryStreamDesc,
-		method: "/graphpb.testpb.Messaging/GetMessageOne",
+		method: "/larking.testpb.Messaging/GetMessageOne",
 		ins: []in{{
 			msg: &testpb.GetMessageRequestOne{
 				Name: "proxy",
@@ -191,7 +191,7 @@ func TestGRPCProxy(t *testing.T) {
 			ClientStreams: true,
 			ServerStreams: true,
 		},
-		method: "/graphpb.testpb.Files/LargeUploadDownload",
+		method: "/larking.testpb.Files/LargeUploadDownload",
 		ins: []in{{
 			msg: &testpb.UploadFileRequest{
 				Filename: "cat.jpg",

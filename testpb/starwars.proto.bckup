@@ -1,28 +1,28 @@
 syntax = "proto3";
 
-package graphpb.testpb;
+package larking.testpb;
 
 // Implements https://relay.dev/docs/en/graphql-server-specification.html
 
 message Faction {
-  option (graphpb.api.relay).node = {
-    rpc : "graphpb.testpb.StarWars.GetFaction(id : id)"
+  option (larking.api.relay).node = {
+    rpc : "larking.testpb.StarWars.GetFaction(id : id)"
   };
 
   string id = 1;
   string name = 2;
 
-  option (graphpb.api.relay).connection = {
+  option (larking.api.relay).connection = {
     name : "ships"
-    rpc : "graphpb.testpb.StarWars.ListShips(faction_id : id)"
+    rpc : "larking.testpb.StarWars.ListShips(faction_id : id)"
   };
 }
 
 message GetFactionRequest { string name = 1; }
 
 message Ship {
-  option (graphpb.api.relay).node = {
-    rpc : "graphpb.testpb.StarWars.GetShip(id : id)"
+  option (larking.api.relay).node = {
+    rpc : "larking.testpb.StarWars.GetShip(id : id)"
   };
 
   string id = 1;
@@ -51,16 +51,16 @@ message ListShipsResponse {
 service StarWars {
 
   rpc GetRebels(google.protobuf.Empty) returns (Faction) {
-    option (graphpb.api.relay) = {
+    option (larking.api.relay) = {
       query : "rebels"
     };
   }
 
   rpc GetFaction(GetFactionRequest) returns (Faction) {
-    option (graphpb.api.relay) = {
+    option (larking.api.relay) = {
       query : "rebels(name : 'rebels')"
     };
-    option (graphpb.api.relay) = {
+    option (larking.api.relay) = {
       "rebels"->
       name : "rebels"
     }

@@ -1,4 +1,4 @@
-module github.com/emcfarlane/graphpb
+module github.com/emcfarlane/larking
 
 go 1.12
 

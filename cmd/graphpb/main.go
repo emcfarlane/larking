@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/emcfarlane/graphpb"
+	"github.com/emcfarlane/larking"
 	"google.golang.org/grpc"
 )
 
@@ -37,7 +37,7 @@ func run() error {
 	}
 	defer l.Close()
 
-	s, err := graphpb.NewServer()
+	s, err := larking.NewServer()
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func run() error {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: graphpb -addr="+defaultAddr+" -svc=service1 -svc=service2\n")
+	fmt.Fprintf(os.Stderr, "usage: larking -addr="+defaultAddr+" -svc=service1 -svc=service2\n")
 	flag.PrintDefaults()
 	os.Exit(2)
 }

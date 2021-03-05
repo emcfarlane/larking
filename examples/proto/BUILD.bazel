@@ -79,7 +79,7 @@ go_proto_library(
 go_proto_library(
     name = "helloworld_go_proto",
     compilers = ["@io_bazel_rules_go//proto:go_grpc"],
-    importpath = "github.com/emcfarlane/graphpb/examples/proto/helloworld",
+    importpath = "github.com/emcfarlane/larking/examples/proto/helloworld",
     protos = [
         #":hellostream_proto",
         ":helloworld_proto",
@@ -105,7 +105,7 @@ go_proto_library(
 #        "helloworld.pb.go",
 #        "helloworld_grpc.pb.go",
 #    ],
-#    importpath = "github.com/emcfarlane/graphpb/examples/proto",
+#    importpath = "github.com/emcfarlane/larking/examples/proto",
 #    visibility = ["//visibility:public"],
 #    deps = [
 #        "@com_github_golang_protobuf//proto:go_default_library",
