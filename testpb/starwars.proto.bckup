@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package graphpb.testpb;
+
+// Implements https://relay.dev/docs/en/graphql-server-specification.html
+
+message Faction {
+  option (graphpb.api.relay).node = {
+    rpc : "graphpb.testpb.StarWars.GetFaction(id : id)"
+  };
+
+  string id = 1;
+  string name = 2;
+
+  option (graphpb.api.relay).connection = {
+    name : "ships"
+    rpc : "graphpb.testpb.StarWars.ListShips(faction_id : id)"
+  };
+}
+
+message GetFactionRequest { string name = 1; }
+
+message Ship {
+  option (graphpb.api.relay).node = {
+    rpc : "graphpb.testpb.StarWars.GetShip(id : id)"
+  };
+
+  string id = 1;
+  string name = 2;
+}
+
+message ListShipsRequest { string faction_id = 1; }
+
+message ListShipsResponse {
+  repeated Ship ships = 1;
+  bool has_next_page = 2;
+  bool has_previous_page = 3;
+  string start_cursor = 4;
+  string end_cursor = 5;
+}
+
+// type Query {
+//  rebels: Faction
+//  empire: Faction
+//  node(id: ID!): Node
+//}
+//
+// type Mutation {
+//  introduceShip(input: IntroduceShipInput!): IntroduceShipPayload
+//}
+service StarWars {
+
+  rpc GetRebels(google.protobuf.Empty) returns (Faction) {
+    option (graphpb.api.relay) = {
+      query : "rebels"
+    };
+  }
+
+  rpc GetFaction(GetFactionRequest) returns (Faction) {
+    option (graphpb.api.relay) = {
+      query : "rebels(name : 'rebels')"
+    };
+    option (graphpb.api.relay) = {
+      "rebels"->
+      name : "rebels"
+    }
+  }
+
+  rpc ListShips(ListShipsRequest) returns (ListShipsResponse)
+}

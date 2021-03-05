@@ -20,3 +20,10 @@ protoc --go_out=paths=source_relative:. --go-grpc_out=paths=source_relative:. te
 
 bazel run //:gazelle -- update-repos -from_file=go.mod
 ```
+
+### Protoc
+
+Just link API to `/usr/local/include/google` so protoc can find it.
+```
+ln -s ~/src/github.com/googleapis/googleapis/google/api/ /usr/local/include/google/
+```

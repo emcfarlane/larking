@@ -1,0 +1,33 @@
+java_library(
+    name = "helloworld",
+    testonly = 1,
+    srcs = glob(
+        ["*.java"],
+    ),
+    runtime_deps = [
+        "@io_grpc_grpc_java//netty",
+    ],
+    deps = [
+        "//examples/proto:helloworld_java_grpc",
+        "//examples/proto:helloworld_java_proto",
+        "@com_google_protobuf//:protobuf_java",
+        "@com_google_protobuf//:protobuf_java_util",
+        "@io_grpc_grpc_java//api",
+        "@io_grpc_grpc_java//protobuf",
+        "@io_grpc_grpc_java//services:reflection",
+        "@io_grpc_grpc_java//stub",
+        "@maven//:com_google_api_grpc_proto_google_common_protos",
+        "@maven//:com_google_code_findbugs_jsr305",
+        "@maven//:com_google_code_gson_gson",
+        "@maven//:com_google_guava_guava",
+    ],
+)
+
+java_binary(
+    name = "HelloWorldServer",
+    testonly = 1,
+    main_class = "com.examples.helloworld.HelloWorldServer",
+    runtime_deps = [
+        ":helloworld",
+    ],
+)

@@ -6,6 +6,7 @@ go_library(
     srcs = ["main.go"],
     importpath = "github.com/emcfarlane/graphpb/cmd/graphpb",
     visibility = ["//visibility:private"],
+    deps = ["//:go_default_library"],
 )
 
 go_binary(
