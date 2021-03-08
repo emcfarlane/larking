@@ -1,6 +1,10 @@
+// Copyright 2021 Edward McFarlane. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 syntax = "proto3";
 
-package graphpb.testpb;
+package larking.testpb;
 
 import "google/api/annotations.proto";
 import "google/api/httpbody.proto";
@@ -10,7 +14,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/wrappers.proto";
 
-option go_package = "github.com/emcfarlane/graphpb/testpb;testpb";
+option go_package = "github.com/emcfarlane/larking/testpb;testpb";
 
 service Messaging {
   // HTTP | gRPC

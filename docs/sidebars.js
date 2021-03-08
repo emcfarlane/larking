@@ -1,5 +1,5 @@
 module.exports = {
   someSidebar: {
-    GraphPB: ["intro"],
+    Larking: ["intro"],
   },
 };

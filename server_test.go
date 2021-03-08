@@ -1,4 +1,8 @@
-package graphpb
+// Copyright 2021 Edward McFarlane. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package larking
 
 import (
 	"context"
@@ -11,8 +15,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"github.com/emcfarlane/graphpb/grpc/reflection"
-	"github.com/emcfarlane/graphpb/testpb"
+	"github.com/emcfarlane/larking/grpc/reflection"
+	"github.com/emcfarlane/larking/testpb"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 )
@@ -103,7 +107,7 @@ func TestServer(t *testing.T) {
 	}{{
 		name:   "unary_message",
 		desc:   unaryStreamDesc,
-		method: "/graphpb.testpb.Messaging/GetMessageOne",
+		method: "/larking.testpb.Messaging/GetMessageOne",
 		ins: []in{{
 			msg: &testpb.GetMessageRequestOne{
 				Name: "proxy",

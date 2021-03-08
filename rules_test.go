@@ -1,4 +1,8 @@
-package graphpb
+// Copyright 2021 Edward McFarlane. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package larking
 
 import (
 	"bytes"
@@ -26,8 +30,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/emcfarlane/graphpb/grpc/reflection"
-	"github.com/emcfarlane/graphpb/testpb"
+	"github.com/emcfarlane/larking/grpc/reflection"
+	"github.com/emcfarlane/larking/testpb"
 )
 
 func TestMessageServer(t *testing.T) {
@@ -142,7 +146,7 @@ func TestMessageServer(t *testing.T) {
 		name: "first",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/messages/name/hello", nil),
 		in: in{
-			method: "/graphpb.testpb.Messaging/GetMessageOne",
+			method: "/larking.testpb.Messaging/GetMessageOne",
 			msg:    &testpb.GetMessageRequestOne{Name: "name/hello"},
 		},
 		out: out{
@@ -156,7 +160,7 @@ func TestMessageServer(t *testing.T) {
 		name: "sub.subfield",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/messages/123456?revision=2&sub.subfield=foo", nil),
 		in: in{
-			method: "/graphpb.testpb.Messaging/GetMessageTwo",
+			method: "/larking.testpb.Messaging/GetMessageTwo",
 			msg: &testpb.GetMessageRequestTwo{
 				MessageId: "123456",
 				Revision:  2,
@@ -176,7 +180,7 @@ func TestMessageServer(t *testing.T) {
 		name: "additional_bindings1",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/users/usr_123/messages?message_id=msg_123&revision=2", nil),
 		in: in{
-			method: "/graphpb.testpb.Messaging/GetMessageTwo",
+			method: "/larking.testpb.Messaging/GetMessageTwo",
 			msg: &testpb.GetMessageRequestTwo{
 				MessageId: "msg_123",
 				Revision:  2,
@@ -194,7 +198,7 @@ func TestMessageServer(t *testing.T) {
 		name: "additional_bindings2",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/users/usr_123/messages/msg_123?revision=2", nil),
 		in: in{
-			method: "/graphpb.testpb.Messaging/GetMessageTwo",
+			method: "/larking.testpb.Messaging/GetMessageTwo",
 			msg: &testpb.GetMessageRequestTwo{
 				MessageId: "msg_123",
 				Revision:  2,
@@ -214,7 +218,7 @@ func TestMessageServer(t *testing.T) {
 			`{ "text": "Hi!" }`,
 		)),
 		in: in{
-			method: "/graphpb.testpb.Messaging/UpdateMessage",
+			method: "/larking.testpb.Messaging/UpdateMessage",
 			msg: &testpb.UpdateMessageRequestOne{
 				MessageId: "msg_123",
 				Message: &testpb.Message{
@@ -235,7 +239,7 @@ func TestMessageServer(t *testing.T) {
 			`{ "message_id": "123" }`,
 		)),
 		in: in{
-			method: "/graphpb.testpb.Messaging/Action",
+			method: "/larking.testpb.Messaging/Action",
 			msg:    &testpb.Message{MessageId: "123", Text: "action"},
 		},
 		out: out{
@@ -263,7 +267,7 @@ func TestMessageServer(t *testing.T) {
 			return r
 		}(),
 		in: in{
-			method: "/graphpb.testpb.Files/UploadDownload",
+			method: "/larking.testpb.Files/UploadDownload",
 			msg: &testpb.UploadFileRequest{
 				Filename: "cat.jpg",
 				File: &httpbody.HttpBody{
@@ -302,7 +306,7 @@ func TestMessageServer(t *testing.T) {
 			nil,
 		),
 		in: in{
-			method: "/graphpb.testpb.WellKnown/Check",
+			method: "/larking.testpb.WellKnown/Check",
 			msg: &testpb.Scalars{
 				Timestamp: &timestamppb.Timestamp{
 					Seconds: 1484443815,
@@ -334,7 +338,7 @@ func TestMessageServer(t *testing.T) {
 		name: "variable_one",
 		req:  httptest.NewRequest(http.MethodGet, "/version/one", nil),
 		in: in{
-			method: "/graphpb.testpb.Messaging/VariableOne",
+			method: "/larking.testpb.Messaging/VariableOne",
 			msg:    &testpb.Message{Text: "version"},
 		},
 		out: out{
@@ -348,7 +352,7 @@ func TestMessageServer(t *testing.T) {
 		name: "variable_two",
 		req:  httptest.NewRequest(http.MethodGet, "/version/two", nil),
 		in: in{
-			method: "/graphpb.testpb.Messaging/VariableTwo",
+			method: "/larking.testpb.Messaging/VariableTwo",
 			msg:    &testpb.Message{Text: "version"},
 		},
 		out: out{

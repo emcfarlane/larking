@@ -1,16 +1,16 @@
 module.exports = {
-  title: "GraphPB",
+  title: "Larking",
   tagline: "Reflective protobuffer APIs",
   url: "https://emcfarlane.github.io",
-  baseUrl: "/graphpb/",
+  baseUrl: "/larking/",
   favicon: "img/favicon.ico",
   organizationName: "emcfarlane",
-  projectName: "graphpb",
+  projectName: "larking",
   themeConfig: {
     navbar: {
-      title: "GraphPB",
+      title: "Larking",
       logo: {
-        alt: "GraphPB",
+        alt: "Larking",
         src: "img/logo_one.svg",
       },
       items: [
@@ -21,7 +21,7 @@ module.exports = {
           position: "left",
         },
         {
-          href: "https://github.com/emcfarlane/graphpb",
+          href: "https://github.com/emcfarlane/larking",
           position: "right",
           className: "header-github header-logo",
         },

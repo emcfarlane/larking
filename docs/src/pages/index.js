@@ -22,7 +22,7 @@ const features = [
     imageUrl: "img/rest.png",
     description: (
       <>
-        GraphPB lets you focus on API specification. REST bindings are generated
+        Larking lets you focus on API specification. REST bindings are generated
         directily from protobuffer descriptors with no need for more code
         generation.
       </>
@@ -70,7 +70,7 @@ function Home() {
               </Link>
             </div>
             <div className="col">
-              <img className="hero-logo" src="img/GraphPB_hero.png" />
+              <img className="hero-logo" src="img/Larking_hero.png" />
             </div>
           </div>
         </div>

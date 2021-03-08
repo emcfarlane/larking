@@ -1,4 +1,6 @@
-# [WIP] GraphPB
+# [WIP] Larking
+
+| “Now Bert, none of your larking about.” - Mary Poppins
 
 Reflective gRPC gateway proxy.
 
@@ -14,7 +16,7 @@ Go install each protoc generation bin.
 Regenerate protoc buffers:
 
 ```
-graphpb$ protoc -I=. --go_out=:. --go-grpc_out=:. grpc/reflection/v1alpha/*.proto
+larking$ protoc -I=. --go_out=:. --go-grpc_out=:. grpc/reflection/v1alpha/*.proto
 
 protoc --go_out=paths=source_relative:. --go-grpc_out=paths=source_relative:. testpb/test.proto
 

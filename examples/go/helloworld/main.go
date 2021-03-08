@@ -8,9 +8,9 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/emcfarlane/graphpb"
-	pb "github.com/emcfarlane/graphpb/examples/proto/helloworld"
-	"github.com/emcfarlane/graphpb/grpc/reflection"
+	"github.com/emcfarlane/larking"
+	pb "github.com/emcfarlane/larking/examples/proto/helloworld"
+	"github.com/emcfarlane/larking/grpc/reflection"
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
 )
@@ -42,7 +42,7 @@ func (s *Server) serve(l net.Listener) error {
 
 	// Register HTTP handler in-process to server both the GRPC server and
 	// the HTTP server on one port.
-	hd := &graphpb.Handler{}
+	hd := &larking.Handler{}
 	if err := hd.RegisterServiceByName("helloworld.Greeter", s); err != nil {
 		return err
 	}

@@ -1,4 +1,8 @@
-package graphpb
+// Copyright 2021 Edward McFarlane. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package larking
 
 import (
 	"context"
@@ -10,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/emcfarlane/graphpb/testpb"
+	"github.com/emcfarlane/larking/testpb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -22,7 +26,7 @@ func TestHandler(t *testing.T) {
 	ms := &testpb.UnimplementedMessagingServer{}
 
 	var h Handler
-	if err := h.RegisterServiceByName("graphpb.testpb.Messaging", ms); err != nil {
+	if err := h.RegisterServiceByName("larking.testpb.Messaging", ms); err != nil {
 		t.Fatal(err)
 	}
 
@@ -42,7 +46,7 @@ func TestHandler(t *testing.T) {
 			return nil, fmt.Errorf("missing context metadata")
 		}
 
-		if info.FullMethod != "/graphpb.testpb.Messaging/UpdateMessage" {
+		if info.FullMethod != "/larking.testpb.Messaging/UpdateMessage" {
 			return nil, fmt.Errorf("invalid method %s", info.FullMethod)
 		}
 

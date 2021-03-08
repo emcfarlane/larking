@@ -6,7 +6,7 @@ go_library(
         "test.pb.go",
         "test_grpc.pb.go",
     ],
-    importpath = "github.com/emcfarlane/graphpb/testpb",
+    importpath = "github.com/emcfarlane/larking/testpb",
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_golang_protobuf//proto:go_default_library",

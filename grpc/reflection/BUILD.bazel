@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["reflection.go"],
-    importpath = "github.com/emcfarlane/graphpb/grpc/reflection",
+    importpath = "github.com/emcfarlane/larking/grpc/reflection",
     visibility = ["//visibility:public"],
     deps = [
         "//grpc/reflection/v1alpha:go_default_library",

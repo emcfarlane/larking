@@ -60,7 +60,7 @@ func NewMessagingClient(cc *grpc.ClientConn) MessagingClient {
 
 func (c *messagingClient) GetMessageOne(ctx context.Context, in *GetMessageRequestOne, opts ...grpc.CallOption) (*Message, error) {
 	out := new(Message)
-	err := c.cc.Invoke(ctx, "/graphpb.testpb.Messaging/GetMessageOne", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/GetMessageOne", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (c *messagingClient) GetMessageOne(ctx context.Context, in *GetMessageReque
 
 func (c *messagingClient) GetMessageTwo(ctx context.Context, in *GetMessageRequestTwo, opts ...grpc.CallOption) (*Message, error) {
 	out := new(Message)
-	err := c.cc.Invoke(ctx, "/graphpb.testpb.Messaging/GetMessageTwo", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/GetMessageTwo", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (c *messagingClient) GetMessageTwo(ctx context.Context, in *GetMessageReque
 
 func (c *messagingClient) UpdateMessage(ctx context.Context, in *UpdateMessageRequestOne, opts ...grpc.CallOption) (*Message, error) {
 	out := new(Message)
-	err := c.cc.Invoke(ctx, "/graphpb.testpb.Messaging/UpdateMessage", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/UpdateMessage", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (c *messagingClient) UpdateMessage(ctx context.Context, in *UpdateMessageRe
 
 func (c *messagingClient) UpdateMessageBody(ctx context.Context, in *Message, opts ...grpc.CallOption) (*Message, error) {
 	out := new(Message)
-	err := c.cc.Invoke(ctx, "/graphpb.testpb.Messaging/UpdateMessageBody", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/UpdateMessageBody", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func (c *messagingClient) UpdateMessageBody(ctx context.Context, in *Message, op
 
 func (c *messagingClient) Action(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, "/graphpb.testpb.Messaging/Action", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/Action", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (c *messagingClient) Action(ctx context.Context, in *Message, opts ...grpc.
 
 func (c *messagingClient) VariableOne(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, "/graphpb.testpb.Messaging/VariableOne", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/VariableOne", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (c *messagingClient) VariableOne(ctx context.Context, in *Message, opts ...
 
 func (c *messagingClient) VariableTwo(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, "/graphpb.testpb.Messaging/VariableTwo", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/VariableTwo", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func _Messaging_GetMessageOne_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/graphpb.testpb.Messaging/GetMessageOne",
+		FullMethod: "/larking.testpb.Messaging/GetMessageOne",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServer).GetMessageOne(ctx, req.(*GetMessageRequestOne))
@@ -208,7 +208,7 @@ func _Messaging_GetMessageTwo_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/graphpb.testpb.Messaging/GetMessageTwo",
+		FullMethod: "/larking.testpb.Messaging/GetMessageTwo",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServer).GetMessageTwo(ctx, req.(*GetMessageRequestTwo))
@@ -226,7 +226,7 @@ func _Messaging_UpdateMessage_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/graphpb.testpb.Messaging/UpdateMessage",
+		FullMethod: "/larking.testpb.Messaging/UpdateMessage",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServer).UpdateMessage(ctx, req.(*UpdateMessageRequestOne))
@@ -244,7 +244,7 @@ func _Messaging_UpdateMessageBody_Handler(srv interface{}, ctx context.Context, 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/graphpb.testpb.Messaging/UpdateMessageBody",
+		FullMethod: "/larking.testpb.Messaging/UpdateMessageBody",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServer).UpdateMessageBody(ctx, req.(*Message))
@@ -262,7 +262,7 @@ func _Messaging_Action_Handler(srv interface{}, ctx context.Context, dec func(in
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/graphpb.testpb.Messaging/Action",
+		FullMethod: "/larking.testpb.Messaging/Action",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServer).Action(ctx, req.(*Message))
@@ -280,7 +280,7 @@ func _Messaging_VariableOne_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/graphpb.testpb.Messaging/VariableOne",
+		FullMethod: "/larking.testpb.Messaging/VariableOne",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServer).VariableOne(ctx, req.(*Message))
@@ -298,7 +298,7 @@ func _Messaging_VariableTwo_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/graphpb.testpb.Messaging/VariableTwo",
+		FullMethod: "/larking.testpb.Messaging/VariableTwo",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServer).VariableTwo(ctx, req.(*Message))
@@ -307,7 +307,7 @@ func _Messaging_VariableTwo_Handler(srv interface{}, ctx context.Context, dec fu
 }
 
 var _Messaging_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "graphpb.testpb.Messaging",
+	ServiceName: "larking.testpb.Messaging",
 	HandlerType: (*MessagingServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -365,7 +365,7 @@ func NewFilesClient(cc *grpc.ClientConn) FilesClient {
 
 func (c *filesClient) UploadDownload(ctx context.Context, in *UploadFileRequest, opts ...grpc.CallOption) (*httpbody.HttpBody, error) {
 	out := new(httpbody.HttpBody)
-	err := c.cc.Invoke(ctx, "/graphpb.testpb.Files/UploadDownload", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Files/UploadDownload", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +373,7 @@ func (c *filesClient) UploadDownload(ctx context.Context, in *UploadFileRequest,
 }
 
 func (c *filesClient) LargeUploadDownload(ctx context.Context, opts ...grpc.CallOption) (Files_LargeUploadDownloadClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Files_serviceDesc.Streams[0], "/graphpb.testpb.Files/LargeUploadDownload", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Files_serviceDesc.Streams[0], "/larking.testpb.Files/LargeUploadDownload", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -438,7 +438,7 @@ func _Files_UploadDownload_Handler(srv interface{}, ctx context.Context, dec fun
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/graphpb.testpb.Files/UploadDownload",
+		FullMethod: "/larking.testpb.Files/UploadDownload",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(FilesServer).UploadDownload(ctx, req.(*UploadFileRequest))
@@ -473,7 +473,7 @@ func (x *filesLargeUploadDownloadServer) Recv() (*UploadFileRequest, error) {
 }
 
 var _Files_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "graphpb.testpb.Files",
+	ServiceName: "larking.testpb.Files",
 	HandlerType: (*FilesServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -513,7 +513,7 @@ func NewWellKnownClient(cc *grpc.ClientConn) WellKnownClient {
 
 func (c *wellKnownClient) Check(ctx context.Context, in *Scalars, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, "/graphpb.testpb.WellKnown/Check", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/larking.testpb.WellKnown/Check", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -551,7 +551,7 @@ func _WellKnown_Check_Handler(srv interface{}, ctx context.Context, dec func(int
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/graphpb.testpb.WellKnown/Check",
+		FullMethod: "/larking.testpb.WellKnown/Check",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(WellKnownServer).Check(ctx, req.(*Scalars))
@@ -560,7 +560,7 @@ func _WellKnown_Check_Handler(srv interface{}, ctx context.Context, dec func(int
 }
 
 var _WellKnown_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "graphpb.testpb.WellKnown",
+	ServiceName: "larking.testpb.WellKnown",
 	HandlerType: (*WellKnownServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
