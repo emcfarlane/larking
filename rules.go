@@ -668,11 +668,12 @@ func (m *method) parseQueryParams(values url.Values) (params, error) {
 
 func (v *variable) index(s string) int {
 	var i int
-	//fmt.Println("\tlen(v.toks)", len(v.toks))
+	//fmt.Println("\tlen(v.toks)", len(v.toks), v.toks)
 	for _, tok := range v.toks {
 		if i == len(s) {
 			return -1
 		}
+		//fmt.Println("---", s[:i], "---")
 
 		switch tok.typ {
 		case tokenSlash:
@@ -683,9 +684,10 @@ func (v *variable) index(s string) int {
 			//fmt.Println("\ttokenSlash", i)
 
 		case tokenStar:
-			i = strings.Index(s[i:], "/")
-			if i == -1 {
-				i = len(s)
+			if j := strings.Index(s[i:], "/"); j != -1 {
+				i += j
+			} else {
+				i = len(s) // EOL
 			}
 			//fmt.Println("\ttokenStar", i)
 
@@ -740,7 +742,7 @@ func (p *path) match(route, method string) (*method, params, error) {
 		}
 		newRoute := route[l:]
 
-		//fmt.Println("variable", l, newRoute)
+		//fmt.Println("variable", l, route, "->", newRoute)
 		m, ps, err := v.next.match(newRoute, method)
 		if err != nil {
 			continue
@@ -830,6 +832,7 @@ func (m *method) decodeRequestArgs(args proto.Message, r *http.Request) error {
 
 	default:
 		// TODO: contentType check?
+		// What marshalling options should we support?
 		if err := protojson.Unmarshal(b, msg); err != nil {
 			return err
 		}
