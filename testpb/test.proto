@@ -80,6 +80,18 @@ service Messaging {
       get : "/{text}/two"
     };
   }
+
+  rpc GetBook(GetBookRequest) returns (Book) {
+    option (google.api.http) = {
+      get : "/v1/{name=shelves/*/books/*}"
+    };
+  };
+  rpc CreateBook(CreateBookRequest) returns (Book) {
+    option (google.api.http) = {
+      post : "/v1/{parent=shelves/*}/books"
+      body : "book"
+    };
+  };
 }
 
 message Message {
@@ -152,4 +164,25 @@ message Scalars {
   google.protobuf.BytesValue bytes_value = 10;
   google.protobuf.StringValue string_value = 11;
   // TODO google.protobuf.FieldMask mask = 12;
+}
+
+message Book {
+  // Resource name of the book. It must have the format of "shelves/*/books/*".
+  // For example: "shelves/shelf1/books/book2".
+  string name = 1;
+
+  // ... other properties
+}
+
+message GetBookRequest {
+  // Resource name of a book. For example: "shelves/shelf1/books/book2".
+  string name = 1;
+}
+
+message CreateBookRequest {
+  // Resource name of the parent resource where to create the book.
+  // For example: "shelves/shelf1".
+  string parent = 1;
+  // The Book resource to be created. Client must not set the `Book.name` field.
+  Book book = 2;
 }

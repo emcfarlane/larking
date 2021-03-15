@@ -362,6 +362,41 @@ func TestMessageServer(t *testing.T) {
 			statusCode: 200,
 			msg:        &empty.Empty{},
 		},
+	}, {
+		name: "resource_name_get",
+		req:  httptest.NewRequest(http.MethodGet, "/v1/shelves/shelf1/books/book2", nil),
+		in: in{
+			method: "/larking.testpb.Messaging/GetBook",
+			msg:    &testpb.GetBookRequest{Name: "shelves/shelf1/books/book2"},
+		},
+		out: out{
+			msg: &testpb.Book{Name: "book2"},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &testpb.Book{Name: "book2"},
+		},
+	}, {
+		name: "resource_name_create",
+		req: httptest.NewRequest(http.MethodPost, "/v1/shelves/shelf1/books", strings.NewReader(
+			`{ "name": "book3" }`,
+		)),
+		in: in{
+			method: "/larking.testpb.Messaging/CreateBook",
+			msg: &testpb.CreateBookRequest{
+				Parent: "shelves/shelf1",
+				Book: &testpb.Book{
+					Name: "book3",
+				},
+			},
+		},
+		out: out{
+			msg: &testpb.Book{Name: "book3"},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &testpb.Book{Name: "book3"},
+		},
 	}}
 
 	opts := cmp.Options{protocmp.Transform()}
