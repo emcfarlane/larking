@@ -48,6 +48,8 @@ type MessagingClient interface {
 	Action(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	VariableOne(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	VariableTwo(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	GetBook(ctx context.Context, in *GetBookRequest, opts ...grpc.CallOption) (*Book, error)
+	CreateBook(ctx context.Context, in *CreateBookRequest, opts ...grpc.CallOption) (*Book, error)
 }
 
 type messagingClient struct {
@@ -121,6 +123,24 @@ func (c *messagingClient) VariableTwo(ctx context.Context, in *Message, opts ...
 	return out, nil
 }
 
+func (c *messagingClient) GetBook(ctx context.Context, in *GetBookRequest, opts ...grpc.CallOption) (*Book, error) {
+	out := new(Book)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/GetBook", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingClient) CreateBook(ctx context.Context, in *CreateBookRequest, opts ...grpc.CallOption) (*Book, error) {
+	out := new(Book)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/CreateBook", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessagingServer is the server API for Messaging service.
 type MessagingServer interface {
 	// HTTP | gRPC
@@ -148,6 +168,8 @@ type MessagingServer interface {
 	Action(context.Context, *Message) (*emptypb.Empty, error)
 	VariableOne(context.Context, *Message) (*emptypb.Empty, error)
 	VariableTwo(context.Context, *Message) (*emptypb.Empty, error)
+	GetBook(context.Context, *GetBookRequest) (*Book, error)
+	CreateBook(context.Context, *CreateBookRequest) (*Book, error)
 }
 
 // UnimplementedMessagingServer can be embedded to have forward compatible implementations.
@@ -174,6 +196,12 @@ func (*UnimplementedMessagingServer) VariableOne(context.Context, *Message) (*em
 }
 func (*UnimplementedMessagingServer) VariableTwo(context.Context, *Message) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method VariableTwo not implemented")
+}
+func (*UnimplementedMessagingServer) GetBook(context.Context, *GetBookRequest) (*Book, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetBook not implemented")
+}
+func (*UnimplementedMessagingServer) CreateBook(context.Context, *CreateBookRequest) (*Book, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateBook not implemented")
 }
 
 func RegisterMessagingServer(s *grpc.Server, srv MessagingServer) {
@@ -306,6 +334,42 @@ func _Messaging_VariableTwo_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Messaging_GetBook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBookRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServer).GetBook(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/larking.testpb.Messaging/GetBook",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServer).GetBook(ctx, req.(*GetBookRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Messaging_CreateBook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateBookRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServer).CreateBook(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/larking.testpb.Messaging/CreateBook",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServer).CreateBook(ctx, req.(*CreateBookRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Messaging_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "larking.testpb.Messaging",
 	HandlerType: (*MessagingServer)(nil),
@@ -337,6 +401,14 @@ var _Messaging_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "VariableTwo",
 			Handler:    _Messaging_VariableTwo_Handler,
+		},
+		{
+			MethodName: "GetBook",
+			Handler:    _Messaging_GetBook_Handler,
+		},
+		{
+			MethodName: "CreateBook",
+			Handler:    _Messaging_CreateBook_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
