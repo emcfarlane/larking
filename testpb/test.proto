@@ -10,7 +10,7 @@ import "google/api/annotations.proto";
 import "google/api/httpbody.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
-// import "google/protobuf/field_mask.proto";
+import "google/protobuf/field_mask.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/wrappers.proto";
 
@@ -92,6 +92,16 @@ service Messaging {
       body : "book"
     };
   };
+  rpc UpdateBook(UpdateBookRequest) returns (Book) {
+    // Update maps to HTTP PATCH. Resource name is mapped to a URL path.
+    // Resource is contained in the HTTP request body.
+    option (google.api.http) = {
+      // Note the URL template variable which captures the resource name of the
+      // book to update.
+      patch : "/v1/{book.name=shelves/*/books/*}"
+      body : "book"
+    };
+  }
 }
 
 message Message {
@@ -163,7 +173,7 @@ message Scalars {
   google.protobuf.DoubleValue double_value = 9;
   google.protobuf.BytesValue bytes_value = 10;
   google.protobuf.StringValue string_value = 11;
-  // TODO google.protobuf.FieldMask mask = 12;
+  google.protobuf.FieldMask field_mask = 12;
 }
 
 message Book {
@@ -172,6 +182,7 @@ message Book {
   string name = 1;
 
   // ... other properties
+  string title = 2;
 }
 
 message GetBookRequest {
@@ -185,4 +196,14 @@ message CreateBookRequest {
   string parent = 1;
   // The Book resource to be created. Client must not set the `Book.name` field.
   Book book = 2;
+}
+
+message UpdateBookRequest {
+  // The book resource which replaces the resource on the server.
+  Book book = 1;
+
+  // The update mask applies to the resource. For the `FieldMask` definition,
+  // see
+  // https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#fieldmask
+  google.protobuf.FieldMask update_mask = 2;
 }

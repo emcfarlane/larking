@@ -32,6 +32,7 @@ import (
 	_ "google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -603,12 +604,12 @@ func parseParam(fds []protoreflect.FieldDescriptor, raw []byte) (param, error) {
 			}
 			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 
-		//case "google.protobuf.FieldMask": // TODO
-		//	var msg fieldmaskpb.FieldMask
-		//	if err := protojson.Unmarshal(raw, &msg); err != nil {
-		//		return param{}, err
-		//	}
-		//	return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+		case "google.protobuf.FieldMask":
+			var msg fieldmaskpb.FieldMask
+			if err := protojson.Unmarshal(raw, &msg); err != nil {
+				return param{}, err
+			}
+			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		default:
 			return param{}, fmt.Errorf("unexpected message type %s", md.FullName())
 		}
