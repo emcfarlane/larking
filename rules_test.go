@@ -27,6 +27,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -301,8 +302,8 @@ func TestMessageServer(t *testing.T) {
 				"float_value=5.5&"+
 				"double_value=6.6&"+
 				"bytes_value=aGVsbG8&"+ // base64URL
-				"string_value=hello",
-			//"fieldmask=\"user.displayName,photo\"&"+
+				"string_value=hello&"+
+				"field_mask=\"user.displayName,photo\"",
 			nil,
 		),
 		in: in{
@@ -325,6 +326,12 @@ func TestMessageServer(t *testing.T) {
 				DoubleValue: &wrapperspb.DoubleValue{Value: 6.6},
 				BytesValue:  &wrapperspb.BytesValue{Value: []byte("hello")},
 				StringValue: &wrapperspb.StringValue{Value: "hello"},
+				FieldMask: &fieldmaskpb.FieldMask{
+					Paths: []string{
+						"user.display_name", // JSON name converted to field name
+						"photo",
+					},
+				},
 			},
 		},
 		out: out{
@@ -396,6 +403,39 @@ func TestMessageServer(t *testing.T) {
 		want: want{
 			statusCode: 200,
 			msg:        &testpb.Book{Name: "book3"},
+		},
+	}, {
+		name: "resource_name_update",
+		req: httptest.NewRequest(http.MethodPatch, `/v1/shelves/shelf1/books/book2?update_mask="name,title"`, strings.NewReader(
+			`{ "title": "Lord of the Rings" }`,
+		)),
+		in: in{
+			method: "/larking.testpb.Messaging/UpdateBook",
+			msg: &testpb.UpdateBookRequest{
+				Book: &testpb.Book{
+					Name:  "shelves/shelf1/books/book2",
+					Title: "Lord of the Rings",
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{
+					Paths: []string{
+						"name",
+						"title",
+					},
+				},
+			},
+		},
+		out: out{
+			msg: &testpb.Book{
+				Name:  "shelves/shelf1/books/book2",
+				Title: "Lord of the Rings",
+			},
+		},
+		want: want{
+			statusCode: 200,
+			msg: &testpb.Book{
+				Name:  "shelves/shelf1/books/book2",
+				Title: "Lord of the Rings",
+			},
 		},
 	}}
 
