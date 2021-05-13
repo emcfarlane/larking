@@ -251,6 +251,38 @@ func TestMessageServer(t *testing.T) {
 			msg:        &empty.Empty{},
 		},
 	}, {
+		name: "actionSegment",
+		req: httptest.NewRequest(http.MethodPost, "/v1/name:clear", strings.NewReader(
+			`{ "message_id": "123" }`,
+		)),
+		in: in{
+			method: "/larking.testpb.Messaging/ActionSegment",
+			msg:    &testpb.Message{MessageId: "123", Text: "name"},
+		},
+		out: out{
+			msg: &empty.Empty{},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &empty.Empty{},
+		},
+	}, {
+		name: "actionSegments",
+		req: httptest.NewRequest(http.MethodPost, "/v1/name/id:watch", strings.NewReader(
+			`{ "message_id": "123" }`,
+		)),
+		in: in{
+			method: "/larking.testpb.Messaging/ActionSegments",
+			msg:    &testpb.Message{MessageId: "123", Text: "name/id"},
+		},
+		out: out{
+			msg: &empty.Empty{},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &empty.Empty{},
+		},
+	}, {
 		name: "404",
 		req:  httptest.NewRequest(http.MethodGet, "/error404", nil),
 		want: want{
