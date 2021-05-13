@@ -70,6 +70,20 @@ service Messaging {
     };
   }
 
+  rpc ActionSegment(Message) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post : "/v1/{text=*}:clear"
+      body : "*"
+    };
+  }
+
+  rpc ActionSegments(Message) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post : "/v1/{text=**}:watch"
+      body : "*"
+    };
+  }
+
   rpc VariableOne(Message) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       get : "/{text}/one"

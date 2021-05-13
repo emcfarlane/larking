@@ -46,6 +46,8 @@ type MessagingClient interface {
 	// "123456" text: "Hi!")`
 	UpdateMessageBody(ctx context.Context, in *Message, opts ...grpc.CallOption) (*Message, error)
 	Action(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ActionSegment(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ActionSegments(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	VariableOne(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	VariableTwo(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetBook(ctx context.Context, in *GetBookRequest, opts ...grpc.CallOption) (*Book, error)
@@ -100,6 +102,24 @@ func (c *messagingClient) UpdateMessageBody(ctx context.Context, in *Message, op
 func (c *messagingClient) Action(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/Action", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingClient) ActionSegment(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/ActionSegment", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingClient) ActionSegments(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/ActionSegments", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -176,6 +196,8 @@ type MessagingServer interface {
 	// "123456" text: "Hi!")`
 	UpdateMessageBody(context.Context, *Message) (*Message, error)
 	Action(context.Context, *Message) (*emptypb.Empty, error)
+	ActionSegment(context.Context, *Message) (*emptypb.Empty, error)
+	ActionSegments(context.Context, *Message) (*emptypb.Empty, error)
 	VariableOne(context.Context, *Message) (*emptypb.Empty, error)
 	VariableTwo(context.Context, *Message) (*emptypb.Empty, error)
 	GetBook(context.Context, *GetBookRequest) (*Book, error)
@@ -201,6 +223,12 @@ func (*UnimplementedMessagingServer) UpdateMessageBody(context.Context, *Message
 }
 func (*UnimplementedMessagingServer) Action(context.Context, *Message) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Action not implemented")
+}
+func (*UnimplementedMessagingServer) ActionSegment(context.Context, *Message) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ActionSegment not implemented")
+}
+func (*UnimplementedMessagingServer) ActionSegments(context.Context, *Message) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ActionSegments not implemented")
 }
 func (*UnimplementedMessagingServer) VariableOne(context.Context, *Message) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method VariableOne not implemented")
@@ -308,6 +336,42 @@ func _Messaging_Action_Handler(srv interface{}, ctx context.Context, dec func(in
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServer).Action(ctx, req.(*Message))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Messaging_ActionSegment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Message)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServer).ActionSegment(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/larking.testpb.Messaging/ActionSegment",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServer).ActionSegment(ctx, req.(*Message))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Messaging_ActionSegments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Message)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServer).ActionSegments(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/larking.testpb.Messaging/ActionSegments",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServer).ActionSegments(ctx, req.(*Message))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -425,6 +489,14 @@ var _Messaging_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Action",
 			Handler:    _Messaging_Action_Handler,
+		},
+		{
+			MethodName: "ActionSegment",
+			Handler:    _Messaging_ActionSegment_Handler,
+		},
+		{
+			MethodName: "ActionSegments",
+			Handler:    _Messaging_ActionSegments_Handler,
 		},
 		{
 			MethodName: "VariableOne",

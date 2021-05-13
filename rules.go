@@ -43,7 +43,7 @@ func getExtensionHTTP(m proto.Message) *annotations.HttpRule {
 }
 
 type variable struct {
-	name string  // path.to.field=segment/*/***
+	name string  // path.to.field=segment/*/**
 	toks []token // segment/*/**
 	next *path
 }
@@ -667,6 +667,8 @@ func (m *method) parseQueryParams(values url.Values) (params, error) {
 	return ps, nil
 }
 
+// index returns the capture length.
+// TODO: better method name.
 func (v *variable) index(s string) int {
 	var i int
 	//fmt.Println("\tlen(v.toks)", len(v.toks), v.toks)
@@ -685,7 +687,7 @@ func (v *variable) index(s string) int {
 			//fmt.Println("\ttokenSlash", i)
 
 		case tokenStar:
-			if j := strings.Index(s[i:], "/"); j != -1 {
+			if j := strings.IndexAny(s[i:], "/:"); j != -1 {
 				i += j
 			} else {
 				i = len(s) // EOL
@@ -693,7 +695,11 @@ func (v *variable) index(s string) int {
 			//fmt.Println("\ttokenStar", i)
 
 		case tokenStarStar:
-			i = len(s)
+			if j := strings.Index(s[i:], ":"); j != -1 {
+				i += j
+			} else {
+				i = len(s) // EOL
+			}
 			//fmt.Println("\ttokenStarStar", i)
 
 		case tokenValue:
@@ -712,7 +718,7 @@ func (v *variable) index(s string) int {
 
 // Depth first search preferring path segments over variables.
 // Variables split the search tree:
-//     /path/{variable/*}/to/{end/**} VERB
+//     /path/{variable/*}/to/{end/**} ?:VERB
 func (p *path) match(route, method string) (*method, params, error) {
 	if len(route) == 0 {
 		if m, ok := p.methods[method]; ok {
