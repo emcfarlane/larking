@@ -914,14 +914,10 @@ func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
 		r.URL.Path = "/" + r.URL.Path
 	}
 
+	// TOOD: debug flag?
 	//d, err := httputil.DumpRequest(r, true)
 	//if err != nil {
 	//	return err
-	//}
-	//fmt.Println(string(d))
-
-	//for k, v := range r.Header {
-	//	fmt.Println(k, v)
 	//}
 
 	s := m.loadState()
@@ -956,7 +952,6 @@ func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	params = append(params, queryParams...)
-	//fmt.Println("queryParams", len(queryParams), queryParams)
 
 	if err := params.set(args); err != nil {
 		return err
@@ -972,6 +967,7 @@ func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
 		grpc.Header(&header),
 		grpc.Trailer(&trailer),
 	); err != nil {
+		setOutgoingHeader(w.Header(), header, trailer)
 		return err
 	}
 

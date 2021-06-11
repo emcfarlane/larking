@@ -223,6 +223,7 @@ func (h *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		replyI, err = mh.unary(ctx, args)
 	}
 	if err != nil {
+		setOutgoingHeader(w.Header(), stream.header, stream.trailer)
 		return err
 	}
 	reply := replyI.(proto.Message)
