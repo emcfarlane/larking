@@ -42,6 +42,8 @@ github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDk
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
 github.com/cncf/udpa/go v0.0.0-20201120205902-5459f2c99403/go.mod h1:WmhPx2Nbnhtbo57+VJT5O0JRkEi1Wbu0z5j0R8u5Hbk=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/emcfarlane/starlarkassert v0.0.0-20210612114505-0b5ce3fc3821 h1:7oK3sOM+eDRecdOxrNfgZ9mxGFlBi+klql4uz+uNetk=
+github.com/emcfarlane/starlarkassert v0.0.0-20210612114505-0b5ce3fc3821/go.mod h1:uhXe4bPiNuqIXBXyNw+hr8KVzPyuOlMj1kR3rl17ERc=
 github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82 h1:wKkXL3j8fRfFAhv8jBMS1IJHpMY/O1fSgolg5hvc8aU=
 github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82/go.mod h1:2XlWgRKiS//nDUSQcidcCwVQ0AtfjRwWnr5MUb1tH+Y=
 github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=

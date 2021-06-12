@@ -10,26 +10,27 @@ import (
 
 	"github.com/emcfarlane/larking/grpc/reflection"
 	"github.com/emcfarlane/larking/testpb"
+	"github.com/emcfarlane/starlarkassert"
+	"github.com/google/go-cmp/cmp"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
-	"go.starlark.net/starlarktest"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
 	if module == "assert.star" {
-		return starlarktest.LoadAssertModule()
+		return starlarkassert.LoadAssertModule()
 	}
 	return nil, fmt.Errorf("unknown module %s", module)
 }
 
 func TestStarlark(t *testing.T) {
+	opts := cmp.Options{protocmp.Transform()}
 
 	ms := &testpb.UnimplementedMessagingServer{}
-	overrides := make(map[string]func(context.Context, proto.Message, string) (proto.Message, error))
 	gs := grpc.NewServer(
 		grpc.UnaryInterceptor(
 			func(
@@ -38,21 +39,22 @@ func TestStarlark(t *testing.T) {
 				info *grpc.UnaryServerInfo,
 				handler grpc.UnaryHandler,
 			) (interface{}, error) {
-				md, ok := metadata.FromIncomingContext(ctx)
-				if !ok {
-					return handler(ctx, req) // default
-				}
-				ss := md["test"]
-				if len(ss) == 0 {
-					return handler(ctx, req) // default
-				}
-				h, ok := overrides[ss[0]]
-				if !ok {
-					return handler(ctx, req) // default
+				wantMethod := "/larking.testpb.Messaging/GetMessageOne"
+				if info.FullMethod != wantMethod {
+					return nil, fmt.Errorf("grpc expected %s, got %s", wantMethod, info.FullMethod)
 				}
 
-				// TODO: reflection assert on handler types.
-				return h(ctx, req.(proto.Message), info.FullMethod)
+				msg := req.(proto.Message)
+				wantIn := &testpb.GetMessageRequestOne{Name: "starlark"}
+				diff := cmp.Diff(msg, wantIn, opts...)
+				if diff != "" {
+					return nil, fmt.Errorf(diff)
+				}
+				return &testpb.Message{
+					MessageId: "starlark",
+					Text:      "hello",
+					UserId:    "user",
+				}, nil
 			},
 		),
 	)
@@ -93,7 +95,7 @@ func TestStarlark(t *testing.T) {
 	}
 
 	thread := &starlark.Thread{Load: load}
-	starlarktest.SetReporter(thread, t)
+	starlarkassert.SetReporter(thread, t)
 	globals := starlark.StringDict{
 		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
 		//"proto":  starlarkproto.NewModule(),

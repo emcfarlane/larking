@@ -3,6 +3,7 @@ module github.com/emcfarlane/larking
 go 1.12
 
 require (
+	github.com/emcfarlane/starlarkassert v0.0.0-20210612114505-0b5ce3fc3821 // indirect
 	github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82
 	github.com/golang/protobuf v1.5.0
 	github.com/google/go-cmp v0.5.6
