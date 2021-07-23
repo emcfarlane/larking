@@ -2,8 +2,8 @@ package larking
 
 import (
 	"context"
-	"fmt"
 	"strings"
+	"time"
 
 	"github.com/emcfarlane/starlarkproto"
 	"go.starlark.net/starlark"
@@ -46,8 +46,10 @@ func (s *Starlark) Dial(thread *starlark.Thread, b *starlark.Builtin, args starl
 		ctx = context.Background()
 	}
 
-	// TODO: opts?
-	cc, err := grpc.DialContext(ctx, target)
+	// TODO: handle security, opts.
+	dialCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
+	cc, err := grpc.DialContext(dialCtx, target, grpc.WithInsecure())
 	if err != nil {
 		return nil, err
 	}
@@ -68,17 +70,17 @@ func (s *Starlark) Service(thread *starlark.Thread, b *starlark.Builtin, args st
 		return nil, err
 	}
 
-	fmt.Println("grpc.service", name)
-
 	pfx := "/" + name
-	for method := range s.mux.loadState().methods {
-		if strings.HasPrefix(method, pfx) {
-			return &StarlarkService{
-				mux:  s.mux,
-				name: name,
-			}, nil
-		}
+	if state := s.mux.loadState(); state != nil {
+		for method := range state.methods {
+			if strings.HasPrefix(method, pfx) {
+				return &StarlarkService{
+					mux:  s.mux,
+					name: name,
+				}, nil
+			}
 
+		}
 	}
 	return nil, status.Errorf(codes.NotFound, "unknown service: %s", name)
 }

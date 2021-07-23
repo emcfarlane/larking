@@ -22,6 +22,7 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -31,7 +32,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/emcfarlane/larking/grpc/reflection"
 	"github.com/emcfarlane/larking/testpb"
 )
 
@@ -402,21 +402,35 @@ func TestMessageServer(t *testing.T) {
 			msg:        &empty.Empty{},
 		},
 	}, {
-		name: "resource_name_get",
+		name: "shelf_name_get",
+		req:  httptest.NewRequest(http.MethodGet, "/v1/shelves/shelf1", nil),
+		in: in{
+			method: "/larking.testpb.Messaging/GetShelf",
+			msg:    &testpb.GetShelfRequest{Name: "shelves/shelf1"},
+		},
+		out: out{
+			msg: &testpb.Shelf{Name: "shelves/shelf1"},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &testpb.Shelf{Name: "shelves/shelf1"},
+		},
+	}, {
+		name: "book_name_get",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/shelves/shelf1/books/book2", nil),
 		in: in{
 			method: "/larking.testpb.Messaging/GetBook",
 			msg:    &testpb.GetBookRequest{Name: "shelves/shelf1/books/book2"},
 		},
 		out: out{
-			msg: &testpb.Book{Name: "book2"},
+			msg: &testpb.Book{Name: "shelves/shelf1/books/book2"},
 		},
 		want: want{
 			statusCode: 200,
-			msg:        &testpb.Book{Name: "book2"},
+			msg:        &testpb.Book{Name: "shelves/shelf1/books/book2"},
 		},
 	}, {
-		name: "resource_name_create",
+		name: "book_name_create",
 		req: httptest.NewRequest(http.MethodPost, "/v1/shelves/shelf1/books", strings.NewReader(
 			`{ "name": "book3" }`,
 		)),
@@ -437,7 +451,7 @@ func TestMessageServer(t *testing.T) {
 			msg:        &testpb.Book{Name: "book3"},
 		},
 	}, {
-		name: "resource_name_update",
+		name: "book_name_update",
 		req: httptest.NewRequest(http.MethodPatch, `/v1/shelves/shelf1/books/book2?update_mask="name,title"`, strings.NewReader(
 			`{ "title": "Lord of the Rings" }`,
 		)),

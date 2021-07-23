@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/emcfarlane/larking/grpc/reflection"
 	"github.com/emcfarlane/larking/testpb"
 	"github.com/emcfarlane/starlarkassert"
 	"github.com/google/go-cmp/cmp"
@@ -16,6 +15,7 @@ import (
 	"go.starlark.net/starlarkstruct"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 )

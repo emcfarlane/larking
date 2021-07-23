@@ -14,10 +14,10 @@ import (
 	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"github.com/emcfarlane/larking/grpc/reflection"
 	"github.com/emcfarlane/larking/testpb"
 	"golang.org/x/sync/errgroup"
 )
@@ -224,8 +224,6 @@ func TestGRPCProxy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var i int
-
 			var o override
 			if tt.desc.ClientStreams || tt.desc.ServerStreams {
 				o.stream = func(stream grpc.ServerStream, method string) error {
@@ -234,8 +232,9 @@ func TestGRPCProxy(t *testing.T) {
 					}
 
 					var err error
-					for {
-						in := proto.Clone(tt.ins[i].msg)
+					for i := 0; ; i++ {
+						// Consistent type
+						in := proto.Clone(tt.ins[0].msg)
 						if err = stream.RecvMsg(in); err != nil {
 							break
 						}
@@ -249,7 +248,6 @@ func TestGRPCProxy(t *testing.T) {
 						if err := stream.SendMsg(out); err != nil {
 							break
 						}
-						//fmt.Println("sent!", i)
 					}
 					if isStreamError(err) {
 						return err
@@ -266,11 +264,11 @@ func TestGRPCProxy(t *testing.T) {
 						return nil, fmt.Errorf("grpc expected %s, got %s", tt.method, method)
 					}
 
-					diff := cmp.Diff(msg, tt.ins[i].msg, cmpOpts...)
+					diff := cmp.Diff(msg, tt.ins[0].msg, cmpOpts...)
 					if diff != "" {
 						return nil, fmt.Errorf(diff)
 					}
-					return tt.outs[i].msg, tt.outs[i].err
+					return tt.outs[0].msg, tt.outs[0].err
 				}
 
 			}
@@ -286,7 +284,7 @@ func TestGRPCProxy(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			for ; i < len(tt.ins); i++ {
+			for i := 0; i < len(tt.ins); i++ {
 				if err := s.SendMsg(tt.ins[i].msg); err != nil {
 					t.Fatal(err)
 				}

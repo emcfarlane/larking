@@ -95,6 +95,11 @@ service Messaging {
     };
   }
 
+  rpc GetShelf(GetShelfRequest) returns (Shelf) {
+    option (google.api.http) = {
+      get : "/v1/{name=shelves/*}"
+    };
+  };
   rpc GetBook(GetBookRequest) returns (Book) {
     option (google.api.http) = {
       get : "/v1/{name=shelves/*/books/*}"
@@ -188,6 +193,17 @@ message Scalars {
   google.protobuf.BytesValue bytes_value = 10;
   google.protobuf.StringValue string_value = 11;
   google.protobuf.FieldMask field_mask = 12;
+}
+
+message Shelf {
+  // Resource name of the shelf. It must have the format of "shelves/*".
+  // For example: "shelves/shelf1".
+  string name = 1;
+}
+
+message GetShelfRequest {
+  // Resource name of a shelf. For example: "shelves/shelf1".
+  string name = 1;
 }
 
 message Book {

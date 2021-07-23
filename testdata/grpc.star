@@ -3,7 +3,7 @@
 load("assert.star", "assert")
 
 # TODO: show dialing to add a new stream.
-#grpc.Dial("//")
+#grpc.dial("//")
 
 s = grpc.service("larking.testpb.Messaging")
 m = s.GetMessageOne({
