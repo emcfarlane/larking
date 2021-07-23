@@ -142,6 +142,7 @@ const (
 type serverOptions struct {
 	tlsConfig *tls.Config
 	muxOpts   muxOptions
+	//admin     string
 }
 
 var defaultServerOptions = serverOptions{
@@ -164,3 +165,9 @@ func MuxOptions(muxOpts ...MuxOption) ServerOption {
 		}
 	}
 }
+
+//func AdminOption(addr string) ServerOption {
+//	return func(opts *serverOptions) {
+//
+//	}
+//}

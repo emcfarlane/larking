@@ -11,17 +11,14 @@ import (
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
-// Reference imports to suppress errors if they are not otherwise used.
-var _ context.Context
-var _ grpc.ClientConn
-
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion4
+// Requires gRPC-Go v1.32.0 or later.
+const _ = grpc.SupportPackageIsVersion7
 
 // MessagingClient is the client API for Messaging service.
 //
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MessagingClient interface {
 	// HTTP | gRPC
 	// -----|-----
@@ -50,16 +47,17 @@ type MessagingClient interface {
 	ActionSegments(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	VariableOne(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	VariableTwo(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	GetShelf(ctx context.Context, in *GetShelfRequest, opts ...grpc.CallOption) (*Shelf, error)
 	GetBook(ctx context.Context, in *GetBookRequest, opts ...grpc.CallOption) (*Book, error)
 	CreateBook(ctx context.Context, in *CreateBookRequest, opts ...grpc.CallOption) (*Book, error)
 	UpdateBook(ctx context.Context, in *UpdateBookRequest, opts ...grpc.CallOption) (*Book, error)
 }
 
 type messagingClient struct {
-	cc *grpc.ClientConn
+	cc grpc.ClientConnInterface
 }
 
-func NewMessagingClient(cc *grpc.ClientConn) MessagingClient {
+func NewMessagingClient(cc grpc.ClientConnInterface) MessagingClient {
 	return &messagingClient{cc}
 }
 
@@ -144,6 +142,15 @@ func (c *messagingClient) VariableTwo(ctx context.Context, in *Message, opts ...
 	return out, nil
 }
 
+func (c *messagingClient) GetShelf(ctx context.Context, in *GetShelfRequest, opts ...grpc.CallOption) (*Shelf, error) {
+	out := new(Shelf)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/GetShelf", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *messagingClient) GetBook(ctx context.Context, in *GetBookRequest, opts ...grpc.CallOption) (*Book, error) {
 	out := new(Book)
 	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/GetBook", in, out, opts...)
@@ -172,6 +179,8 @@ func (c *messagingClient) UpdateBook(ctx context.Context, in *UpdateBookRequest,
 }
 
 // MessagingServer is the server API for Messaging service.
+// All implementations must embed UnimplementedMessagingServer
+// for forward compatibility
 type MessagingServer interface {
 	// HTTP | gRPC
 	// -----|-----
@@ -200,54 +209,67 @@ type MessagingServer interface {
 	ActionSegments(context.Context, *Message) (*emptypb.Empty, error)
 	VariableOne(context.Context, *Message) (*emptypb.Empty, error)
 	VariableTwo(context.Context, *Message) (*emptypb.Empty, error)
+	GetShelf(context.Context, *GetShelfRequest) (*Shelf, error)
 	GetBook(context.Context, *GetBookRequest) (*Book, error)
 	CreateBook(context.Context, *CreateBookRequest) (*Book, error)
 	UpdateBook(context.Context, *UpdateBookRequest) (*Book, error)
+	mustEmbedUnimplementedMessagingServer()
 }
 
-// UnimplementedMessagingServer can be embedded to have forward compatible implementations.
+// UnimplementedMessagingServer must be embedded to have forward compatible implementations.
 type UnimplementedMessagingServer struct {
 }
 
-func (*UnimplementedMessagingServer) GetMessageOne(context.Context, *GetMessageRequestOne) (*Message, error) {
+func (UnimplementedMessagingServer) GetMessageOne(context.Context, *GetMessageRequestOne) (*Message, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMessageOne not implemented")
 }
-func (*UnimplementedMessagingServer) GetMessageTwo(context.Context, *GetMessageRequestTwo) (*Message, error) {
+func (UnimplementedMessagingServer) GetMessageTwo(context.Context, *GetMessageRequestTwo) (*Message, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMessageTwo not implemented")
 }
-func (*UnimplementedMessagingServer) UpdateMessage(context.Context, *UpdateMessageRequestOne) (*Message, error) {
+func (UnimplementedMessagingServer) UpdateMessage(context.Context, *UpdateMessageRequestOne) (*Message, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateMessage not implemented")
 }
-func (*UnimplementedMessagingServer) UpdateMessageBody(context.Context, *Message) (*Message, error) {
+func (UnimplementedMessagingServer) UpdateMessageBody(context.Context, *Message) (*Message, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateMessageBody not implemented")
 }
-func (*UnimplementedMessagingServer) Action(context.Context, *Message) (*emptypb.Empty, error) {
+func (UnimplementedMessagingServer) Action(context.Context, *Message) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Action not implemented")
 }
-func (*UnimplementedMessagingServer) ActionSegment(context.Context, *Message) (*emptypb.Empty, error) {
+func (UnimplementedMessagingServer) ActionSegment(context.Context, *Message) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ActionSegment not implemented")
 }
-func (*UnimplementedMessagingServer) ActionSegments(context.Context, *Message) (*emptypb.Empty, error) {
+func (UnimplementedMessagingServer) ActionSegments(context.Context, *Message) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ActionSegments not implemented")
 }
-func (*UnimplementedMessagingServer) VariableOne(context.Context, *Message) (*emptypb.Empty, error) {
+func (UnimplementedMessagingServer) VariableOne(context.Context, *Message) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method VariableOne not implemented")
 }
-func (*UnimplementedMessagingServer) VariableTwo(context.Context, *Message) (*emptypb.Empty, error) {
+func (UnimplementedMessagingServer) VariableTwo(context.Context, *Message) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method VariableTwo not implemented")
 }
-func (*UnimplementedMessagingServer) GetBook(context.Context, *GetBookRequest) (*Book, error) {
+func (UnimplementedMessagingServer) GetShelf(context.Context, *GetShelfRequest) (*Shelf, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetShelf not implemented")
+}
+func (UnimplementedMessagingServer) GetBook(context.Context, *GetBookRequest) (*Book, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBook not implemented")
 }
-func (*UnimplementedMessagingServer) CreateBook(context.Context, *CreateBookRequest) (*Book, error) {
+func (UnimplementedMessagingServer) CreateBook(context.Context, *CreateBookRequest) (*Book, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateBook not implemented")
 }
-func (*UnimplementedMessagingServer) UpdateBook(context.Context, *UpdateBookRequest) (*Book, error) {
+func (UnimplementedMessagingServer) UpdateBook(context.Context, *UpdateBookRequest) (*Book, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateBook not implemented")
 }
+func (UnimplementedMessagingServer) mustEmbedUnimplementedMessagingServer() {}
 
-func RegisterMessagingServer(s *grpc.Server, srv MessagingServer) {
-	s.RegisterService(&_Messaging_serviceDesc, srv)
+// UnsafeMessagingServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to MessagingServer will
+// result in compilation errors.
+type UnsafeMessagingServer interface {
+	mustEmbedUnimplementedMessagingServer()
+}
+
+func RegisterMessagingServer(s grpc.ServiceRegistrar, srv MessagingServer) {
+	s.RegisterService(&Messaging_ServiceDesc, srv)
 }
 
 func _Messaging_GetMessageOne_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -412,6 +434,24 @@ func _Messaging_VariableTwo_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Messaging_GetShelf_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetShelfRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServer).GetShelf(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/larking.testpb.Messaging/GetShelf",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServer).GetShelf(ctx, req.(*GetShelfRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Messaging_GetBook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetBookRequest)
 	if err := dec(in); err != nil {
@@ -466,7 +506,10 @@ func _Messaging_UpdateBook_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-var _Messaging_serviceDesc = grpc.ServiceDesc{
+// Messaging_ServiceDesc is the grpc.ServiceDesc for Messaging service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Messaging_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "larking.testpb.Messaging",
 	HandlerType: (*MessagingServer)(nil),
 	Methods: []grpc.MethodDesc{
@@ -507,6 +550,10 @@ var _Messaging_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Messaging_VariableTwo_Handler,
 		},
 		{
+			MethodName: "GetShelf",
+			Handler:    _Messaging_GetShelf_Handler,
+		},
+		{
 			MethodName: "GetBook",
 			Handler:    _Messaging_GetBook_Handler,
 		},
@@ -525,7 +572,7 @@ var _Messaging_serviceDesc = grpc.ServiceDesc{
 
 // FilesClient is the client API for Files service.
 //
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type FilesClient interface {
 	// HTTP | gRPC
 	// -----|-----
@@ -536,10 +583,10 @@ type FilesClient interface {
 }
 
 type filesClient struct {
-	cc *grpc.ClientConn
+	cc grpc.ClientConnInterface
 }
 
-func NewFilesClient(cc *grpc.ClientConn) FilesClient {
+func NewFilesClient(cc grpc.ClientConnInterface) FilesClient {
 	return &filesClient{cc}
 }
 
@@ -553,7 +600,7 @@ func (c *filesClient) UploadDownload(ctx context.Context, in *UploadFileRequest,
 }
 
 func (c *filesClient) LargeUploadDownload(ctx context.Context, opts ...grpc.CallOption) (Files_LargeUploadDownloadClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Files_serviceDesc.Streams[0], "/larking.testpb.Files/LargeUploadDownload", opts...)
+	stream, err := c.cc.NewStream(ctx, &Files_ServiceDesc.Streams[0], "/larking.testpb.Files/LargeUploadDownload", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -584,6 +631,8 @@ func (x *filesLargeUploadDownloadClient) Recv() (*httpbody.HttpBody, error) {
 }
 
 // FilesServer is the server API for Files service.
+// All implementations must embed UnimplementedFilesServer
+// for forward compatibility
 type FilesServer interface {
 	// HTTP | gRPC
 	// -----|-----
@@ -591,21 +640,30 @@ type FilesServer interface {
 	// { content_type: "image/jpeg", data: <body>})"`
 	UploadDownload(context.Context, *UploadFileRequest) (*httpbody.HttpBody, error)
 	LargeUploadDownload(Files_LargeUploadDownloadServer) error
+	mustEmbedUnimplementedFilesServer()
 }
 
-// UnimplementedFilesServer can be embedded to have forward compatible implementations.
+// UnimplementedFilesServer must be embedded to have forward compatible implementations.
 type UnimplementedFilesServer struct {
 }
 
-func (*UnimplementedFilesServer) UploadDownload(context.Context, *UploadFileRequest) (*httpbody.HttpBody, error) {
+func (UnimplementedFilesServer) UploadDownload(context.Context, *UploadFileRequest) (*httpbody.HttpBody, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UploadDownload not implemented")
 }
-func (*UnimplementedFilesServer) LargeUploadDownload(Files_LargeUploadDownloadServer) error {
+func (UnimplementedFilesServer) LargeUploadDownload(Files_LargeUploadDownloadServer) error {
 	return status.Errorf(codes.Unimplemented, "method LargeUploadDownload not implemented")
 }
+func (UnimplementedFilesServer) mustEmbedUnimplementedFilesServer() {}
 
-func RegisterFilesServer(s *grpc.Server, srv FilesServer) {
-	s.RegisterService(&_Files_serviceDesc, srv)
+// UnsafeFilesServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to FilesServer will
+// result in compilation errors.
+type UnsafeFilesServer interface {
+	mustEmbedUnimplementedFilesServer()
+}
+
+func RegisterFilesServer(s grpc.ServiceRegistrar, srv FilesServer) {
+	s.RegisterService(&Files_ServiceDesc, srv)
 }
 
 func _Files_UploadDownload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -652,7 +710,10 @@ func (x *filesLargeUploadDownloadServer) Recv() (*UploadFileRequest, error) {
 	return m, nil
 }
 
-var _Files_serviceDesc = grpc.ServiceDesc{
+// Files_ServiceDesc is the grpc.ServiceDesc for Files service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Files_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "larking.testpb.Files",
 	HandlerType: (*FilesServer)(nil),
 	Methods: []grpc.MethodDesc{
@@ -674,7 +735,7 @@ var _Files_serviceDesc = grpc.ServiceDesc{
 
 // WellKnownClient is the client API for WellKnown service.
 //
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WellKnownClient interface {
 	// HTTP | gRPC
 	// -----|-----
@@ -684,10 +745,10 @@ type WellKnownClient interface {
 }
 
 type wellKnownClient struct {
-	cc *grpc.ClientConn
+	cc grpc.ClientConnInterface
 }
 
-func NewWellKnownClient(cc *grpc.ClientConn) WellKnownClient {
+func NewWellKnownClient(cc grpc.ClientConnInterface) WellKnownClient {
 	return &wellKnownClient{cc}
 }
 
@@ -701,24 +762,35 @@ func (c *wellKnownClient) Check(ctx context.Context, in *Scalars, opts ...grpc.C
 }
 
 // WellKnownServer is the server API for WellKnown service.
+// All implementations must embed UnimplementedWellKnownServer
+// for forward compatibility
 type WellKnownServer interface {
 	// HTTP | gRPC
 	// -----|-----
 	// `GET /v1/wellknown/timestamp/2017-01-15T01:30:15.01Z` |
 	// `Check(Timestamp{...})`
 	Check(context.Context, *Scalars) (*emptypb.Empty, error)
+	mustEmbedUnimplementedWellKnownServer()
 }
 
-// UnimplementedWellKnownServer can be embedded to have forward compatible implementations.
+// UnimplementedWellKnownServer must be embedded to have forward compatible implementations.
 type UnimplementedWellKnownServer struct {
 }
 
-func (*UnimplementedWellKnownServer) Check(context.Context, *Scalars) (*emptypb.Empty, error) {
+func (UnimplementedWellKnownServer) Check(context.Context, *Scalars) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Check not implemented")
 }
+func (UnimplementedWellKnownServer) mustEmbedUnimplementedWellKnownServer() {}
 
-func RegisterWellKnownServer(s *grpc.Server, srv WellKnownServer) {
-	s.RegisterService(&_WellKnown_serviceDesc, srv)
+// UnsafeWellKnownServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to WellKnownServer will
+// result in compilation errors.
+type UnsafeWellKnownServer interface {
+	mustEmbedUnimplementedWellKnownServer()
+}
+
+func RegisterWellKnownServer(s grpc.ServiceRegistrar, srv WellKnownServer) {
+	s.RegisterService(&WellKnown_ServiceDesc, srv)
 }
 
 func _WellKnown_Check_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -739,7 +811,10 @@ func _WellKnown_Check_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
-var _WellKnown_serviceDesc = grpc.ServiceDesc{
+// WellKnown_ServiceDesc is the grpc.ServiceDesc for WellKnown service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var WellKnown_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "larking.testpb.WellKnown",
 	HandlerType: (*WellKnownServer)(nil),
 	Methods: []grpc.MethodDesc{

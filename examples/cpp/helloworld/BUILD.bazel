@@ -1,13 +1,13 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
 cc_binary(
-    name = "hello_world",
+    name = "helloworld",
     srcs = ["hello_world.cc"],
     defines = ["BAZEL_BUILD"],
     deps = [
         "//examples/proto:helloworld_cc_grpc",
         "//examples/proto:helloworld_cc_proto",
-        #"@com_github_grpc_grpc//:grpc++",
+        "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc++_reflection",
     ],
 )

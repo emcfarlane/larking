@@ -19,14 +19,13 @@ import (
 	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	rpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
-
-	rpb "github.com/emcfarlane/larking/grpc/reflection/v1alpha"
 )
 
 type methodDesc struct {
@@ -115,10 +114,12 @@ func (m *Mux) RegisterConn(ctx context.Context, cc *grpc.ClientConn) error {
 
 	// TODO: watch the stream. When it is recreated refresh the service
 	// methods and recreate the mux if needed.
+	fmt.Println("reflection?")
 	stream, err := c.ServerReflectionInfo(ctx, grpc.WaitForReady(true))
 	if err != nil {
 		return err
 	}
+	fmt.Println("got stream")
 
 	// Load the state for writing.
 	m.mu.Lock()

@@ -10,9 +10,9 @@ import (
 
 	"github.com/emcfarlane/larking"
 	pb "github.com/emcfarlane/larking/examples/proto/helloworld"
-	"github.com/emcfarlane/larking/grpc/reflection"
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 var (
