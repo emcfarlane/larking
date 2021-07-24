@@ -6,6 +6,10 @@ Reflective gRPC transcoding handler.
 - [Follows Google API Design principles](https://cloud.google.com/apis/design)
 - [Dynamically load descriptors via gRPC server reflection](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md)
 
+<div align="center">
+<img src="docs/larking.svg" />
+</div>
+
 ## Install
 
 ```
@@ -16,13 +20,21 @@ go install github.com/emcfarlane/larking
 
 gRPC transcoding annotations are added to the `.proto` file. Example:
 ```c
-// Lists books in a shelf.
-rpc ListBooks(ListBooksRequest) returns (ListBooksResponse) {
-  // List method maps to HTTP GET.
-  option (google.api.http) = {
-    // The `parent` captures the parent resource name, such as "shelves/shelf1".
-    get: "/v1/{parent=shelves/*}/books"
-  };
+syntax = "proto3";
+
+package books;
+
+import "google/api/annotations.proto";
+
+service Books {
+  // Lists books in a shelf.
+  rpc ListBooks(ListBooksRequest) returns (ListBooksResponse) {
+    // List method maps to HTTP GET.
+    option (google.api.http) = {
+      // The `parent` captures the parent resource name, such as "shelves/shelf1".
+      get: "/v1/{parent=shelves/*}/books"
+    };
+  }
 }
 
 message ListBooksRequest {
@@ -48,8 +60,8 @@ message ListBooksResponse {
 }
 ```
 
-A great resource for designing resourceful API is google *API Design Guide* found [here](https://cloud.google.com/apis/design).
-The proto rules are descrbie in the `google/api/http.proto` file [here](https://github.com/googleapis/googleapis/blob/master/google/api/http.proto).
+A great resource for designing resourceful API is google's [API Design Guide](https://cloud.google.com/apis/design).
+The proto rules are described in the [`google/api/http.proto`](https://github.com/googleapis/googleapis/blob/master/google/api/http.proto).
 
 ## Setup
 
@@ -110,15 +122,16 @@ case _ = <-sigChan:
 }
 ```
 
-### Proxy (TODO)
+### Proxy
 
-- 
+(TODO)
 
 ### REPL
 
 REPLs are awesome. So we have a starlark one with gRPC call support.
 Use it to get command line interactivity with your services or write scripts.
 Easily extendable for custom starlark commands and integrations.
+Works through larking or any gRPC service with reflection support.
 
 ```
 go install github.com/emcfarlane/larking/cmd/lark
