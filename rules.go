@@ -181,7 +181,6 @@ func (p *path) clone() *path {
 
 // delRule deletes the HTTP rule to the path.
 func (p *path) delRule(name string) bool {
-	// dfs
 	for k, s := range p.segments {
 		if ok := s.delRule(name); ok {
 			if !s.alive() {
@@ -671,12 +670,10 @@ func (m *method) parseQueryParams(values url.Values) (params, error) {
 // TODO: better method name.
 func (v *variable) index(s string) int {
 	var i int
-	//fmt.Println("\tlen(v.toks)", len(v.toks), v.toks)
 	for _, tok := range v.toks {
 		if i == len(s) {
 			return -1
 		}
-		//fmt.Println("---", s[:i], "---")
 
 		switch tok.typ {
 		case tokenSlash:
@@ -684,7 +681,6 @@ func (v *variable) index(s string) int {
 				return -1
 			}
 			i += 1
-			//fmt.Println("\ttokenSlash", i)
 
 		case tokenStar:
 			if j := strings.IndexAny(s[i:], "/:"); j != -1 {
@@ -692,7 +688,6 @@ func (v *variable) index(s string) int {
 			} else {
 				i = len(s) // EOL
 			}
-			//fmt.Println("\ttokenStar", i)
 
 		case tokenStarStar:
 			if j := strings.Index(s[i:], ":"); j != -1 {
@@ -700,14 +695,12 @@ func (v *variable) index(s string) int {
 			} else {
 				i = len(s) // EOL
 			}
-			//fmt.Println("\ttokenStarStar", i)
 
 		case tokenValue:
 			if !strings.HasPrefix(s[i:], tok.val) {
 				return -1
 			}
 			i += len(tok.val)
-			//fmt.Println("\ttokenValue", i)
 
 		default:
 			panic(":(")
@@ -727,7 +720,7 @@ func (p *path) match(route, method string) (*method, params, error) {
 		return nil, nil, status.Error(codes.NotFound, "not found")
 	}
 
-	j := strings.Index(route[1:], "/") + 1
+	j := strings.IndexAny(route[1:], "/:") + 1
 	if j == 0 {
 		j = len(route) // capture end of path
 	}

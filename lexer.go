@@ -186,8 +186,8 @@ func lexVerb(l *lexer) error {
 	}
 
 	r := l.next()
-	switch {
-	case r == eof:
+	switch r {
+	case eof:
 		l.backup()
 		return l.emitAndRun(tokenValue, lexEOF)
 	default:
@@ -273,10 +273,10 @@ func lexTemplate(l *lexer) error {
 	}
 
 	r = l.next()
-	switch {
-	case r == ':':
+	switch r {
+	case ':':
 		return l.emitAndRun(tokenVerb, lexVerb)
-	case r == eof:
+	case eof:
 		return lexEOF(l)
 	default:
 		return l.errUnexpected()

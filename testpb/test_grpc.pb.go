@@ -45,6 +45,7 @@ type MessagingClient interface {
 	Action(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ActionSegment(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ActionSegments(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	BatchGet(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	VariableOne(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	VariableTwo(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetShelf(ctx context.Context, in *GetShelfRequest, opts ...grpc.CallOption) (*Shelf, error)
@@ -118,6 +119,15 @@ func (c *messagingClient) ActionSegment(ctx context.Context, in *Message, opts .
 func (c *messagingClient) ActionSegments(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/ActionSegments", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingClient) BatchGet(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/BatchGet", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -207,6 +217,7 @@ type MessagingServer interface {
 	Action(context.Context, *Message) (*emptypb.Empty, error)
 	ActionSegment(context.Context, *Message) (*emptypb.Empty, error)
 	ActionSegments(context.Context, *Message) (*emptypb.Empty, error)
+	BatchGet(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	VariableOne(context.Context, *Message) (*emptypb.Empty, error)
 	VariableTwo(context.Context, *Message) (*emptypb.Empty, error)
 	GetShelf(context.Context, *GetShelfRequest) (*Shelf, error)
@@ -240,6 +251,9 @@ func (UnimplementedMessagingServer) ActionSegment(context.Context, *Message) (*e
 }
 func (UnimplementedMessagingServer) ActionSegments(context.Context, *Message) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ActionSegments not implemented")
+}
+func (UnimplementedMessagingServer) BatchGet(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method BatchGet not implemented")
 }
 func (UnimplementedMessagingServer) VariableOne(context.Context, *Message) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method VariableOne not implemented")
@@ -398,6 +412,24 @@ func _Messaging_ActionSegments_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Messaging_BatchGet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServer).BatchGet(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/larking.testpb.Messaging/BatchGet",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServer).BatchGet(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Messaging_VariableOne_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Message)
 	if err := dec(in); err != nil {
@@ -540,6 +572,10 @@ var Messaging_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ActionSegments",
 			Handler:    _Messaging_ActionSegments_Handler,
+		},
+		{
+			MethodName: "BatchGet",
+			Handler:    _Messaging_BatchGet_Handler,
 		},
 		{
 			MethodName: "VariableOne",
