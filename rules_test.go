@@ -283,6 +283,22 @@ func TestMessageServer(t *testing.T) {
 			msg:        &empty.Empty{},
 		},
 	}, {
+		name: "batchGet",
+		req: httptest.NewRequest(http.MethodGet, "/v3/events:batchGet", strings.NewReader(
+			`{}`,
+		)),
+		in: in{
+			method: "/larking.testpb.Messaging/BatchGet",
+			msg:    &empty.Empty{},
+		},
+		out: out{
+			msg: &empty.Empty{},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &empty.Empty{},
+		},
+	}, {
 		name: "404",
 		req:  httptest.NewRequest(http.MethodGet, "/error404", nil),
 		want: want{

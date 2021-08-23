@@ -84,6 +84,13 @@ service Messaging {
     };
   }
 
+  rpc BatchGet(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    // The batch get method maps to HTTP GET verb.
+    option (google.api.http) = {
+      get : "/v3/events:batchGet"
+    };
+  }
+
   rpc VariableOne(Message) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       get : "/{text}/one"
