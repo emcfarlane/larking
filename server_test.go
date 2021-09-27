@@ -130,6 +130,7 @@ func TestServer(t *testing.T) {
 				msg proto.Message,
 				method string,
 			) (proto.Message, error) {
+				fmt.Println("GOT A CALL")
 				if method != tt.method {
 					return nil, fmt.Errorf("grpc expected %s, got %s", tt.method, method)
 				}

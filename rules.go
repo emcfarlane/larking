@@ -22,7 +22,6 @@ import (
 
 	"google.golang.org/genproto/googleapis/api/annotations"
 	_ "google.golang.org/genproto/googleapis/api/httpbody"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -30,7 +29,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	_ "google.golang.org/protobuf/types/descriptorpb"
-	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -713,6 +711,7 @@ func (v *variable) index(s string) int {
 // Variables split the search tree:
 //     /path/{variable/*}/to/{end/**} ?:VERB
 func (p *path) match(route, method string) (*method, params, error) {
+
 	if len(route) == 0 {
 		if m, ok := p.methods[method]; ok {
 			return m, nil, nil
@@ -900,87 +899,4 @@ func (m *method) encodeResponseReply(
 	}
 
 	return nil
-}
-
-func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
-	if !strings.HasPrefix(r.URL.Path, "/") {
-		r.URL.Path = "/" + r.URL.Path
-	}
-
-	// TOOD: debug flag?
-	//d, err := httputil.DumpRequest(r, true)
-	//if err != nil {
-	//	return err
-	//}
-
-	s := m.loadState()
-
-	method, params, err := s.path.match(r.URL.Path, r.Method)
-	if err != nil {
-		return err
-	}
-
-	mc, err := s.pickMethodConn(method.name)
-	if err != nil {
-		return err
-	}
-
-	// TODO: fix the body marshalling
-	argsDesc := method.desc.Input()
-	replyDesc := method.desc.Output()
-	//fmt.Printf("\n%s -> %s\n", argsDesc.FullName(), replyDesc.FullName())
-
-	args := dynamicpb.NewMessage(argsDesc)
-	reply := dynamicpb.NewMessage(replyDesc)
-
-	if method.hasBody {
-		// TODO: handler should decide what to select on.
-		if err := method.decodeRequestArgs(args, r); err != nil {
-			return err
-		}
-	}
-
-	queryParams, err := method.parseQueryParams(r.URL.Query())
-	if err != nil {
-		return err
-	}
-	params = append(params, queryParams...)
-
-	if err := params.set(args); err != nil {
-		return err
-	}
-
-	ctx := newIncomingContext(r.Context(), r.Header)
-
-	var header, trailer metadata.MD
-	if err := mc.cc.Invoke(
-		ctx,
-		method.name,
-		args, reply,
-		grpc.Header(&header),
-		grpc.Trailer(&trailer),
-	); err != nil {
-		setOutgoingHeader(w.Header(), header, trailer)
-		return err
-	}
-
-	return method.encodeResponseReply(reply, w, r, header, trailer)
-}
-
-func encError(w http.ResponseWriter, err error) {
-	s, _ := status.FromError(err)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(HTTPStatusCode(s.Code()))
-
-	b, err := protojson.Marshal(s.Proto())
-	if err != nil {
-		panic(err) // ...
-	}
-	w.Write(b) //nolint
-}
-
-func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) {
-	if err := m.proxyHTTP(w, r); err != nil {
-		encError(w, err)
-	}
 }

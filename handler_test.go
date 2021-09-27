@@ -25,21 +25,16 @@ import (
 func TestHandler(t *testing.T) {
 	ms := &testpb.UnimplementedMessagingServer{}
 
-	var h Handler
-	if err := h.RegisterServiceByName("larking.testpb.Messaging", ms); err != nil {
-		t.Fatal(err)
-	}
-
 	req := httptest.NewRequest(http.MethodPatch, "/v1/messages/msg_123", strings.NewReader(
 		`{ "text": "Hi!" }`,
 	))
 	req.Header.Set("Content-Type", "application/json")
 
-	h.UnaryInterceptor = func(
+	interceptor := func(
 		ctx context.Context,
 		req interface{},
 		info *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
+		_ grpc.UnaryHandler,
 	) (interface{}, error) {
 		_, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
@@ -66,9 +61,17 @@ func TestHandler(t *testing.T) {
 		return &testpb.Message{Text: "hello, patch!"}, nil
 	}
 
+	m, err := NewMux(UnaryServerInterceptorOption(interceptor))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.RegisterServiceByName("larking.testpb.Messaging", ms); err != nil {
+		t.Fatal(err)
+	}
+
 	w := httptest.NewRecorder()
 
-	h.ServeHTTP(w, req)
+	m.ServeHTTP(w, req)
 	t.Log(w)
 	r := w.Result()
 	if r.StatusCode != 200 {
