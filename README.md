@@ -65,23 +65,26 @@ The proto rules are described in the [`google/api/http.proto`](https://github.co
 
 ## Setup
 
-### Handler
+### Mux
 
-The simpliest setup is to create the wrapped handler, `larking.Handler`, and serve it as a http endpoint.
+The simpliest setup is to create a http mux, `larking.Handler`, and serve it as a http endpoint.
 ```go
-hd := &larking.Handler{
-  UnaryInterceptor: func(
-    ctx context.Context,
-    req interface{},
-    info *grpc.UnaryServerInfo,
-    handler grpc.UnaryHandler,
-  ) (resp interface{}, err error) {
-    fmt.Println(info.FullMethod) // prints the called gRPC method name
-    return handler(ctx, req) 
-  },
-}
+m := larking.NewMux(
+  UnaryServerInterceptorOption(
+    func(
+      ctx context.Context,
+      req interface{},
+      info *grpc.UnaryServerInfo,
+      handler grpc.UnaryHandler,
+    ) (resp interface{}, err error) {
+      fmt.Println(info.FullMethod) // prints the called gRPC method name
+      return handler(ctx, req)
+    },
+  )
+)
+
 // Register your proto services by name.
-if err := hd.RegisterServiceByName("google.longrunning.Operations", s); err != nil {
+if err := m.RegisterServiceByName("google.longrunning.Operations", s); err != nil {
   return err
 }
 http.ListenAndServe(":8000", hd)
@@ -101,7 +104,7 @@ if err := hd.RegisterServiceByName("google.longrunning.Operations", s); err != n
 }
 
 mux := http.NewServeMux()
-mux.Handle("/", hd)
+mux.Handle("/", m)
 
 errs := make(chan error, 3)
 
