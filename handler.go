@@ -7,50 +7,23 @@ package larking
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"reflect"
-	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
-type handlerMethod struct {
-	inType protoreflect.MessageType
-	unary  grpc.UnaryHandler
-	//stream grpc.StreamHandler TODO: streaming
+type handlerFunc func(*muxOptions, grpc.ServerStream) error
+
+type handler struct {
+	method     string
+	descriptor protoreflect.MethodDescriptor
+	handler    handlerFunc
 }
 
-// Handler implements a http handler that wraps a gprc service implementation
-// for google.http bindings.
-type Handler struct {
-	path    *path
-	methods map[string]handlerMethod
-
-	// Files to lookup service descriptors.
-	// If nil, protoregistry.GlobalFiles is used.
-	Files *protoregistry.Files
-
-	// Types to create proto.Message.
-	// If nil, protoregistry.GlobalTypes is used.
-	Types protoregistry.MessageTypeResolver
-
-	// UnaryInterceptor.
-	UnaryInterceptor grpc.UnaryServerInterceptor
-
-	// StreamInterceptor TODO: support streaming.
-	StreamInterceptor grpc.StreamServerInterceptor
-}
-
-func (h *Handler) RegisterServiceByName(name protoreflect.FullName, srv interface{}) error {
-	f := h.Files
-	if f == nil {
-		f = protoregistry.GlobalFiles
-	}
-	desc, err := f.FindDescriptorByName(name)
+func (m *Mux) RegisterServiceByName(name protoreflect.FullName, srv interface{}) error {
+	desc, err := m.opts.files.FindDescriptorByName(name)
 	if err != nil {
 		return err
 	}
@@ -58,18 +31,21 @@ func (h *Handler) RegisterServiceByName(name protoreflect.FullName, srv interfac
 	if !ok {
 		return fmt.Errorf("not a service descriptor %T", desc)
 	}
-	return h.RegisterService(sd, srv)
+	return m.RegisterService(sd, srv)
 }
 
-func (h *Handler) RegisterService(sd protoreflect.ServiceDescriptor, srv interface{}) error {
-	types := h.Types
-	if types == nil {
-		types = protoregistry.GlobalTypes
-	}
+func (m *Mux) RegisterService(sd protoreflect.ServiceDescriptor, srv interface{}) error {
+	// Load the state for writing.
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.loadState().clone()
+
+	types := m.opts.types
 	name := sd.FullName()
 
 	mds := sd.Methods()
 	for j := 0; j < mds.Len(); j++ {
+		// TODO: streaming
 		md := mds.Get(j)
 
 		opts := md.Options() // TODO: nil check fails?
@@ -119,31 +95,48 @@ func (h *Handler) RegisterService(sd protoreflect.ServiceDescriptor, srv interfa
 			return fmt.Errorf("invalid error type %v", rmt)
 		}
 
-		// init
-		if h.path == nil {
-			h.path = newPath()
-			h.methods = make(map[string]handlerMethod)
+		h := func(ctx context.Context, req interface{}) (interface{}, error) {
+			out := rm.Call([]reflect.Value{
+				reflect.ValueOf(ctx), reflect.ValueOf(req),
+			})
+			errVal := out[1]
+			if errVal.IsNil() {
+				return out[0].Interface(), nil
+			}
+			return nil, out[1].Interface().(error)
 		}
 
 		methodName := fmt.Sprintf("/%s/%s", name, md.Name())
-		if err := h.path.addRule(rule, md, methodName); err != nil {
-			return err
+		info := &grpc.UnaryServerInfo{
+			Server:     nil,
+			FullMethod: methodName,
 		}
 
-		h.methods[methodName] = handlerMethod{
-			inType: inProtoType,
-			unary: func(ctx context.Context, in interface{}) (interface{}, error) {
-				out := rm.Call([]reflect.Value{
-					reflect.ValueOf(ctx), reflect.ValueOf(in),
-				})
-				errVal := out[1]
-				if errVal.IsNil() {
-					return out[0].Interface(), nil
+		if err := s.appendHandler(rule, md, methodName, &handler{
+			method:     methodName,
+			descriptor: md,
+			handler: func(opts *muxOptions, stream grpc.ServerStream) error {
+				ctx := stream.Context()
+				args := inProtoType.New().Interface()
+
+				if err := stream.RecvMsg(args); err != nil {
+					return err
 				}
-				return nil, out[1].Interface().(error)
+
+				reply, err := opts.unary(ctx, args, info, h)
+				if err != nil {
+					return err
+				}
+
+				return stream.SendMsg(reply)
 			},
+		}); err != nil {
+			return err
 		}
 	}
+
+	m.storeState(s)
+
 	return nil
 }
 
@@ -155,12 +148,10 @@ type serverTransportStream struct {
 	trailer    metadata.MD
 }
 
-func (s *serverTransportStream) Method() string {
-	return s.method
-}
+func (s *serverTransportStream) Method() string { return s.method }
 func (s *serverTransportStream) SetHeader(md metadata.MD) error {
 	if !s.sentHeader {
-		s.header = md
+		s.header = metadata.Join(s.header, md)
 	}
 	return nil
 
@@ -174,65 +165,6 @@ func (s *serverTransportStream) SendHeader(md metadata.MD) error {
 }
 func (s *serverTransportStream) SetTrailer(md metadata.MD) error {
 	s.sentHeader = true
-	s.trailer = md
+	s.trailer = metadata.Join(s.trailer, md)
 	return nil
-}
-
-func (h *Handler) serveHTTP(w http.ResponseWriter, r *http.Request) error {
-	if !strings.HasPrefix(r.URL.Path, "/") {
-		r.URL.Path = "/" + r.URL.Path
-	}
-
-	method, params, err := h.path.match(r.URL.Path, r.Method)
-	if err != nil {
-		return err
-	}
-	mh := h.methods[method.name]
-
-	args := mh.inType.New().Interface()
-
-	if method.hasBody {
-		if err := method.decodeRequestArgs(args, r); err != nil {
-			return err
-		}
-	}
-
-	queryParams, err := method.parseQueryParams(r.URL.Query())
-	if err != nil {
-		return err
-	}
-	params = append(params, queryParams...)
-	if err := params.set(args); err != nil {
-		return err
-	}
-
-	ctx := newIncomingContext(r.Context(), r.Header)
-	stream := &serverTransportStream{
-		method: method.name,
-	}
-	ctx = grpc.NewContextWithServerTransportStream(ctx, stream)
-
-	// TODO: support streaming
-	var replyI interface{}
-	if h.UnaryInterceptor != nil {
-		info := &grpc.UnaryServerInfo{
-			FullMethod: method.name,
-		}
-		replyI, err = h.UnaryInterceptor(ctx, args, info, mh.unary)
-	} else {
-		replyI, err = mh.unary(ctx, args)
-	}
-	if err != nil {
-		setOutgoingHeader(w.Header(), stream.header, stream.trailer)
-		return err
-	}
-	reply := replyI.(proto.Message)
-
-	return method.encodeResponseReply(reply, w, r, stream.header, stream.trailer)
-}
-
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if err := h.serveHTTP(w, r); err != nil {
-		encError(w, err)
-	}
 }

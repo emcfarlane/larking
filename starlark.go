@@ -2,6 +2,7 @@ package larking
 
 import (
 	"context"
+	"io"
 	"strings"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/dynamicpb"
+	"google.golang.org/protobuf/proto"
 )
 
 func NewModule(mux *Mux) *starlarkstruct.Module {
@@ -72,7 +73,7 @@ func (s *Starlark) Service(thread *starlark.Thread, b *starlark.Builtin, args st
 
 	pfx := "/" + name
 	if state := s.mux.loadState(); state != nil {
-		for method := range state.methods {
+		for method := range state.handlers {
 			if strings.HasPrefix(method, pfx) {
 				return &StarlarkService{
 					mux:  s.mux,
@@ -99,19 +100,20 @@ func (s *StarlarkService) Hash() (uint32, error) { return 0, nil }
 // HasAttrs with each one being callable.
 func (s *StarlarkService) Attr(name string) (starlark.Value, error) {
 	m := "/" + s.name + "/" + name
-	mc, err := s.mux.loadState().pickMethodConn(m)
+	hd, err := s.mux.loadState().pickMethodHandler(m)
 	if err != nil {
 		return nil, err
 	}
 	return &StarlarkMethod{
-		mc: mc,
+		mux: s.mux,
+		hd:  hd,
 	}, nil
 }
 func (s *StarlarkService) AttrNames() []string {
 	var attrs []string
 
 	pfx := "/" + s.name + "/"
-	for method := range s.mux.loadState().methods {
+	for method := range s.mux.loadState().handlers {
 		if strings.HasPrefix(method, pfx) {
 			attrs = append(attrs, strings.TrimPrefix(method, pfx))
 		}
@@ -120,13 +122,64 @@ func (s *StarlarkService) AttrNames() []string {
 	return attrs
 }
 
+type streamStar struct {
+	serverTransportStream
+
+	ctx        context.Context
+	starArgs   starlark.Tuple
+	starKwargs []starlark.Tuple
+
+	args    []proto.Message
+	replies []proto.Message
+}
+
+func (s *streamStar) SetTrailer(md metadata.MD) {
+	if err := s.serverTransportStream.SetTrailer(md); err != nil {
+		panic(err)
+	}
+}
+
+func (s *streamStar) Context() context.Context {
+	ctx := newIncomingContext(s.ctx, nil)
+	return grpc.NewContextWithServerTransportStream(ctx, &s.serverTransportStream)
+}
+
+func (s *streamStar) SendMsg(m interface{}) error {
+	reply := m.(proto.Message)
+	if len(s.replies) > 0 {
+		// TODO: streaming.
+		return io.EOF
+	}
+	s.replies = append(s.replies, reply)
+	return nil
+}
+
+func (s *streamStar) RecvMsg(m interface{}) error {
+	args := m.(proto.Message)
+	msg := args.ProtoReflect()
+
+	if len(s.args) > 0 {
+		// TODO: streaming.
+		return io.EOF
+	}
+
+	// Capture starlark arguments.
+	_, err := starlarkproto.NewMessage(msg, s.starArgs, s.starKwargs)
+	if err != nil {
+		return err
+	}
+	s.args = append(s.args, args)
+	return nil
+}
+
 type StarlarkMethod struct {
-	mc methodConn
+	mux *Mux
+	hd  *handler
 	//method string
 	// Callable
 }
 
-func (s *StarlarkMethod) String() string        { return s.mc.name }
+func (s *StarlarkMethod) String() string        { return s.hd.method }
 func (s *StarlarkMethod) Type() string          { return "grpc.method" }
 func (s *StarlarkMethod) Freeze()               {} // immutable
 func (s *StarlarkMethod) Truth() starlark.Bool  { return starlark.True }
@@ -138,31 +191,21 @@ func (s *StarlarkMethod) CallInternal(thread *starlark.Thread, args starlark.Tup
 		ctx = context.Background()
 	}
 
-	// Check arg is a proto.Message of the form required.
-	argsDesc := s.mc.desc.Input()
-	replyDesc := s.mc.desc.Output()
+	opts := &s.mux.opts
+	stream := &streamStar{
+		ctx:        ctx,
+		starArgs:   args,
+		starKwargs: kwargs,
+	}
 
-	argsPb := dynamicpb.NewMessage(argsDesc)
-	replyPb := dynamicpb.NewMessage(replyDesc)
-
-	// Capture starlark arguments.
-	_, err := starlarkproto.NewMessage(argsPb, args, kwargs)
-	if err != nil {
+	if err := s.hd.handler(opts, stream); err != nil {
 		return nil, err
 	}
 
-	var header, trailer metadata.MD
-	if err := s.mc.cc.Invoke(
-		ctx,
-		s.mc.name,
-		argsPb, replyPb,
-		grpc.Header(&header),
-		grpc.Trailer(&trailer),
-	); err != nil {
-		//setOutgoingHeader(w.Header(), header, trailer)
-		return nil, err
+	if len(stream.replies) != 1 {
+		//
+		return nil, io.EOF
 	}
-	// TODO: how to provide header details?
 
-	return starlarkproto.NewMessage(replyPb, nil, nil)
+	return starlarkproto.NewMessage(stream.replies[0].ProtoReflect(), nil, nil)
 }

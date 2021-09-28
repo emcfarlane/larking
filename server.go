@@ -7,12 +7,15 @@ package larking
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"math"
 	"net"
 	"net/http"
+	"runtime"
 	"time"
 
 	"github.com/soheilhy/cmux"
+	"golang.org/x/net/trace"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -25,6 +28,8 @@ type Server struct {
 	closer chan bool
 	gs     *grpc.Server
 	hs     *http.Server
+
+	events trace.EventLog
 }
 
 // NewServer creates a new Proxy server.
@@ -34,11 +39,21 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		opt(&svrOpts)
 	}
 
+	// TODO: use our own flag?
+	// grpc.EnableTracing sets tracing for the golang.org/x/net/trace
+	var events trace.EventLog
+	if grpc.EnableTracing {
+		_, file, line, _ := runtime.Caller(1)
+		events = trace.NewEventLog("larking.Server", fmt.Sprintf("%s:%d", file, line))
+	}
+
 	return &Server{
 		opts: svrOpts,
 		mux: Mux{
-			opts: svrOpts.muxOpts,
+			opts:   svrOpts.muxOpts,
+			events: events,
 		},
+		events: events,
 	}, nil
 }
 
@@ -122,6 +137,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	})
 	if err := g.Wait(); err != nil {
 		return err
+	}
+	if s.events != nil {
+		s.events.Finish()
+		s.events = nil
 	}
 	return s.Close()
 }

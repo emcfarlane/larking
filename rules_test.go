@@ -65,7 +65,7 @@ func TestMessageServer(t *testing.T) {
 				if !ok {
 					return handler(ctx, req) // default
 				}
-				ss := md["test"]
+				ss := md["http-test"]
 				if len(ss) == 0 {
 					return handler(ctx, req) // default
 				}
@@ -520,10 +520,8 @@ func TestMessageServer(t *testing.T) {
 			}
 			defer delete(overrides, t.Name())
 
-			// ctx hack
-			ctx := tt.req.Context()
-			ctx = metadata.AppendToOutgoingContext(ctx, "test", t.Name())
-			req := tt.req.WithContext(ctx)
+			req := tt.req
+			req.Header["test"] = []string{t.Name()}
 
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, req)
