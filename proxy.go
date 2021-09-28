@@ -5,7 +5,6 @@
 package larking
 
 import (
-	"fmt"
 	"io"
 
 	"golang.org/x/net/context"
@@ -32,17 +31,14 @@ func isStreamError(err error) bool {
 // StreamHandler returns a gRPC stream handler to proxy gRPC requests.
 func (m *Mux) StreamHandler() grpc.StreamHandler {
 	return func(srv interface{}, stream grpc.ServerStream) error {
-		fmt.Println("here...?")
 		ctx := stream.Context()
 		name, _ := grpc.Method(ctx)
 		s := m.loadState()
 
 		hd, err := s.pickMethodHandler(name)
 		if err != nil {
-			fmt.Println("failed on conn", name)
 			return err
 		}
-		fmt.Println("got handler", hd)
 
 		return hd.handler(&m.opts, stream)
 	}

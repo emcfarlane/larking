@@ -33,17 +33,6 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-//type methodDesc struct {
-//	name string
-//	desc protoreflect.MethodDescriptor
-//}
-//
-//// RO
-//type methodConn struct {
-//	methodDesc
-//	cc *grpc.ClientConn
-//}
-
 // RO
 type connList struct {
 	handlers []*handler
@@ -148,12 +137,10 @@ func (m *Mux) RegisterConn(ctx context.Context, cc *grpc.ClientConn) error {
 
 	// TODO: watch the stream. When it is recreated refresh the service
 	// methods and recreate the mux if needed.
-	fmt.Println("reflection?")
 	stream, err := c.ServerReflectionInfo(ctx, grpc.WaitForReady(true))
 	if err != nil {
 		return err
 	}
-	fmt.Println("got stream")
 
 	// Load the state for writing.
 	m.mu.Lock()
@@ -379,45 +366,6 @@ func (s *state) addConnHandler(
 	return nil
 }
 
-//type streamGRPC struct {
-//	method *method
-//	cc *grpc.ClientConn
-//}
-
-//type connUnaryHandler struct {
-//	method string
-//	desc   protoreflect.MethodDescriptor
-//	cc     *grpc.ClientConn
-//}
-//
-//func (h *connUnaryHandler) name() string { return h.method }
-//
-//func (h *connUnaryHandler) args() proto.Message {
-//	argsDesc := h.desc.Input()
-//	return dynamicpb.NewMessage(argsDesc)
-//}
-//func (h *connUnaryHandler) reply() proto.Message {
-//	replyDesc := h.desc.Output()
-//	return dynamicpb.NewMessage(replyDesc)
-//}
-//func (h *connUnaryHandler) unary() grpc.UnaryHandler {
-//	return func(ctx context.Context, req interface{}) (interface{}, error) {
-//		stream := grpc.ServerTransportStreamFromContext(ctx).(*serverTransportStream)
-//		args := req.(proto.Message)
-//		reply := h.reply()
-//		if err := h.cc.Invoke(
-//			ctx,
-//			h.method,
-//			args, reply,
-//			grpc.Header(&stream.header),
-//			grpc.Trailer(&stream.trailer),
-//		); err != nil {
-//			return nil, err
-//		}
-//		return reply, nil
-//	}
-//}
-
 func (s *state) createConnHandler(
 	cc *grpc.ClientConn,
 	sd protoreflect.ServiceDescriptor,
@@ -527,7 +475,6 @@ func (s *state) createConnHandler(
 		}
 		fn := func(ctx context.Context, args interface{}) (interface{}, error) {
 			reply := dynamicpb.NewMessage(replyDesc)
-			fmt.Println("cc.Invoke", method)
 
 			if md, ok := metadata.FromIncomingContext(ctx); ok {
 				ctx = metadata.NewOutgoingContext(ctx, md)
@@ -580,7 +527,6 @@ func (s *state) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor)
 			}
 
 			method := fmt.Sprintf("/%s/%s", sd.FullName(), md.Name())
-			fmt.Println("method", method)
 
 			hd := s.createConnHandler(cc, sd, md, rule)
 
@@ -624,7 +570,9 @@ type streamHTTP struct {
 }
 
 func (s *streamHTTP) SetTrailer(md metadata.MD) {
-	s.serverTransportStream.SetTrailer(md)
+	if err := s.serverTransportStream.SetTrailer(md); err != nil {
+		panic(err)
+	}
 }
 
 func (s *streamHTTP) Context() context.Context {
@@ -644,7 +592,6 @@ func (s *streamHTTP) RecvMsg(m interface{}) error {
 	// TODO: fix the body marshalling
 	if s.method.hasBody {
 		// TODO: handler should decide what to select on?
-		fmt.Println("decodeRequestArgs", args, s.r)
 		if err := s.method.decodeRequestArgs(args, s.r); err != nil {
 			return err
 		}
@@ -656,7 +603,6 @@ func (s *streamHTTP) RecvMsg(m interface{}) error {
 }
 
 func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
-	fmt.Println("proxy?")
 	if !strings.HasPrefix(r.URL.Path, "/") {
 		r.URL.Path = "/" + r.URL.Path
 	}
@@ -668,13 +614,11 @@ func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
 	//}
 
 	s := m.loadState()
-	fmt.Println("proxyHTTP state", s)
 
 	method, params, err := s.path.match(r.URL.Path, r.Method)
 	if err != nil {
 		return err
 	}
-	fmt.Println("method", method, r.URL.Path)
 
 	hd, err := s.pickMethodHandler(method.name)
 	if err != nil {

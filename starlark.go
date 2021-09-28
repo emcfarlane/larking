@@ -134,7 +134,9 @@ type streamStar struct {
 }
 
 func (s *streamStar) SetTrailer(md metadata.MD) {
-	s.serverTransportStream.SetTrailer(md)
+	if err := s.serverTransportStream.SetTrailer(md); err != nil {
+		panic(err)
+	}
 }
 
 func (s *streamStar) Context() context.Context {
