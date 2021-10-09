@@ -36,15 +36,8 @@ func TestLexer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var toks tokens
-			var parser parseFn
-			parser = func(t token) (parseFn, error) {
-				toks = append(toks, t)
-				return parser, nil
-			}
 
 			l := &lexer{
-				parse: parser,
 				input: tt.tmpl,
 			}
 			err := lexTemplate(l)
@@ -57,12 +50,12 @@ func TestLexer(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			if n, m := len(tt.want), len(toks); n != m {
-				t.Errorf("mismatch length %v != %v:\n\t%v\n\t%v", n, m, tt.want, toks)
+			if n, m := len(tt.want), len(l.toks); n != m {
+				t.Errorf("mismatch length %v != %v:\n\t%v\n\t%v", n, m, tt.want, l.toks)
 				return
 			}
 			for i, want := range tt.want {
-				tok := toks[i]
+				tok := l.toks[i]
 				if want != tok {
 					t.Errorf("%d: %v != %v", i, tok, want)
 				}
