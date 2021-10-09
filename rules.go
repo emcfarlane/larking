@@ -41,8 +41,8 @@ func getExtensionHTTP(m proto.Message) *annotations.HttpRule {
 }
 
 type variable struct {
-	name string  // path.to.field=segment/*/**
-	toks []token // segment/*/**
+	name string // path.to.field=segment/*/**
+	toks tokens // segment/*/**
 	next *path
 }
 
@@ -97,6 +97,31 @@ func (p *path) findVariable(name string) (*variable, bool) {
 		}
 	}
 	return nil, false
+}
+
+func (p *path) addVariable(toks tokens) *variable {
+	name := toks.String()
+	if v, ok := p.findVariable(name); ok {
+		return v
+	}
+	v := &variable{
+		name: name,
+		toks: toks,
+		next: newPath(),
+	}
+	p.variables = append(p.variables, v)
+	sort.Sort(p.variables)
+	return v
+}
+
+func (p *path) addPath(parent, value token) *path {
+	val := parent.val + value.val
+	if next, ok := p.segments[val]; ok {
+		return next
+	}
+	next := newPath()
+	p.segments[val] = next
+	return next
 }
 
 func newPath() *path {
@@ -208,131 +233,6 @@ func (p *path) delRule(name string) bool {
 	return false
 }
 
-type parser struct {
-	cursor *path
-	fields protoreflect.FieldDescriptors
-	vars   [][]protoreflect.FieldDescriptor
-}
-
-func (p *parser) parseFieldPath(keys tokens, t token) (parseFn, error) {
-	if len(keys) == 0 {
-		return nil, fmt.Errorf("empty field path: %v %v", keys, t)
-	}
-
-	assign := func(vals tokens, t token) (parseFn, error) {
-		if t.typ != tokenVariableEnd {
-			return nil, fmt.Errorf("unexpected variable end")
-		}
-
-		keyVals := keys.vals()
-		valVals := vals.vals()
-		varLookup := strings.Join(valVals, "")
-
-		fds := fieldPath(p.fields, keyVals...)
-		if fds == nil {
-			return nil, fmt.Errorf("field not found %v", keys)
-		}
-
-		// TODO: validate tokens.
-		// TODO: field type checking.
-
-		p.vars = append(p.vars, fds)
-
-		if v, ok := p.cursor.findVariable(varLookup); ok {
-			p.cursor = v.next
-			return p.parseTemplate, nil
-		}
-
-		v := &variable{
-			name: varLookup,
-			toks: vals,
-			next: newPath(),
-		}
-		p.cursor.variables = append(p.cursor.variables, v)
-		sort.Sort(p.cursor.variables)
-		p.cursor = v.next
-
-		return p.parseTemplate, nil
-	}
-
-	if t.typ == tokenEqual {
-		return collect(
-			[]tokenType{tokenSlash, tokenStar, tokenStarStar, tokenValue},
-			nil,
-			assign,
-		), nil
-	}
-
-	// Default fields are assigned to "*".
-	return assign([]token{{
-		typ: tokenStar,
-		val: "*",
-	}}, t)
-}
-
-func (p *parser) parseSegments(t token) (parseFn, error) {
-	switch t.typ {
-	case tokenStar:
-		return nil, fmt.Errorf("token %q must be assigned to a variable", t.val)
-
-	case tokenStarStar:
-		return nil, fmt.Errorf("token %q must be assigned to a variable", t.val)
-
-	case tokenValue:
-		val := "/" + t.val // Prefix for easier matching
-		next, ok := p.cursor.segments[val]
-		if !ok {
-			next = newPath()
-			p.cursor.segments[val] = next
-		}
-		p.cursor = next
-		return p.parseTemplate, nil
-
-	case tokenVariableStart:
-		return collect(
-			[]tokenType{tokenValue},
-			[]tokenType{tokenDot},
-			p.parseFieldPath,
-		), nil
-
-	case tokenEOF:
-		return nil, fmt.Errorf("invalid path end %q", t.val)
-
-	default:
-		return nil, fmt.Errorf("unexpected %q", t)
-	}
-}
-
-func (p *parser) parseVerb(t token) (parseFn, error) {
-	switch t.typ {
-	case tokenValue:
-		val := ":" + t.val // Prefix for easier matching
-		next, ok := p.cursor.segments[val]
-		if !ok {
-			next = newPath()
-			p.cursor.segments[val] = next
-		}
-		p.cursor = next
-		return p.parseTemplate, nil
-
-	default:
-		return nil, fmt.Errorf("verb unexpected %q", t)
-	}
-}
-
-func (p *parser) parseTemplate(t token) (parseFn, error) {
-	switch t.typ {
-	case tokenSlash:
-		return p.parseSegments, nil
-	case tokenVerb:
-		return p.parseVerb, nil
-	case tokenEOF:
-		return nil, nil
-	default:
-		return nil, fmt.Errorf("template unexpected %q", t)
-	}
-}
-
 // addRule adds the HTTP rule to the path.
 func (p *path) addRule(
 	rule *annotations.HttpRule,
@@ -366,28 +266,101 @@ func (p *path) addRule(
 	msgDesc := desc.Input()
 	fieldDescs := msgDesc.Fields()
 
-	// Hold state for the parser.
-	pr := &parser{
-		cursor: p,
-		fields: fieldDescs,
-	}
 	// Hold state for the lexer.
-	l := &lexer{
-		parse: pr.parseTemplate,
-		input: tmpl,
-	}
+	l := &lexer{input: tmpl}
 	if err := lexTemplate(l); err != nil {
 		return err
 	}
 
-	cursor := pr.cursor
+	var (
+		i      = 0
+		cursor = p
+		varfds [][]protoreflect.FieldDescriptor
+	)
+
+	next := func() token {
+		i++
+		return l.toks[i]
+	}
+	invalid := func(tok token) { panic(fmt.Sprintf("invalid token: %v", tok)) }
+
+	// Segments
+	tok := l.toks[i]
+	for ; tok.typ == tokenSlash; tok = next() {
+		switch val := next(); val.typ {
+		case tokenStar, tokenStarStar:
+			// TODO: Variables that don't capture the path.
+			panic("todo")
+
+		// Literal
+		case tokenValue:
+			cursor = cursor.addPath(tok, val)
+
+		// Variable
+		case tokenVariableStart:
+			// FieldPath
+			tok := next()
+			keys := []string{tok.val}
+
+			nxt := next()
+			for nxt.typ == tokenDot {
+				keys = append(keys, next().val)
+				nxt = next()
+			}
+
+			var vars tokens
+			switch nxt.typ {
+			case tokenEqual:
+				for nxt := next(); nxt.typ != tokenVariableEnd; nxt = next() {
+					vars = append(vars, nxt)
+				}
+
+			case tokenVariableEnd:
+				// default
+				vars = append(vars, token{
+					typ: tokenStar,
+					val: "*",
+				})
+
+			default:
+				invalid(nxt)
+			}
+
+			fds := fieldPath(fieldDescs, keys...)
+			if fds == nil {
+				return fmt.Errorf("field not found %v", keys)
+			}
+			varfds = append(varfds, fds)
+
+			v := cursor.addVariable(vars)
+			cursor = v.next
+
+		default:
+			invalid(tok)
+		}
+	}
+
+	switch tok.typ {
+	case tokenVerb:
+		// Literal
+		val := next()
+		cursor = cursor.addPath(tok, val)
+		// eof
+
+	case tokenEOF:
+		// eof
+
+	default:
+		invalid(tok)
+	}
+
 	if _, ok := cursor.methods[verb]; ok {
 		return fmt.Errorf("duplicate rule %v", rule)
 	}
 
 	m := &method{
 		desc: desc,
-		vars: pr.vars,
+		vars: varfds,
 		name: name,
 	}
 	switch rule.Body {
@@ -665,40 +638,43 @@ func (m *method) parseQueryParams(values url.Values) (params, error) {
 }
 
 // index returns the capture length.
-// TODO: better method name.
-func (v *variable) index(s string) int {
+func (v *variable) index(toks tokens) int {
+	n := len(toks)
+
 	var i int
 	for _, tok := range v.toks {
-		if i == len(s) {
+		if i == n {
 			return -1
 		}
 
 		switch tok.typ {
 		case tokenSlash:
-			if !strings.HasPrefix(s[i:], "/") {
+			if toks[i].typ != tok.typ {
 				return -1
 			}
 			i += 1
 
 		case tokenStar:
-			if j := strings.IndexAny(s[i:], "/:"); j != -1 {
+			set := newTokenSet(tokenSlash, tokenVerb)
+			if j := toks.indexAny(set); j != -1 {
 				i += j
 			} else {
-				i = len(s) // EOL
+				i = n // EOL
 			}
 
 		case tokenStarStar:
-			if j := strings.Index(s[i:], ":"); j != -1 {
+			if j := toks.index(tokenVerb); j != -1 {
 				i += j
 			} else {
-				i = len(s) // EOL
+				i = n // EOL
 			}
 
 		case tokenValue:
-			if !strings.HasPrefix(s[i:], tok.val) {
+			// TODO: tokenPath != tokenValue
+			if toks[i].typ != tokenPath || tok.val != toks[i].val {
 				return -1
 			}
-			i += len(tok.val)
+			i += 1
 
 		default:
 			panic(":(")
@@ -710,46 +686,40 @@ func (v *variable) index(s string) int {
 // Depth first search preferring path segments over variables.
 // Variables split the search tree:
 //     /path/{variable/*}/to/{end/**} ?:VERB
-func (p *path) match(route, method string) (*method, params, error) {
-
-	if len(route) == 0 {
-		if m, ok := p.methods[method]; ok {
+func (p *path) search(toks tokens, verb string) (*method, params, error) {
+	if n := len(toks); n == 0 || n == 1 {
+		if m, ok := p.methods[verb]; ok {
 			return m, nil, nil
 		}
 		return nil, nil, status.Error(codes.NotFound, "not found")
 	}
 
-	j := strings.IndexAny(route[1:], "/:") + 1
-	if j == 0 {
-		j = len(route) // capture end of path
-	}
-	segment := route[:j]
+	tt, tv := toks[0], toks[1]
+	segment := tt.val + tv.val
 
 	//fmt.Println("------------------")
 	//fmt.Println("~", segment, "~")
+	//defer fmt.Println("search end")
 
 	if next, ok := p.segments[segment]; ok {
-		if m, ps, err := next.match(route[j:], method); err == nil {
+		if m, ps, err := next.search(toks[2:], verb); err == nil {
 			return m, ps, err
 		}
 	}
 
 	for _, v := range p.variables {
-		l := v.index(route[1:]) + 1 // bump off /
+		l := v.index(toks[1:]) + 1 // bump off /
 		if l == 0 {
 			continue
 		}
-		newRoute := route[l:]
 
-		//fmt.Println("variable", l, route, "->", newRoute)
-		m, ps, err := v.next.match(newRoute, method)
+		m, ps, err := v.next.search(toks[l:], verb)
 		if err != nil {
 			continue
 		}
 
-		capture := []byte(route[1:l])
+		capture := []byte(toks[1:l].String())
 
-		//fmt.Println("capture", len(m.vars), len(ps))
 		fds := m.vars[len(m.vars)-len(ps)-1]
 		if p, err := parseParam(fds, capture); err != nil {
 			return nil, nil, err
@@ -758,8 +728,16 @@ func (p *path) match(route, method string) (*method, params, error) {
 		}
 		return m, ps, err
 	}
-
 	return nil, nil, status.Error(codes.NotFound, "not found")
+}
+
+// match the route to a method.
+func (p *path) match(route, verb string) (*method, params, error) {
+	l := &lexer{input: route}
+	if err := lexPath(l); err != nil {
+		return nil, nil, err
+	}
+	return p.search(l.toks, verb)
 }
 
 const httpHeaderPrefix = "http-"

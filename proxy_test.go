@@ -70,9 +70,7 @@ func (os overrides) UnaryInterceptor() grpc.ServerOption {
 			info *grpc.UnaryServerInfo,
 			handler grpc.UnaryHandler,
 		) (interface{}, error) {
-			fmt.Println("got unary")
 			h, ok := os.fromContext(ctx)
-			fmt.Println("handler??", h, ok)
 			if !ok {
 				return handler(ctx, req) // default
 			}
