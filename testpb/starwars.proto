@@ -1,0 +1,116 @@
+// Copyright 2021 Edward McFarlane. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+syntax = "proto3";
+
+package larking.testpb;
+
+import "google/api/annotations.proto";
+import "api/graphql.proto";
+// import "google/protobuf/empty.proto";
+
+option go_package = "github.com/emcfarlane/larking/testpb;testpb";
+
+message Faction {
+  // option (larking.api.relay).node = {
+  //  rpc : "larking.testpb.StarWars.GetFaction(id : id)"
+  //  method : "/larking.testpb.Starwars/GetFaction/"
+  //  args : {
+  //    "name" : "{id}"
+  //  }
+  //  id : "factions/{name}"
+  //  match : "factions/*"
+  //};
+
+  string name = 1;
+  //[ (larking.api.relay).node = {
+  //  method : "/larking.testpb.StarWars/GetFaction/"
+  //  matches : "{name=factions/*}"
+  //} ];
+  string display_name = 2;
+
+  // arg "{parent}"
+  // arg "page_size:{first}
+  // query_arg { name : "after" field_path: "
+
+  // option (larking.api.relay).connection = {
+  //  name : "ships"
+  //  method : "/larking.testpb.StarWars/ListShips/"
+  //  args {
+  //    "{name}" : "parent",
+  //    "first" : "page_size",
+  //    "after" : "page_token",
+  //  }
+  //};
+}
+
+message GetFactionRequest { string name = 1; }
+
+message Ship {
+  // option (larking.api.relay).node = {
+  //  rpc : "larking.testpb.StarWars.GetShip(id : id)"
+  //};
+
+  string name = 1 [ (larking.api.relay_id) = true ];
+  string display_name = 2;
+}
+
+message GetShipRequest { string name = 1; }
+
+message ListShipsRequest {
+  string parent = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListShipsResponse {
+  repeated Ship ships = 1;
+  string next_page_token = 2;
+}
+
+// type Query {
+//  rebels: Faction
+//  empire: Faction
+//  node(id: ID!): Node
+//}
+//
+// type Mutation {
+//  introduceShip(input: IntroduceShipInput!): IntroduceShipPayload
+//}
+service StarWars {
+
+  rpc GetFaction(GetFactionRequest) returns (Faction) {
+    option (larking.api.relay) = {
+      query : "faction"
+      args {name : "id" field : "name"}
+      node_id : "{name=factions/*}"
+
+      // TODO: empire/rebel routes?
+      // TODO: default constant args?
+      // additional_bindings {
+      //  query : "rebels"
+      //  args {"name" : "id=factions/1"}
+      //}
+      // additional_bindings {
+      //  query : "empire"
+      //  args {"name" : "id=factions/2"}
+      //}
+    };
+    option (google.api.http) = {
+      get : "/v1/{name=factions/*}"
+    };
+  }
+
+  rpc ListShips(ListShipsRequest) returns (ListShipsResponse) {
+    option (google.api.http) = {
+      get : "/v1/{parent=factions/*}/ships"
+    };
+  }
+
+  rpc GetShip(GetShipRequest) returns (Ship) {
+    option (google.api.http) = {
+      get : "/v1/{name=factions/*/ships/*}"
+    };
+  }
+}

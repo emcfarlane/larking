@@ -21,6 +21,7 @@ import (
 	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/metadata"
 	rpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/grpc/status"
@@ -79,6 +80,8 @@ type muxOptions struct {
 	types                 protoregistry.MessageTypeResolver
 	unaryInterceptor      grpc.UnaryServerInterceptor
 	streamInterceptor     grpc.StreamServerInterceptor
+	graphQLPath           string
+	healthPath            string
 }
 
 // unary is a nil-safe interceptor unary call.
@@ -97,7 +100,7 @@ func (o *muxOptions) stream(srv interface{}, ss grpc.ServerStream, info *grpc.St
 	return handler(srv, ss)
 }
 
-type MuxOption func(*muxOptions)
+type MuxOption func(*muxOptions) error
 
 var defaultMuxOptions = muxOptions{
 	maxReceiveMessageSize: defaultServerMaxReceiveMessageSize,
@@ -105,11 +108,34 @@ var defaultMuxOptions = muxOptions{
 	connectionTimeout:     defaultServerConnectionTimeout,
 	files:                 protoregistry.GlobalFiles,
 	types:                 protoregistry.GlobalTypes,
+	healthPath:            "/health",
 }
 
 func UnaryServerInterceptorOption(interceptor grpc.UnaryServerInterceptor) MuxOption {
-	return func(opts *muxOptions) {
+	return func(opts *muxOptions) error {
 		opts.unaryInterceptor = interceptor
+		return nil
+	}
+}
+
+func StreamServerInterceptorOption(interceptor grpc.StreamServerInterceptor) MuxOption {
+	return func(opts *muxOptions) error {
+		opts.streamInterceptor = interceptor
+		return nil
+	}
+}
+
+func GraphQLPath(path string) MuxOption {
+	return func(opts *muxOptions) error {
+		opts.graphQLPath = path
+		return nil
+	}
+}
+
+func HealthPath(path string) MuxOption {
+	return func(opts *muxOptions) error {
+		opts.healthPath = path
+		return nil
 	}
 }
 
@@ -118,17 +144,22 @@ type Mux struct {
 	events trace.EventLog
 	mu     sync.Mutex   // Lock to sync writers
 	state  atomic.Value // Value of *state
+
+	health *health.Server
 }
 
-func NewMux(opts ...MuxOption) (*Mux, error) {
+func NewMux(opts ...MuxOption) (m *Mux, err error) {
 	// Apply options.
 	var muxOpts = defaultMuxOptions
 	for _, opt := range opts {
-		opt(&muxOpts)
+		if err := opt(&muxOpts); err != nil {
+			return nil, err
+		}
 	}
 
 	return &Mux{
-		opts: muxOpts,
+		opts:   muxOpts,
+		health: health.NewServer(),
 	}, nil
 }
 
@@ -153,6 +184,7 @@ func (m *Mux) RegisterConn(ctx context.Context, cc *grpc.ClientConn) error {
 
 	m.storeState(s)
 
+	// TODO: keep stream open...
 	return stream.CloseSend()
 }
 
@@ -161,8 +193,11 @@ func (m *Mux) DropConn(ctx context.Context, cc *grpc.ClientConn) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s := m.loadState().clone()
-
-	return s.removeHandler(cc)
+	ok := s.removeHandler(cc)
+	if ok {
+		m.storeState(s)
+	}
+	return ok
 }
 
 // resolver implements protodesc.Resolver.
@@ -540,7 +575,10 @@ func (s *state) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor)
 }
 
 func (m *Mux) loadState() *state {
-	s, _ := m.state.Load().(*state)
+	s, ok := m.state.Load().(*state)
+	if !ok {
+		s = s.clone()
+	}
 	return s
 }
 func (m *Mux) storeState(s *state) { m.state.Store(s) }
@@ -555,10 +593,6 @@ func (s *state) pickMethodHandler(name string) (*handler, error) {
 	}
 	hd := hds[rand.Intn(len(hds))]
 	return hd, nil
-}
-
-func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	m.serveHTTP(w, r)
 }
 
 type streamHTTP struct {
@@ -659,7 +693,7 @@ func encError(w http.ResponseWriter, err error) {
 	w.Write(b) //nolint
 }
 
-func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) {
+func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := m.proxyHTTP(w, r); err != nil {
 		encError(w, err)
 	}

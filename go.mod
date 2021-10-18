@@ -8,6 +8,7 @@ require (
 	github.com/emcfarlane/starlarkrepl v0.0.0-20200525000826-057477e78566
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.6
+	github.com/graphql-go/graphql v0.8.0 // indirect
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/peterh/liner v1.2.1 // indirect
 	github.com/soheilhy/cmux v0.1.4

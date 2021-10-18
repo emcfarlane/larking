@@ -190,3 +190,8 @@ func MuxOptions(muxOpts ...MuxOption) ServerOption {
 //
 //	}
 //}
+
+//func (s *Server) RegisterService(desc *grpc.ServiceDesc, impl interface{}) {
+//	// TODO: register http bindings...
+//	s.gs.RegisterService(desc, impl)
+//}

@@ -6,26 +6,108 @@ syntax = "proto3";
 
 package larking.api;
 
+import "google/api/annotations.proto";
+import "google/api/httpbody.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/emcfarlane/larking/api;api";
+
 // Relay GraphQL implementation
-// https://relay.dev/docs/en/graphql-server-specification.html
+// https://relay.dev/docs/guides/graphql-server-specification/
+// http://spec.graphql.org/draft/
+//
+// Cursor implementation
+// https://relay.dev/assets/files/connections-932f4f2cdffd79724ac76373deb30dc8.htm#
 
 extend google.protobuf.MethodOptions {
-  // See `HttpRule`.
-  HttpRule http = 72295728;
+  // Adds a method to the GraphQL query root.
+  GraphQLRule relay = 72222228;
 }
 
-extend google.protobuf.MessageOptions {
-  g optional int32 my_message_option = 50001;
+extend google.protobuf.FieldOptions {
+  // Adds relay
+  optional bool relay_id = 70000;
 }
 
+// GraphQL bindings.
+message GraphQLRule {
+  oneof pattern {
+    string query = 1;
+    string mutation = 2;
+    string subscription = 3;
+  }
+
+  // Args is a mapping of fields.
+  repeated Arg args = 4;
+
+  // Controls the Relay NodeID binding.
+  string node_id = 5;
+
+  // Additional GraphQL bindings for the selector. Nested bindings must
+  // not contain an `additional_bindings` field themselves (that is,
+  // the nesting may only be one level deep).
+  repeated GraphQLRule additional_bindings = 6;
+}
+
+extend google.protobuf.MessageOptions { MessageConnection connection = 70000; }
+
+message Arg {
+  string name = 1;
+  string field = 2;
+}
+
+// Connection
+// https://relay.dev/graphql/connections.htm#
+// A field that returns a Connection Type must include forward pagination
+// arguments, backward pagination arguments, or both. These pagination arguments
+// allow the client to slice the set of edges before it is returned.
+//
+// Forward Arguments:
+// - first takes a non-negative integer.
+// - after takes the cursor type as described in the cursor field section.
+//
+// Backward Arguments:
+// - last takes a non-negative integer.
+// - before takes the cursor type as described in the cursor field section.
+message MessageConnection {
+  // TODO
+  string name = 1;
+  string method = 2;
+  repeated Arg args = 3;
+}
+
+// https://relay.dev/graphql/connections.htm
 message PageInfo {
   bool has_next_page = 1;
   bool has_previous_page = 2;
-  string start_cursor = 3;
-  string end_cursor = 4;
+  bytes start_cursor = 3;
+  bytes end_cursor = 4;
 }
 
 message Connection {
   repeated google.protobuf.Any edges = 1;
   PageInfo page_info = 2;
+}
+
+message GraphQLResponse {
+  google.protobuf.Struct data = 1;
+  repeated google.protobuf.Any errors = 2;
+}
+
+service GraphQL {
+  rpc Query(google.api.HttpBody) returns (stream GraphQLResponse) {
+    option (google.api.http) = {
+      post : "/graphql"
+    };
+  }
+}
+
+message GetRelayNodeRequest { string id = 1; }
+
+// Relay service is a client required service for GraphQL options.
+service Relay {
+  // GetRelayNode exposes ID! querying capabilities to the GraphQL service.
+  rpc GetRelayNode(GetRelayNodeRequest) returns (google.protobuf.Any);
 }

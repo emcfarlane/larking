@@ -34,6 +34,8 @@ func (m *Mux) RegisterServiceByName(name protoreflect.FullName, srv interface{})
 	return m.RegisterService(sd, srv)
 }
 
+// TODO: move to server
+//func (s *Server) RegisterService(desc *grpc.ServiceDesc, impl interface{}) {
 func (m *Mux) RegisterService(sd protoreflect.ServiceDescriptor, srv interface{}) error {
 	// Load the state for writing.
 	m.mu.Lock()
