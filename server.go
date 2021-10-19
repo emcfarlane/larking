@@ -23,7 +23,7 @@ import (
 
 type Server struct {
 	opts serverOptions
-	mux  Mux
+	mux  *Mux
 
 	closer chan bool
 	gs     *grpc.Server
@@ -47,32 +47,34 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		events = trace.NewEventLog("larking.Server", fmt.Sprintf("%s:%d", file, line))
 	}
 
-	return &Server{
-		opts: svrOpts,
-		mux: Mux{
-			opts:   svrOpts.muxOpts,
-			events: events,
-		},
+	mux := &Mux{
+		opts:   svrOpts.muxOpts,
 		events: events,
-	}, nil
-}
+	}
 
-func (s *Server) Mux() *Mux {
-	return &s.mux
-}
-
-func (s *Server) grpcOpts() []grpc.ServerOption {
 	var grpcOpts []grpc.ServerOption
-
-	grpcOpts = append(grpcOpts, grpc.UnknownServiceHandler(s.Mux().StreamHandler()))
-
-	if c := s.opts.tlsConfig; c != nil {
+	grpcOpts = append(grpcOpts, grpc.UnknownServiceHandler(mux.StreamHandler()))
+	if c := svrOpts.tlsConfig; c != nil {
 		creds := credentials.NewTLS(c)
 		grpcOpts = append(grpcOpts, grpc.Creds(creds))
 	}
 
-	return grpcOpts
+	gs := grpc.NewServer(grpcOpts...)
+	hs := &http.Server{
+		Handler:   mux,
+		TLSConfig: svrOpts.tlsConfig,
+	}
+
+	return &Server{
+		opts:   svrOpts,
+		mux:    mux,
+		gs:     gs,
+		hs:     hs,
+		events: events,
+	}, nil
 }
+
+func (s *Server) Mux() *Mux { return s.mux }
 
 func (s *Server) Serve(l net.Listener) error {
 	s.closer = make(chan bool, 1)
@@ -88,30 +90,22 @@ func (s *Server) Serve(l net.Listener) error {
 	n := 3
 	errs := make(chan error, n)
 
-	gs := grpc.NewServer(s.grpcOpts()...)
-	go func() { errs <- gs.Serve(grpcL) }()
-	defer gs.Stop()
+	go func() { errs <- s.gs.Serve(grpcL) }()
+	defer s.gs.Stop()
 
-	hs := &http.Server{
-		Handler:   &s.mux,
-		TLSConfig: s.opts.tlsConfig,
-	}
 	go func() {
 		if s.opts.tlsConfig != nil {
 			// TLSConfig must have the cert object.
-			errs <- hs.ServeTLS(httpL, "", "")
+			errs <- s.hs.ServeTLS(httpL, "", "")
 		} else {
-			errs <- hs.Serve(httpL)
+			errs <- s.hs.Serve(httpL)
 		}
 	}()
-	defer hs.Close()
+	defer s.hs.Close()
 
 	// TODO: metrics/debug http server...?
 
 	go func() { errs <- m.Serve() }()
-
-	s.gs = gs
-	s.hs = hs
 
 	select {
 	case <-s.closer:
@@ -190,3 +184,8 @@ func MuxOptions(muxOpts ...MuxOption) ServerOption {
 //
 //	}
 //}
+
+func (s *Server) RegisterService(desc *grpc.ServiceDesc, impl interface{}) {
+	s.gs.RegisterService(desc, impl)
+	s.mux.RegisterService(desc, impl)
+}

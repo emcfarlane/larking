@@ -150,6 +150,7 @@ func (m *Mux) RegisterConn(ctx context.Context, cc *grpc.ClientConn) error {
 	if err := s.addConnHandler(cc, stream); err != nil {
 		return err
 	}
+	fmt.Println("got back something", s)
 
 	m.storeState(s)
 
@@ -237,13 +238,12 @@ func (r *resolver) FindDescriptorByName(fullname protoreflect.FullName) (protore
 func (s *state) appendHandler(
 	rule *annotations.HttpRule,
 	desc protoreflect.MethodDescriptor,
-	name string,
 	h *handler,
 ) error {
-	if err := s.path.addRule(rule, desc, name); err != nil {
+	if err := s.path.addRule(rule, desc, h.method); err != nil {
 		return err
 	}
-	s.handlers[name] = append(s.handlers[name], h)
+	s.handlers[h.method] = append(s.handlers[h.method], h)
 	return nil
 }
 
@@ -526,11 +526,9 @@ func (s *state) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor)
 				continue
 			}
 
-			method := fmt.Sprintf("/%s/%s", sd.FullName(), md.Name())
-
 			hd := s.createConnHandler(cc, sd, md, rule)
 
-			if err := s.appendHandler(rule, md, method, hd); err != nil {
+			if err := s.appendHandler(rule, md, hd); err != nil {
 				return nil, err
 			}
 			handlers = append(handlers, hd)

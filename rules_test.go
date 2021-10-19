@@ -335,6 +335,37 @@ func TestMessageServer(t *testing.T) {
 			statusCode: 200,
 			body:       []byte("cat"),
 		},
+
+		/*}, {
+		name: "large_cat.jpg",
+		req: func() *http.Request {
+			r := httptest.NewRequest(
+				http.MethodPost, "/files/large/cat.jpg",
+				strings.NewReader("cat"),
+			)
+			r.Header.Set("Content-Type", "image/jpeg")
+			return r
+		}(),
+		in: in{
+			method: "/larking.testpb.Files/UploadDownload",
+			msg: &testpb.UploadFileRequest{
+				Filename: "cat.jpg",
+				File: &httpbody.HttpBody{
+					ContentType: "image/jpeg",
+					Data:        []byte("cat"),
+				},
+			},
+		},
+		out: out{
+			msg: &httpbody.HttpBody{
+				ContentType: "image/jpeg",
+				Data:        []byte("cat"),
+			},
+		},
+		want: want{
+			statusCode: 200,
+			body:       []byte("cat"),
+		},*/
 	}, {
 		name: "wellknown_scalars",
 		req: httptest.NewRequest(

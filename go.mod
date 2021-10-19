@@ -12,11 +12,15 @@ require (
 	github.com/peterh/liner v1.2.1 // indirect
 	github.com/soheilhy/cmux v0.1.4
 	go.starlark.net v0.0.0-20210602144842-1cdb82c9e17a
-	golang.org/x/net v0.0.0-20210716203947-853a461950ff
+	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
+	golang.org/x/net v0.0.0-20211015210444-4f30a5c0130f
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
-	google.golang.org/genproto v0.0.0-20210722135532-667f2b7c528f
-	google.golang.org/grpc v1.39.0
+	golang.org/x/sys v0.0.0-20211019181941-9d821ace8654 // indirect
+	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/tools v0.1.5 // indirect
+	google.golang.org/genproto v0.0.0-20211019152133-63b7e35f4404
+	google.golang.org/grpc v1.41.0
 	google.golang.org/grpc/examples v0.0.0-20201116223408-707e298f55ef // indirect
 	google.golang.org/protobuf v1.27.1
+	nhooyr.io/websocket v1.8.7 // indirect
 )

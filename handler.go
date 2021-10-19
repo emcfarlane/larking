@@ -5,8 +5,8 @@
 package larking
 
 import (
-	"context"
 	"fmt"
+	"log"
 	"reflect"
 
 	"google.golang.org/grpc"
@@ -22,121 +22,112 @@ type handler struct {
 	handler    handlerFunc
 }
 
-func (m *Mux) RegisterServiceByName(name protoreflect.FullName, srv interface{}) error {
-	desc, err := m.opts.files.FindDescriptorByName(name)
-	if err != nil {
-		return err
+// TODO: use grpclog?
+//var logger = grpclog.Component("core")
+
+// RegisterService satisfies gprc generated service code.
+func (m *Mux) RegisterService(sd *grpc.ServiceDesc, ss interface{}) {
+	if ss != nil {
+		ht := reflect.TypeOf(sd.HandlerType).Elem()
+		st := reflect.TypeOf(ss)
+		if !st.Implements(ht) {
+			log.Fatalf("grpc: RegisterService found the handler of type %v that does not satisfy %v", st, ht)
+		}
 	}
-	sd, ok := desc.(protoreflect.ServiceDescriptor)
-	if !ok {
-		return fmt.Errorf("not a service descriptor %T", desc)
+	if err := m.registerService(sd, ss); err != nil {
+		log.Fatalf("larking: RegisterService error: %v", err)
 	}
-	return m.RegisterService(sd, srv)
 }
 
-func (m *Mux) RegisterService(sd protoreflect.ServiceDescriptor, srv interface{}) error {
+func (m *Mux) registerService(gsd *grpc.ServiceDesc, ss interface{}) error {
+
 	// Load the state for writing.
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s := m.loadState().clone()
 
-	types := m.opts.types
-	name := sd.FullName()
-
+	d, err := m.opts.files.FindDescriptorByName(protoreflect.FullName(gsd.ServiceName))
+	if err != nil {
+		return err
+	}
+	sd, ok := d.(protoreflect.ServiceDescriptor)
+	if !ok {
+		return fmt.Errorf("invalid method descriptor %T", d)
+	}
 	mds := sd.Methods()
-	for j := 0; j < mds.Len(); j++ {
-		// TODO: streaming
-		md := mds.Get(j)
 
-		opts := md.Options() // TODO: nil check fails?
+	findMethod := func(methodName string) (protoreflect.MethodDescriptor, error) {
+		md := mds.ByName(protoreflect.Name(methodName))
+		if md == nil {
+			return nil, fmt.Errorf("missing method descriptor for %v", methodName)
+		}
+		return md, nil
+	}
 
-		rule := getExtensionHTTP(opts)
+	for i := range gsd.Methods {
+		d := &gsd.Methods[i]
+		method := "/" + gsd.ServiceName + "/" + d.MethodName
+
+		md, err := findMethod(d.MethodName)
+		if err != nil {
+			return err
+		}
+
+		rule := getExtensionHTTP(md.Options())
 		if rule == nil {
 			continue
 		}
 
-		rv := reflect.ValueOf(srv)
-		rm := rv.MethodByName(string(md.Name()))
-		if !rm.IsValid() {
-			return fmt.Errorf("%T missing %s method", srv, md.Name())
-		}
-
-		inDesc := md.Input()
-		outDesc := md.Output()
-
-		inProtoType, err := types.FindMessageByName(inDesc.FullName())
-		if err != nil {
-			return err
-		}
-		outProtoType, err := types.FindMessageByName(outDesc.FullName())
-		if err != nil {
-			return err
-		}
-		in, out := inProtoType.Zero().Interface(), outProtoType.Zero().Interface()
-
-		rmt := rm.Type()
-		if rmt.NumIn() != 2 || rmt.NumOut() != 2 {
-			return fmt.Errorf("invalid method %v", rmt)
-		}
-
-		ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
-		if !rmt.In(0).Implements(ctxType) {
-			return fmt.Errorf("invalid context type %v", rmt)
-		}
-		if rmt.In(1) != reflect.TypeOf(in) {
-			return fmt.Errorf("invalid input type %v", rmt)
-		}
-
-		if rmt.Out(0) != reflect.TypeOf(out) {
-			return fmt.Errorf("invalid output type %v", rmt)
-		}
-		errType := reflect.TypeOf((*error)(nil)).Elem()
-		if !rmt.Out(1).Implements(errType) {
-			return fmt.Errorf("invalid error type %v", rmt)
-		}
-
-		h := func(ctx context.Context, req interface{}) (interface{}, error) {
-			out := rm.Call([]reflect.Value{
-				reflect.ValueOf(ctx), reflect.ValueOf(req),
-			})
-			errVal := out[1]
-			if errVal.IsNil() {
-				return out[0].Interface(), nil
-			}
-			return nil, out[1].Interface().(error)
-		}
-
-		methodName := fmt.Sprintf("/%s/%s", name, md.Name())
-		info := &grpc.UnaryServerInfo{
-			Server:     nil,
-			FullMethod: methodName,
-		}
-
-		if err := s.appendHandler(rule, md, methodName, &handler{
-			method:     methodName,
+		h := &handler{
+			method:     method,
 			descriptor: md,
 			handler: func(opts *muxOptions, stream grpc.ServerStream) error {
 				ctx := stream.Context()
-				args := inProtoType.New().Interface()
 
-				if err := stream.RecvMsg(args); err != nil {
-					return err
-				}
-
-				reply, err := opts.unary(ctx, args, info, h)
+				reply, err := d.Handler(ss, ctx, stream.RecvMsg, opts.unaryInterceptor)
 				if err != nil {
 					return err
 				}
-
 				return stream.SendMsg(reply)
 			},
-		}); err != nil {
+		}
+
+		if err := s.appendHandler(rule, md, h); err != nil {
+			return err
+		}
+	}
+	for i := range gsd.Streams {
+		d := &gsd.Streams[i]
+		method := "/" + gsd.ServiceName + "/" + d.StreamName
+		md, err := findMethod(d.StreamName)
+		if err != nil {
+			return err
+		}
+
+		rule := getExtensionHTTP(md.Options())
+		if rule == nil {
+			continue
+		}
+
+		h := &handler{
+			method:     method,
+			descriptor: md,
+			handler: func(opts *muxOptions, stream grpc.ServerStream) error {
+				info := &grpc.StreamServerInfo{
+					FullMethod:     method,
+					IsClientStream: d.ClientStreams,
+					IsServerStream: d.ServerStreams,
+				}
+
+				return opts.stream(ss, stream, info, d.Handler)
+			},
+		}
+		if err := s.appendHandler(rule, md, h); err != nil {
 			return err
 		}
 	}
 
 	m.storeState(s)
-
 	return nil
 }
 
