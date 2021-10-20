@@ -150,7 +150,6 @@ func (m *Mux) RegisterConn(ctx context.Context, cc *grpc.ClientConn) error {
 	if err := s.addConnHandler(cc, stream); err != nil {
 		return err
 	}
-	fmt.Println("got back something", s)
 
 	m.storeState(s)
 

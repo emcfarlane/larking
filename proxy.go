@@ -5,7 +5,6 @@
 package larking
 
 import (
-	"fmt"
 	"io"
 
 	"golang.org/x/net/context"
@@ -36,7 +35,6 @@ func (m *Mux) StreamHandler() grpc.StreamHandler {
 		name, _ := grpc.Method(ctx)
 		s := m.loadState()
 
-		fmt.Println("finding somethin?", name, s)
 		hd, err := s.pickMethodHandler(name)
 		if err != nil {
 			return err

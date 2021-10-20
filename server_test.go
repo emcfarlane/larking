@@ -6,7 +6,6 @@ package larking
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"testing"
 
@@ -24,11 +23,8 @@ import (
 func TestServer(t *testing.T) {
 	ms := &testpb.UnimplementedMessagingServer{}
 
-	overrides := make(overrides)
-	gs := grpc.NewServer(
-		overrides.StreamInterceptor(),
-		overrides.UnaryInterceptor(),
-	)
+	o := &overrides{}
+	gs := grpc.NewServer(o.streamOption(), o.unaryOption())
 	testpb.RegisterMessagingServer(gs, ms)
 	reflection.Register(gs)
 
@@ -82,15 +78,6 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	type in struct {
-		msg proto.Message
-	}
-
-	type out struct {
-		msg proto.Message
-		err error
-	}
-
 	cmpOpts := cmp.Options{protocmp.Transform()}
 
 	var unaryStreamDesc = &grpc.StreamDesc{
@@ -102,68 +89,46 @@ func TestServer(t *testing.T) {
 		name   string
 		desc   *grpc.StreamDesc
 		method string
-		ins    []in
-		outs   []out
+		inouts []interface{}
+		//ins    []in
+		//outs   []out
 	}{{
 		name:   "unary_message",
 		desc:   unaryStreamDesc,
 		method: "/larking.testpb.Messaging/GetMessageOne",
-		ins: []in{{
-			msg: &testpb.GetMessageRequestOne{
-				Name: "proxy",
-			},
-		}},
-		outs: []out{{
-			msg: &testpb.Message{Text: "success"},
-		}},
+		inouts: []interface{}{
+			in{msg: &testpb.GetMessageRequestOne{Name: "proxy"}},
+			out{msg: &testpb.Message{Text: "success"}},
+		},
 	}}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var (
-				i int
-				o override
-			)
-
-			o.unary = func(
-				ctx context.Context,
-				msg proto.Message,
-				method string,
-			) (proto.Message, error) {
-				if method != tt.method {
-					return nil, fmt.Errorf("grpc expected %s, got %s", tt.method, method)
-				}
-
-				diff := cmp.Diff(msg, tt.ins[i].msg, cmpOpts...)
-				if diff != "" {
-					return nil, fmt.Errorf(diff)
-				}
-				return tt.outs[i].msg, tt.outs[i].err
-			}
-			overrides[t.Name()] = o
-			defer delete(overrides, t.Name())
+			o.reset("test", tt.inouts)
 
 			ctx := context.Background()
-			ctx = metadata.AppendToOutgoingContext(ctx, "test", t.Name())
+			ctx = metadata.AppendToOutgoingContext(ctx, "test", tt.method)
 
 			s, err := cc.NewStream(ctx, tt.desc, tt.method)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			for ; i < len(tt.ins); i++ {
-				if err := s.SendMsg(tt.ins[i].msg); err != nil {
-					t.Fatal(err)
-				}
-
-				out := proto.Clone(tt.outs[i].msg)
-				if err := s.RecvMsg(out); err != nil {
-					t.Fatal(err)
-				}
-
-				diff := cmp.Diff(out, tt.outs[i].msg, cmpOpts...)
-				if diff != "" {
-					t.Fatal(diff)
+			for i := 0; i < len(tt.inouts); i++ {
+				switch typ := tt.inouts[i].(type) {
+				case in:
+					if err := s.SendMsg(typ.msg); err != nil {
+						t.Fatal(err)
+					}
+				case out:
+					out := proto.Clone(typ.msg)
+					if err := s.RecvMsg(out); err != nil {
+						t.Fatal(err)
+					}
+					diff := cmp.Diff(out, typ.msg, cmpOpts...)
+					if diff != "" {
+						t.Fatal(diff)
+					}
 				}
 			}
 		})

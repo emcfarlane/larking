@@ -35,6 +35,110 @@ import (
 	"github.com/emcfarlane/larking/testpb"
 )
 
+type in struct {
+	method string
+	msg    proto.Message
+	// TODO: headers?
+}
+
+type out struct {
+	msg proto.Message
+	err error
+	// TODO: trailers?
+}
+
+// overrides is a map of an array of in/out msgs.
+type overrides struct {
+	header string
+	inouts []interface{}
+}
+
+func (o *overrides) unary() grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req interface{},
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		md, _ := metadata.FromIncomingContext(ctx)
+		if hdr := md[o.header]; len(hdr) == 0 || info.FullMethod != hdr[0] {
+			return handler(ctx, req)
+		}
+		in, out := o.inouts[0].(in), o.inouts[1].(out)
+
+		msg := req.(proto.Message)
+		if in.method != "" && info.FullMethod != in.method {
+			return nil, fmt.Errorf("grpc expected %s, got %s", in.method, info.FullMethod)
+		}
+
+		diff := cmp.Diff(msg, in.msg, protocmp.Transform())
+		if diff != "" {
+			return nil, fmt.Errorf(diff)
+		}
+		return out.msg, out.err
+	}
+}
+
+func (o *overrides) unaryOption() grpc.ServerOption {
+	return grpc.UnaryInterceptor(o.unary())
+}
+
+func (o *overrides) stream() grpc.StreamServerInterceptor {
+	return func(
+		srv interface{},
+		stream grpc.ServerStream,
+		info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler,
+	) (err error) {
+		md, _ := metadata.FromIncomingContext(stream.Context())
+		if hdr := md[o.header]; len(hdr) == 0 || info.FullMethod != hdr[0] {
+			return handler(srv, stream)
+		}
+
+		for i, v := range o.inouts {
+			switch v := v.(type) {
+			case in:
+				//if v.method != "" && info.FullMethod != v.method {
+				//	return fmt.Errorf("grpc expected %s, got %s", v.method, info.FullMethod)
+				//}
+
+				msg := v.msg.ProtoReflect().New().Interface()
+				if err := stream.RecvMsg(msg); err != nil {
+					return err
+				}
+				diff := cmp.Diff(msg, v.msg, protocmp.Transform())
+				if diff != "" {
+					return fmt.Errorf(diff)
+				}
+
+			case out:
+				if i == 0 {
+					return fmt.Errorf("unexpected first message type: %T", v)
+				}
+
+				if err := v.err; err != nil {
+					return err // application
+				}
+				if err := stream.SendMsg(v.msg); err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("unknown override type: %T", v)
+			}
+		}
+		return nil
+	}
+}
+
+func (o *overrides) streamOption() grpc.ServerOption {
+	return grpc.StreamInterceptor(o.stream())
+}
+
+func (o *overrides) reset(header string, msgs []interface{}) {
+	o.header = header
+	o.inouts = append(o.inouts[:0], msgs...)
+}
+
 func TestMessageServer(t *testing.T) {
 
 	// Create test server.
@@ -42,43 +146,10 @@ func TestMessageServer(t *testing.T) {
 	fs := &testpb.UnimplementedFilesServer{}
 	js := &testpb.UnimplementedWellKnownServer{}
 
-	overrides := make(map[string]func(context.Context, proto.Message, string) (proto.Message, error))
-	gs := grpc.NewServer(
-		grpc.StreamInterceptor(
-			func(
-				srv interface{},
-				stream grpc.ServerStream,
-				info *grpc.StreamServerInfo,
-				handler grpc.StreamHandler,
-			) (err error) {
-				return handler(srv, stream)
-			},
-		),
-		grpc.UnaryInterceptor(
-			func(
-				ctx context.Context,
-				req interface{},
-				info *grpc.UnaryServerInfo,
-				handler grpc.UnaryHandler,
-			) (interface{}, error) {
-				md, ok := metadata.FromIncomingContext(ctx)
-				if !ok {
-					return handler(ctx, req) // default
-				}
-				ss := md["http-test"]
-				if len(ss) == 0 {
-					return handler(ctx, req) // default
-				}
-				h, ok := overrides[ss[0]]
-				if !ok {
-					return handler(ctx, req) // default
-				}
+	//overrides := make(map[string]func(context.Context, proto.Message, string) (proto.Message, error))
+	o := &overrides{}
+	gs := grpc.NewServer(o.unaryOption(), o.streamOption())
 
-				// TODO: reflection assert on handler types.
-				return h(ctx, req.(proto.Message), info.FullMethod)
-			},
-		),
-	)
 	testpb.RegisterMessagingServer(gs, ms)
 	testpb.RegisterFilesServer(gs, fs)
 	testpb.RegisterWellKnownServer(gs, js)
@@ -115,18 +186,6 @@ func TestMessageServer(t *testing.T) {
 	}
 	if err := h.RegisterConn(context.Background(), conn); err != nil {
 		t.Fatal(err)
-	}
-
-	type in struct {
-		method string
-		msg    proto.Message
-		// TODO: headers?
-	}
-
-	type out struct {
-		msg proto.Message
-		err error
-		// TODO: trailers?
 	}
 
 	type want struct {
@@ -536,23 +595,10 @@ func TestMessageServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			overrides[t.Name()] = func(
-				ctx context.Context, msg proto.Message, method string,
-			) (proto.Message, error) {
-				if method != tt.in.method {
-					return nil, fmt.Errorf("grpc expected %s, got %s", tt.in.method, method)
-				}
-
-				diff := cmp.Diff(msg, tt.in.msg, opts...)
-				if diff != "" {
-					return nil, fmt.Errorf(diff)
-				}
-				return tt.out.msg, tt.out.err
-			}
-			defer delete(overrides, t.Name())
+			o.reset("http-test", []interface{}{tt.in, tt.out})
 
 			req := tt.req
-			req.Header["test"] = []string{t.Name()}
+			req.Header["test"] = []string{tt.in.method}
 
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, req)

@@ -66,9 +66,6 @@ func TestHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	testpb.RegisterMessagingServer(m, ms)
-	//if err := m.RegisterServiceByName("larking.testpb.Messaging", ms); err != nil {
-	//	t.Fatal(err)
-	//}
 
 	w := httptest.NewRecorder()
 
