@@ -146,7 +146,6 @@ func TestMessageServer(t *testing.T) {
 	fs := &testpb.UnimplementedFilesServer{}
 	js := &testpb.UnimplementedWellKnownServer{}
 
-	//overrides := make(map[string]func(context.Context, proto.Message, string) (proto.Message, error))
 	o := &overrides{}
 	gs := grpc.NewServer(o.unaryOption(), o.streamOption())
 

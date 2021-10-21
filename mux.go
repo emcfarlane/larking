@@ -108,9 +108,11 @@ var defaultMuxOptions = muxOptions{
 }
 
 func UnaryServerInterceptorOption(interceptor grpc.UnaryServerInterceptor) MuxOption {
-	return func(opts *muxOptions) {
-		opts.unaryInterceptor = interceptor
-	}
+	return func(opts *muxOptions) { opts.unaryInterceptor = interceptor }
+}
+
+func StreamServerInterceptorOption(interceptor grpc.StreamServerInterceptor) MuxOption {
+	return func(opts *muxOptions) { opts.streamInterceptor = interceptor }
 }
 
 type Mux struct {
