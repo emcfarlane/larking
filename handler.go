@@ -131,31 +131,22 @@ func (m *Mux) registerService(gsd *grpc.ServiceDesc, ss interface{}) error {
 	return nil
 }
 
-// serverTransportStream captures server metadata in memory.
+var _ grpc.ServerTransportStream = (*serverTransportStream)(nil)
+
+// serverTransportStream wraps gprc.SeverStream to support header/trailers.
 type serverTransportStream struct {
-	method     string
-	sentHeader bool
-	header     metadata.MD
-	trailer    metadata.MD
+	grpc.ServerStream
+	method string
 }
 
 func (s *serverTransportStream) Method() string { return s.method }
 func (s *serverTransportStream) SetHeader(md metadata.MD) error {
-	if !s.sentHeader {
-		s.header = metadata.Join(s.header, md)
-	}
-	return nil
-
+	return s.ServerStream.SetHeader(md)
 }
 func (s *serverTransportStream) SendHeader(md metadata.MD) error {
-	if err := s.SetHeader(md); err != nil {
-		return err
-	}
-	s.sentHeader = true
-	return nil
+	return s.ServerStream.SendHeader(md)
 }
 func (s *serverTransportStream) SetTrailer(md metadata.MD) error {
-	s.sentHeader = true
-	s.trailer = metadata.Join(s.trailer, md)
+	s.ServerStream.SetTrailer(md)
 	return nil
 }

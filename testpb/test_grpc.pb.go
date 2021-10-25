@@ -862,3 +862,121 @@ var WellKnown_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "testpb/test.proto",
 }
+
+// ChatRoomClient is the client API for ChatRoom service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type ChatRoomClient interface {
+	Chat(ctx context.Context, opts ...grpc.CallOption) (ChatRoom_ChatClient, error)
+}
+
+type chatRoomClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewChatRoomClient(cc grpc.ClientConnInterface) ChatRoomClient {
+	return &chatRoomClient{cc}
+}
+
+func (c *chatRoomClient) Chat(ctx context.Context, opts ...grpc.CallOption) (ChatRoom_ChatClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ChatRoom_ServiceDesc.Streams[0], "/larking.testpb.ChatRoom/Chat", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &chatRoomChatClient{stream}
+	return x, nil
+}
+
+type ChatRoom_ChatClient interface {
+	Send(*ChatMessage) error
+	Recv() (*ChatMessage, error)
+	grpc.ClientStream
+}
+
+type chatRoomChatClient struct {
+	grpc.ClientStream
+}
+
+func (x *chatRoomChatClient) Send(m *ChatMessage) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *chatRoomChatClient) Recv() (*ChatMessage, error) {
+	m := new(ChatMessage)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// ChatRoomServer is the server API for ChatRoom service.
+// All implementations must embed UnimplementedChatRoomServer
+// for forward compatibility
+type ChatRoomServer interface {
+	Chat(ChatRoom_ChatServer) error
+	mustEmbedUnimplementedChatRoomServer()
+}
+
+// UnimplementedChatRoomServer must be embedded to have forward compatible implementations.
+type UnimplementedChatRoomServer struct {
+}
+
+func (UnimplementedChatRoomServer) Chat(ChatRoom_ChatServer) error {
+	return status.Errorf(codes.Unimplemented, "method Chat not implemented")
+}
+func (UnimplementedChatRoomServer) mustEmbedUnimplementedChatRoomServer() {}
+
+// UnsafeChatRoomServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ChatRoomServer will
+// result in compilation errors.
+type UnsafeChatRoomServer interface {
+	mustEmbedUnimplementedChatRoomServer()
+}
+
+func RegisterChatRoomServer(s grpc.ServiceRegistrar, srv ChatRoomServer) {
+	s.RegisterService(&ChatRoom_ServiceDesc, srv)
+}
+
+func _ChatRoom_Chat_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ChatRoomServer).Chat(&chatRoomChatServer{stream})
+}
+
+type ChatRoom_ChatServer interface {
+	Send(*ChatMessage) error
+	Recv() (*ChatMessage, error)
+	grpc.ServerStream
+}
+
+type chatRoomChatServer struct {
+	grpc.ServerStream
+}
+
+func (x *chatRoomChatServer) Send(m *ChatMessage) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *chatRoomChatServer) Recv() (*ChatMessage, error) {
+	m := new(ChatMessage)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// ChatRoom_ServiceDesc is the grpc.ServiceDesc for ChatRoom service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ChatRoom_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "larking.testpb.ChatRoom",
+	HandlerType: (*ChatRoomServer)(nil),
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Chat",
+			Handler:       _ChatRoom_Chat_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
+	Metadata: "testpb/test.proto",
+}

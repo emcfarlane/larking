@@ -1,18 +1,15 @@
 package larking
 
 import (
-	"bytes"
 	"context"
-	"io"
-	"io/ioutil"
 	"net"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/emcfarlane/larking/testpb"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -22,7 +19,7 @@ import (
 
 func TestWebsocket(t *testing.T) {
 	// Create test server.
-	fs := &testpb.UnimplementedFilesServer{}
+	fs := &testpb.UnimplementedChatRoomServer{}
 	o := &overrides{}
 
 	var g errgroup.Group
@@ -41,18 +38,24 @@ func TestWebsocket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testpb.RegisterFilesServer(s, fs)
+	testpb.RegisterChatRoomServer(s, fs)
 
 	lis, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
-	defer lis.Close()
 
-	g.Go(func() error {
-		return s.Serve(lis)
+	g.Go(func() (err error) {
+		if err := s.Serve(lis); err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		return nil
 	})
-	defer s.Shutdown(context.Background())
+	defer func() {
+		if err := s.Shutdown(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	cmpOpts := cmp.Options{protocmp.Transform()}
 	var unaryStreamDesc = &grpc.StreamDesc{
@@ -63,29 +66,37 @@ func TestWebsocket(t *testing.T) {
 	tests := []struct {
 		name   string
 		desc   *grpc.StreamDesc
+		path   string
 		method string
-		inouts []interface{}
+		client []interface{}
+		server []interface{}
 	}{{
 		name:   "unary",
 		desc:   unaryStreamDesc,
-		method: "/larking.testpb.Files/UploadDownload",
-		inouts: []interface{}{
+		path:   "/v1/rooms/chat",
+		method: "/larking.testpb.ChatRoom/Chat",
+		client: []interface{}{
 			in{
-				msg: &testpb.UploadFileRequest{
-					Filename: "cat.jpg",
-					File: &httpbody.HttpBody{
-						ContentType: "jpg",
-						Data:        []byte("large_cat"),
-					},
+				msg: &testpb.ChatMessage{
+					Text: "hello",
 				},
 			},
 			out{
-				msg: &testpb.UploadFileRequest{
-					Filename: "cat_small.jpg",
-					File: &httpbody.HttpBody{
-						ContentType: "jpg",
-						Data:        []byte("small_cat"),
-					},
+				msg: &testpb.ChatMessage{
+					Text: "world",
+				},
+			},
+		},
+		server: []interface{}{
+			in{
+				msg: &testpb.ChatMessage{
+					Name: "rooms/chat", // name added from URL path
+					Text: "hello",
+				},
+			},
+			out{
+				msg: &testpb.ChatMessage{
+					Text: "world",
 				},
 			},
 		},
@@ -93,43 +104,38 @@ func TestWebsocket(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			o.reset(t, "http-test", tt.server)
+
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
 
-			c, _, err := websocket.Dial(ctx, "ws://"+lis.Addr().String(), nil)
+			c, _, err := websocket.Dial(ctx, "ws://"+lis.Addr().String()+tt.path, &websocket.DialOptions{
+				HTTPHeader: map[string][]string{
+					"test": {tt.method},
+				},
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer c.Close(websocket.StatusInternalError, "the sky is falling")
+			defer c.Close(websocket.StatusNormalClosure, "the sky is falling")
 
-			for i := 0; i < len(tt.inouts); i++ {
-				switch typ := tt.inouts[i].(type) {
+			for i := 0; i < len(tt.client); i++ {
+				switch typ := tt.client[i].(type) {
 				case in:
-					w, err := c.Writer(ctx, websocket.MessageText)
-					if err != nil {
-						t.Fatal(err)
-					}
 					b, err := protojson.Marshal(typ.msg)
 					if err != nil {
 						t.Fatal(err)
 					}
-					if _, err := io.Copy(w, bytes.NewReader(b)); err != nil {
-						t.Fatal(err)
-					}
-					if err := w.Close(); err != nil {
+					if err := c.Write(ctx, websocket.MessageText, b); err != nil {
 						t.Fatal(err)
 					}
 
 				case out:
-					_, r, err := c.Reader(ctx)
+					mt, b, err := c.Read(ctx)
 					if err != nil {
-						t.Fatal(err)
+						t.Fatal(mt, err)
 					}
-
-					b, err := ioutil.ReadAll(r)
-					if err != nil {
-						t.Fatal(err)
-					}
+					t.Log("b", string(b))
 
 					out := proto.Clone(typ.msg)
 					if err := protojson.Unmarshal(b, out); err != nil {
@@ -141,6 +147,7 @@ func TestWebsocket(t *testing.T) {
 					}
 				}
 			}
+			c.Close(websocket.StatusNormalClosure, "normal")
 		})
 	}
 }

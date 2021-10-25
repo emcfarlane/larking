@@ -7,6 +7,7 @@ package larking
 import (
 	"context"
 	"net"
+	"net/http"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -68,10 +69,16 @@ func TestServer(t *testing.T) {
 	defer lisProxy.Close()
 
 	g.Go(func() error {
-		return ts.Serve(lisProxy)
+		if err := ts.Serve(lisProxy); err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		return nil
 	})
-	//defer ts.Stop()
-	defer ts.Close()
+	defer func() {
+		if err := ts.Shutdown(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	cc, err := grpc.Dial(lisProxy.Addr().String(), grpc.WithInsecure())
 	if err != nil {
@@ -104,7 +111,7 @@ func TestServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			o.reset("test", tt.inouts)
+			o.reset(t, "test", tt.inouts)
 
 			ctx := context.Background()
 			ctx = metadata.AppendToOutgoingContext(ctx, "test", tt.method)

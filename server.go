@@ -12,11 +12,11 @@ import (
 	"net"
 	"net/http"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/soheilhy/cmux"
 	"golang.org/x/net/trace"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -105,11 +105,16 @@ func (s *Server) Serve(l net.Listener) error {
 
 	// TODO: metrics/debug http server...?
 
-	go func() { errs <- m.Serve() }()
+	go func() {
+		if err := m.Serve(); !strings.Contains(err.Error(), "use of closed") {
+			errs <- err
+		}
+
+	}()
 
 	select {
 	case <-s.closer:
-		return nil
+		return http.ErrServerClosed
 
 	case err := <-errs:
 		return err
@@ -117,33 +122,25 @@ func (s *Server) Serve(l net.Listener) error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	if s.closer == nil {
-		return nil
-	}
-
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		return s.hs.Shutdown(ctx)
-	})
-	g.Go(func() error {
-		s.gs.GracefulStop()
-		return nil
-	})
-	if err := g.Wait(); err != nil {
-		return err
-	}
 	if s.events != nil {
 		s.events.Finish()
 		s.events = nil
 	}
-	return s.Close()
+	if s.closer == nil {
+		return nil
+	}
+	close(s.closer)
+	s.gs.GracefulStop()
+	if err := s.hs.Shutdown(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Server) Close() error {
-	if s.closer != nil {
-		close(s.closer)
-	}
-	return nil
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return s.Shutdown(ctx)
 }
 
 const (

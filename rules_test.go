@@ -49,6 +49,7 @@ type out struct {
 
 // overrides is a map of an array of in/out msgs.
 type overrides struct {
+	testing.TB
 	header string
 	inouts []interface{}
 }
@@ -68,12 +69,15 @@ func (o *overrides) unary() grpc.UnaryServerInterceptor {
 
 		msg := req.(proto.Message)
 		if in.method != "" && info.FullMethod != in.method {
-			return nil, fmt.Errorf("grpc expected %s, got %s", in.method, info.FullMethod)
+			err := fmt.Errorf("grpc expected %s, got %s", in.method, info.FullMethod)
+			o.Log(err)
+			return nil, err
 		}
 
 		diff := cmp.Diff(msg, in.msg, protocmp.Transform())
 		if diff != "" {
-			return nil, fmt.Errorf(diff)
+			o.Log(diff)
+			return nil, fmt.Errorf("message didn't match")
 		}
 		return out.msg, out.err
 	}
@@ -104,11 +108,13 @@ func (o *overrides) stream() grpc.StreamServerInterceptor {
 
 				msg := v.msg.ProtoReflect().New().Interface()
 				if err := stream.RecvMsg(msg); err != nil {
+					o.Log(err)
 					return err
 				}
 				diff := cmp.Diff(msg, v.msg, protocmp.Transform())
 				if diff != "" {
-					return fmt.Errorf(diff)
+					o.Log(diff)
+					return fmt.Errorf("message didn't match")
 				}
 
 			case out:
@@ -117,9 +123,11 @@ func (o *overrides) stream() grpc.StreamServerInterceptor {
 				}
 
 				if err := v.err; err != nil {
+					o.Log(err)
 					return err // application
 				}
 				if err := stream.SendMsg(v.msg); err != nil {
+					o.Log(err)
 					return err
 				}
 			default:
@@ -134,7 +142,8 @@ func (o *overrides) streamOption() grpc.ServerOption {
 	return grpc.StreamInterceptor(o.stream())
 }
 
-func (o *overrides) reset(header string, msgs []interface{}) {
+func (o *overrides) reset(t testing.TB, header string, msgs []interface{}) {
+	o.TB = t
 	o.header = header
 	o.inouts = append(o.inouts[:0], msgs...)
 }
@@ -594,7 +603,7 @@ func TestMessageServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			o.reset("http-test", []interface{}{tt.in, tt.out})
+			o.reset(t, "http-test", []interface{}{tt.in, tt.out})
 
 			req := tt.req
 			req.Header["test"] = []string{tt.in.method}

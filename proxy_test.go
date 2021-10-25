@@ -147,7 +147,7 @@ func TestGRPCProxy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			o.reset("test", tt.inouts)
+			o.reset(t, "test", tt.inouts)
 
 			ctx := context.Background()
 			ctx = metadata.AppendToOutgoingContext(ctx, "test", tt.method)

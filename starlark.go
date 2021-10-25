@@ -123,9 +123,12 @@ func (s *StarlarkService) AttrNames() []string {
 }
 
 type streamStar struct {
-	serverTransportStream
-
 	ctx        context.Context
+	method     string
+	sentHeader bool
+	header     metadata.MD
+	trailer    metadata.MD
+
 	starArgs   starlark.Tuple
 	starKwargs []starlark.Tuple
 
@@ -133,15 +136,31 @@ type streamStar struct {
 	replies []proto.Message
 }
 
-func (s *streamStar) SetTrailer(md metadata.MD) {
-	if err := s.serverTransportStream.SetTrailer(md); err != nil {
-		panic(err)
+func (s *streamStar) SetHeader(md metadata.MD) error {
+	if !s.sentHeader {
+		s.header = metadata.Join(s.header, md)
 	}
+	return nil
+
+}
+func (s *streamStar) SendHeader(md metadata.MD) error {
+	if s.sentHeader {
+		return nil // already sent?
+	}
+	// TODO: write header?
+	s.sentHeader = true
+	return nil
+}
+
+func (s *streamStar) SetTrailer(md metadata.MD) {
+	s.sentHeader = true
+	s.trailer = metadata.Join(s.trailer, md)
 }
 
 func (s *streamStar) Context() context.Context {
-	ctx := newIncomingContext(s.ctx, nil)
-	return grpc.NewContextWithServerTransportStream(ctx, &s.serverTransportStream)
+	ctx := newIncomingContext(s.ctx, nil) // TODO: remove me?
+	sts := &serverTransportStream{s, s.method}
+	return grpc.NewContextWithServerTransportStream(ctx, sts)
 }
 
 func (s *streamStar) SendMsg(m interface{}) error {
@@ -175,7 +194,6 @@ func (s *streamStar) RecvMsg(m interface{}) error {
 type StarlarkMethod struct {
 	mux *Mux
 	hd  *handler
-	//method string
 	// Callable
 }
 
@@ -194,6 +212,7 @@ func (s *StarlarkMethod) CallInternal(thread *starlark.Thread, args starlark.Tup
 	opts := &s.mux.opts
 	stream := &streamStar{
 		ctx:        ctx,
+		method:     s.hd.method,
 		starArgs:   args,
 		starKwargs: kwargs,
 	}

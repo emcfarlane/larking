@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"google.golang.org/grpc/codes"
+	"nhooyr.io/websocket"
 )
 
 var codeToHTTPStatus = [...]int{
@@ -35,4 +36,32 @@ func HTTPStatusCode(c codes.Code) int {
 		return http.StatusInternalServerError
 	}
 	return codeToHTTPStatus[c]
+}
+
+// TODO: validate error codes.
+var codeToWSStatus = [...]websocket.StatusCode{
+	websocket.StatusNormalClosure,   // 0
+	websocket.StatusGoingAway,       // 1
+	websocket.StatusInternalError,   // 2
+	websocket.StatusUnsupportedData, // 3
+	websocket.StatusGoingAway,       // 4
+	websocket.StatusInternalError,   // 5
+	websocket.StatusInternalError,   // 6
+	websocket.StatusInternalError,   // 7
+	websocket.StatusInternalError,   // 8
+	websocket.StatusInternalError,   // 9
+	websocket.StatusInternalError,   // 10
+	websocket.StatusInternalError,   // 11
+	websocket.StatusUnsupportedData, // 12
+	websocket.StatusInternalError,   // 13
+	websocket.StatusInternalError,   // 14
+	websocket.StatusInternalError,   // 15
+	websocket.StatusPolicyViolation, // 16
+}
+
+func WSStatusCode(c codes.Code) websocket.StatusCode {
+	if int(c) > len(codeToHTTPStatus) {
+		return websocket.StatusInternalError
+	}
+	return codeToWSStatus[c]
 }
