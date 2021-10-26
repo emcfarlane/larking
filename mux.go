@@ -6,9 +6,12 @@ package larking
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -31,6 +34,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
+	"nhooyr.io/websocket"
 )
 
 // RO
@@ -108,9 +112,11 @@ var defaultMuxOptions = muxOptions{
 }
 
 func UnaryServerInterceptorOption(interceptor grpc.UnaryServerInterceptor) MuxOption {
-	return func(opts *muxOptions) {
-		opts.unaryInterceptor = interceptor
-	}
+	return func(opts *muxOptions) { opts.unaryInterceptor = interceptor }
+}
+
+func StreamServerInterceptorOption(interceptor grpc.StreamServerInterceptor) MuxOption {
+	return func(opts *muxOptions) { opts.streamInterceptor = interceptor }
 }
 
 type Mux struct {
@@ -237,13 +243,12 @@ func (r *resolver) FindDescriptorByName(fullname protoreflect.FullName) (protore
 func (s *state) appendHandler(
 	rule *annotations.HttpRule,
 	desc protoreflect.MethodDescriptor,
-	name string,
 	h *handler,
 ) error {
-	if err := s.path.addRule(rule, desc, name); err != nil {
+	if err := s.path.addRule(rule, desc, h.method); err != nil {
 		return err
 	}
-	s.handlers[name] = append(s.handlers[name], h)
+	s.handlers[h.method] = append(s.handlers[h.method], h)
 	return nil
 }
 
@@ -391,7 +396,7 @@ func (s *state) createConnHandler(
 			IsServerStream: isServerStream,
 		}
 
-		fn := func(srv interface{}, stream grpc.ServerStream) error {
+		fn := func(_ interface{}, stream grpc.ServerStream) error {
 			ctx := stream.Context()
 
 			args := dynamicpb.NewMessage(argsDesc)
@@ -526,11 +531,9 @@ func (s *state) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor)
 				continue
 			}
 
-			method := fmt.Sprintf("/%s/%s", sd.FullName(), md.Name())
-
 			hd := s.createConnHandler(cc, sd, md, rule)
 
-			if err := s.appendHandler(rule, md, method, hd); err != nil {
+			if err := s.appendHandler(rule, md, hd); err != nil {
 				return nil, err
 			}
 			handlers = append(handlers, hd)
@@ -557,94 +560,185 @@ func (s *state) pickMethodHandler(name string) (*handler, error) {
 	return hd, nil
 }
 
-func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	m.serveHTTP(w, r)
-}
-
 type streamHTTP struct {
-	serverTransportStream
+	ctx    context.Context
 	w      http.ResponseWriter
 	r      *http.Request
 	method *method
 	params params
+	recvN  int
+	sendN  int
+
+	sentHeader bool
+	header     metadata.MD
+	trailer    metadata.MD
+}
+
+func (s *streamHTTP) SetHeader(md metadata.MD) error {
+	if !s.sentHeader {
+		s.header = metadata.Join(s.header, md)
+	}
+	return nil
+
+}
+func (s *streamHTTP) SendHeader(md metadata.MD) error {
+	if s.sentHeader {
+		return nil // already sent?
+	}
+	setOutgoingHeader(s.w.Header(), s.header, s.trailer)
+	s.w.WriteHeader(http.StatusOK)
+	s.sentHeader = true
+	return nil
 }
 
 func (s *streamHTTP) SetTrailer(md metadata.MD) {
-	if err := s.serverTransportStream.SetTrailer(md); err != nil {
-		panic(err)
-	}
+	s.sentHeader = true
+	s.trailer = metadata.Join(s.trailer, md)
 }
 
 func (s *streamHTTP) Context() context.Context {
-	ctx := newIncomingContext(s.r.Context(), s.r.Header)
-	return grpc.NewContextWithServerTransportStream(ctx, &s.serverTransportStream)
+	sts := &serverTransportStream{s, s.method.name}
+	return grpc.NewContextWithServerTransportStream(s.ctx, sts)
 }
 
 func (s *streamHTTP) SendMsg(m interface{}) error {
+	s.sendN += 1
 	reply := m.(proto.Message)
 
-	return s.method.encodeResponseReply(reply, s.w, s.r, s.header, s.trailer)
+	acceptEncoding := s.r.Header.Get("Accept-Encoding")
+
+	if fRsp, ok := s.w.(http.Flusher); ok {
+		defer fRsp.Flush()
+	}
+
+	setOutgoingHeader(s.w.Header(), s.header, s.trailer)
+
+	var resp io.Writer
+	switch acceptEncoding {
+	case "gzip":
+		s.w.Header().Set("Content-Encoding", "gzip")
+		gRsp := gzip.NewWriter(s.w)
+		defer gRsp.Close()
+		resp = gRsp
+
+	default:
+		resp = s.w
+	}
+
+	cur := reply.ProtoReflect()
+	for _, fd := range s.method.resp {
+		cur = cur.Mutable(fd).Message()
+	}
+
+	msg := cur.Interface()
+
+	switch cur.Descriptor().FullName() {
+	case "google.api.HttpBody":
+		fds := cur.Descriptor().Fields()
+		fdContentType := fds.ByName(protoreflect.Name("content_type"))
+		fdData := fds.ByName(protoreflect.Name("data"))
+		pContentType := cur.Get(fdContentType)
+		pData := cur.Get(fdData)
+
+		s.w.Header().Set("Content-Type", pContentType.String())
+		if _, err := io.Copy(resp, bytes.NewReader(pData.Bytes())); err != nil {
+			return err
+		}
+		return nil
+
+	default:
+		// TODO: contentType check?
+		b, err := protojson.Marshal(msg)
+		if err != nil {
+			return err
+		}
+
+		s.w.Header().Set("Content-Type", "application/json")
+		if _, err := io.Copy(resp, bytes.NewReader(b)); err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+func (s *streamHTTP) decodeRequestArgs(args proto.Message) error {
+	contentType := s.r.Header.Get("Content-Type")
+	contentEncoding := s.r.Header.Get("Content-Encoding")
+
+	var body io.ReadCloser
+	switch contentEncoding {
+	case "gzip":
+		var err error
+		body, err = gzip.NewReader(s.r.Body)
+		if err != nil {
+			return err
+		}
+
+	default:
+		body = s.r.Body
+	}
+	defer body.Close()
+
+	// TODO: mux options.
+	b, err := ioutil.ReadAll(io.LimitReader(body, 1024*1024*2))
+	if err != nil {
+		return err
+	}
+
+	cur := args.ProtoReflect()
+	for _, fd := range s.method.body {
+		cur = cur.Mutable(fd).Message()
+	}
+	fullname := cur.Descriptor().FullName()
+
+	msg := cur.Interface()
+
+	switch fullname {
+	case "google.api.HttpBody":
+		rfl := msg.ProtoReflect()
+		fds := rfl.Descriptor().Fields()
+		fdContentType := fds.ByName(protoreflect.Name("content_type"))
+		fdData := fds.ByName(protoreflect.Name("data"))
+		rfl.Set(fdContentType, protoreflect.ValueOfString(contentType))
+		rfl.Set(fdData, protoreflect.ValueOfBytes(b))
+		// TODO: extensions?
+
+	default:
+		// TODO: contentType check?
+		// What marshalling options should we support?
+		if err := protojson.Unmarshal(b, msg); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *streamHTTP) RecvMsg(m interface{}) error {
+	s.recvN += 1
 	args := m.(proto.Message)
 
 	// TODO: fix the body marshalling
 	if s.method.hasBody {
 		// TODO: handler should decide what to select on?
-		if err := s.method.decodeRequestArgs(args, s.r); err != nil {
+		if err := s.decodeRequestArgs(args); err != nil {
 			return err
 		}
 	}
-	if err := s.params.set(args); err != nil {
-		return err
+	if s.recvN == 1 {
+		if err := s.params.set(args); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (m *Mux) proxyHTTP(w http.ResponseWriter, r *http.Request) error {
-	if !strings.HasPrefix(r.URL.Path, "/") {
-		r.URL.Path = "/" + r.URL.Path
+func isWebsocketRequest(r *http.Request) bool {
+	for _, header := range r.Header["Upgrade"] {
+		if header == "websocket" {
+			return true
+		}
 	}
-
-	// TOOD: debug flag?
-	//d, err := httputil.DumpRequest(r, true)
-	//if err != nil {
-	//	return err
-	//}
-
-	s := m.loadState()
-
-	method, params, err := s.path.match(r.URL.Path, r.Method)
-	if err != nil {
-		return err
-	}
-
-	hd, err := s.pickMethodHandler(method.name)
-	if err != nil {
-		return err
-	}
-
-	queryParams, err := method.parseQueryParams(r.URL.Query())
-	if err != nil {
-		return err
-	}
-	params = append(params, queryParams...)
-
-	stream := &streamHTTP{
-		serverTransportStream: serverTransportStream{
-			method: method.name,
-		},
-		w: w, r: r,
-		method: method,
-		params: params,
-	}
-
-	if err := hd.handler(&m.opts, stream); err != nil {
-		setOutgoingHeader(w.Header(), stream.header, stream.trailer)
-		return err
-	}
-	return nil
+	return false
 }
 
 func encError(w http.ResponseWriter, err error) {
@@ -659,8 +753,75 @@ func encError(w http.ResponseWriter, err error) {
 	w.Write(b) //nolint
 }
 
-func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) {
-	if err := m.proxyHTTP(w, r); err != nil {
+func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
+	ctx := newIncomingContext(r.Context(), r.Header)
+
+	// TOOD: debug flag?
+	//d, err := httputil.DumpRequest(r, true)
+	//if err != nil {
+	//	return err
+	//}
+
+	s := m.loadState()
+	isWebsocket := isWebsocketRequest(r)
+
+	verb := r.Method
+	if isWebsocket {
+		verb = kindWebsocket
+	}
+
+	method, params, err := s.path.match(r.URL.Path, verb)
+	if err != nil {
+		return err
+	}
+
+	queryParams, err := method.parseQueryParams(r.URL.Query())
+	if err != nil {
+		return err
+	}
+	params = append(params, queryParams...)
+
+	hd, err := s.pickMethodHandler(method.name)
+	if err != nil {
+		return err
+	}
+
+	if isWebsocket {
+		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{})
+		if err != nil {
+			return err
+		}
+
+		stream := &streamWS{
+			ctx:    ctx,
+			conn:   c,
+			method: method,
+			params: params,
+		}
+		if err := hd.handler(&m.opts, stream); err != nil {
+			s, _ := status.FromError(err)
+			// TODO: limit message size.
+			c.Close(WSStatusCode(s.Code()), s.Message()) // TODO
+			return nil
+		}
+		c.Close(websocket.StatusNormalClosure, "OK") // TODO
+		return nil
+	}
+
+	stream := &streamHTTP{
+		ctx: ctx,
+		w:   w, r: r,
+		method: method,
+		params: params,
+	}
+	return hd.handler(&m.opts, stream)
+}
+
+func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if !strings.HasPrefix(r.URL.Path, "/") {
+		r.URL.Path = "/" + r.URL.Path
+	}
+	if err := m.serveHTTP(w, r); err != nil {
 		encError(w, err)
 	}
 }

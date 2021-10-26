@@ -6,13 +6,10 @@ package larking
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"net/textproto"
 	"net/url"
@@ -60,6 +57,7 @@ type path struct {
 	segments  map[string]*path   // maps constants to path routes
 	variables variables          // sorted array of variables
 	methods   map[string]*method // maps http methods to grpc methods
+	methodAll *method            // maps kind '*'
 }
 
 func (p *path) String() string {
@@ -198,6 +196,7 @@ func (p *path) clone() *path {
 	for k, m := range p.methods {
 		pc.methods[k] = m // RO
 	}
+	pc.methodAll = p.methodAll
 
 	return pc
 }
@@ -257,7 +256,7 @@ func (p *path) addRule(
 		verb = http.MethodPatch
 		tmpl = v.Patch
 	case *annotations.HttpRule_Custom:
-		verb = v.Custom.Kind
+		verb = strings.ToUpper(v.Custom.Kind)
 		tmpl = v.Custom.Path
 	default:
 		return fmt.Errorf("unsupported pattern %v", v)
@@ -354,7 +353,7 @@ func (p *path) addRule(
 		invalid(tok)
 	}
 
-	if _, ok := cursor.methods[verb]; ok {
+	if _, ok := cursor.methods[verb]; ok || cursor.methodAll != nil {
 		return fmt.Errorf("duplicate rule %v", rule)
 	}
 
@@ -385,7 +384,12 @@ func (p *path) addRule(
 		}
 	}
 
-	cursor.methods[verb] = m // register method
+	// register method
+	if verb == "*" {
+		cursor.methodAll = m
+	} else {
+		cursor.methods[verb] = m
+	}
 
 	for _, addRule := range rule.AdditionalBindings {
 		if len(addRule.AdditionalBindings) != 0 {
@@ -687,8 +691,11 @@ func (v *variable) index(toks tokens) int {
 // Variables split the search tree:
 //     /path/{variable/*}/to/{end/**} ?:VERB
 func (p *path) search(toks tokens, verb string) (*method, params, error) {
-	if n := len(toks); n == 0 || n == 1 {
+	if n := len(toks); n <= 1 {
 		if m, ok := p.methods[verb]; ok {
+			return m, nil, nil
+		}
+		if m := p.methodAll; m != nil {
 			return m, nil, nil
 		}
 		return nil, nil, status.Error(codes.NotFound, "not found")
@@ -735,7 +742,7 @@ func (p *path) search(toks tokens, verb string) (*method, params, error) {
 func (p *path) match(route, verb string) (*method, params, error) {
 	l := &lexer{input: route}
 	if err := lexPath(l); err != nil {
-		return nil, nil, err
+		return nil, nil, status.Errorf(codes.NotFound, "not found: %v", err)
 	}
 	return p.search(l.toks, verb)
 }
@@ -763,118 +770,4 @@ func setOutgoingHeader(header http.Header, mds ...metadata.MD) {
 			header[textproto.CanonicalMIMEHeaderKey(k)] = vs
 		}
 	}
-}
-
-func (m *method) decodeRequestArgs(args proto.Message, r *http.Request) error {
-	contentType := r.Header.Get("Content-Type")
-	contentEncoding := r.Header.Get("Content-Encoding")
-
-	var body io.ReadCloser
-	switch contentEncoding {
-	case "gzip":
-		var err error
-		body, err = gzip.NewReader(r.Body)
-		if err != nil {
-			return err
-		}
-
-	default:
-		body = r.Body
-	}
-	defer body.Close()
-
-	// TODO: mux options.
-	b, err := ioutil.ReadAll(io.LimitReader(body, 1024*1024*2))
-	if err != nil {
-		return err
-	}
-
-	cur := args.ProtoReflect()
-	for _, fd := range m.body {
-		cur = cur.Mutable(fd).Message()
-	}
-	fullname := cur.Descriptor().FullName()
-
-	msg := cur.Interface()
-
-	switch fullname {
-	case "google.api.HttpBody":
-		rfl := msg.ProtoReflect()
-		fds := rfl.Descriptor().Fields()
-		fdContentType := fds.ByName(protoreflect.Name("content_type"))
-		fdData := fds.ByName(protoreflect.Name("data"))
-		rfl.Set(fdContentType, protoreflect.ValueOfString(contentType))
-		rfl.Set(fdData, protoreflect.ValueOfBytes(b))
-		// TODO: extensions?
-
-	default:
-		// TODO: contentType check?
-		// What marshalling options should we support?
-		if err := protojson.Unmarshal(b, msg); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (m *method) encodeResponseReply(
-	reply proto.Message, w http.ResponseWriter, r *http.Request,
-	header, trailer metadata.MD,
-) error {
-	//accept := r.Header.Get("Accept")
-	acceptEncoding := r.Header.Get("Accept-Encoding")
-
-	if fRsp, ok := w.(http.Flusher); ok {
-		defer fRsp.Flush()
-	}
-
-	setOutgoingHeader(w.Header(), header, trailer)
-
-	var resp io.Writer
-	switch acceptEncoding {
-	case "gzip":
-		w.Header().Set("Content-Encoding", "gzip")
-		gRsp := gzip.NewWriter(w)
-		defer gRsp.Close()
-		resp = gRsp
-
-	default:
-		resp = w
-	}
-
-	cur := reply.ProtoReflect()
-	for _, fd := range m.resp {
-		cur = cur.Mutable(fd).Message()
-	}
-
-	msg := cur.Interface()
-
-	switch cur.Descriptor().FullName() {
-	case "google.api.HttpBody":
-		rfl := msg.ProtoReflect()
-		fds := rfl.Descriptor().Fields()
-		fdContentType := fds.ByName(protoreflect.Name("content_type"))
-		fdData := fds.ByName(protoreflect.Name("data"))
-		pContentType := rfl.Get(fdContentType)
-		pData := rfl.Get(fdData)
-
-		w.Header().Set("Content-Type", pContentType.String())
-		if _, err := io.Copy(resp, bytes.NewReader(pData.Bytes())); err != nil {
-			return err
-		}
-
-	default:
-		// TODO: contentType check?
-		b, err := protojson.Marshal(msg)
-		if err != nil {
-			return err
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		if _, err := io.Copy(resp, bytes.NewReader(b)); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }

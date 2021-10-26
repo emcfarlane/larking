@@ -244,3 +244,18 @@ message UpdateBookRequest {
   // https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#fieldmask
   google.protobuf.FieldMask update_mask = 2;
 }
+
+message ChatMessage {
+  string name = 1;
+  string text = 2;
+}
+
+// Chatroom shows the websocket extension.
+service ChatRoom {
+  rpc Chat(stream ChatMessage) returns (stream ChatMessage) {
+    option (google.api.http) = {
+      custom : {kind : "websocket" path : "/v1/{name=rooms/*}"}
+      body : "*"
+    };
+  }
+}
