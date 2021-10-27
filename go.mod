@@ -12,6 +12,7 @@ require (
 	github.com/peterh/liner v1.2.1 // indirect
 	github.com/soheilhy/cmux v0.1.5
 	go.starlark.net v0.0.0-20210602144842-1cdb82c9e17a
+	gocloud.dev v0.24.0 // indirect
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	golang.org/x/net v0.0.0-20211020060615-d418f374d309
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
