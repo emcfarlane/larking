@@ -186,6 +186,10 @@ func makeArgs(args starlark.Tuple) ([]interface{}, error) {
 	return xs, nil
 }
 
+func dbBeginTx(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	return nil, nil // TODO: Create struct TX.
+}
+
 func dbExec(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	v := b.Receiver().(*DB)
 
@@ -195,13 +199,11 @@ func dbExec(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, k
 	}
 	var query string
 	if err := starlark.UnpackPositionalArgs("sql.db.exex", queryArgs, kwargs, 1, &query); err != nil {
-		fmt.Println("here?", query)
 		return nil, err
 	}
 
 	dbArgs, err := makeArgs(args[1:])
 	if err != nil {
-		fmt.Println("orHere", dbArgs, args)
 		return nil, err
 	}
 
@@ -242,13 +244,16 @@ func dbQuery(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, 
 		return nil, err
 	}
 	columns := make([]string, len(cols))
+	mapping := make(map[string]int, len(cols))
 	for i, col := range cols {
 		columns[i] = col.Name()
+		mapping[col.Name()] = i
 	}
 
 	// TODO: resource
 	return &Rows{
 		columns: columns,
+		mapping: mapping,
 		rows:    rows,
 	}, nil
 }
@@ -292,7 +297,6 @@ func dbQueryRow(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tupl
 
 	m := make(map[string]int, len(columns))
 	x := &Row{
-		columns: columns,
 		mapping: m,
 		values:  make([]starlark.Value, len(columns)),
 	}
@@ -325,6 +329,7 @@ func dbPing(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, k
 
 type Rows struct {
 	columns []string
+	mapping map[string]int
 	rows    *sql.Rows
 
 	frozen   bool
@@ -352,16 +357,13 @@ func (v *Rows) Next(p *starlark.Value) bool {
 		return false
 	}
 
-	m := make(map[string]int, len(v.columns))
 	x := &Row{
-		columns: v.columns,
-		mapping: m,
+		mapping: v.mapping,
 		values:  make([]starlark.Value, len(v.columns)),
 	}
 
 	dest := make([]interface{}, len(v.columns))
-	for i, name := range v.columns {
-		m[name] = i
+	for i := range v.columns {
 		dest[i] = x.scanAt(i)
 	}
 
@@ -375,12 +377,11 @@ func (v *Rows) Done() {
 }
 
 type Row struct {
-	columns []string
 	mapping map[string]int
 	values  []starlark.Value
 }
 
-func (v *Row) String() string        { return fmt.Sprintf("<row %q>", strings.Join(v.columns, ", ")) }
+func (v *Row) String() string        { return fmt.Sprintf("<row %q>", strings.Join(v.AttrNames(), ", ")) }
 func (v *Row) Type() string          { return "sql.row" }
 func (v *Row) Freeze()               {} // immutable
 func (v *Row) Truth() starlark.Bool  { return len(v.values) > 0 }
@@ -401,7 +402,7 @@ func (v *Row) AttrNames() []string {
 	return names
 }
 func (v *Row) Index(i int) starlark.Value { return v.values[i] }
-func (v *Row) Len() int                   { return len(v.columns) }
+func (v *Row) Len() int                   { return len(v.mapping) }
 
 type scanFn func(value interface{}) error
 
