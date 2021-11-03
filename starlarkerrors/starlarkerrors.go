@@ -55,7 +55,6 @@ func (e Error) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %
 var errorMethods = map[string]*starlark.Builtin{
 	"matches": starlark.NewBuiltin("errors.error.matches", errorMatches),
 	"kind":    starlark.NewBuiltin("errors.error.kind", errorKind),
-	"unwrap":  starlark.NewBuiltin("errors.error.unwrap", errorUnwrap),
 }
 
 func (e Error) Attr(name string) (starlark.Value, error) {
@@ -98,15 +97,6 @@ func errorKind(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwa
 	}
 	ok := errors.Is(e.err, err.err)
 	return starlark.Bool(ok), nil
-}
-
-func errorUnwrap(_ *starlark.Thread, b *starlark.Builtin, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
-	e := b.Receiver().(Error)
-	err := errors.Unwrap(e.err)
-	if err == nil {
-		return starlark.None, nil
-	}
-	return Error{err: err}, nil
 }
 
 type Result struct {

@@ -24,11 +24,6 @@ func load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
 }
 
 // ioEOF fails with an io.EOF error.
-func ioEOFWrapped(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return nil, io.EOF
-}
-
-// ioEOF fails with an io.EOF error.
 func ioEOF(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	return nil, io.EOF
 }
@@ -37,11 +32,10 @@ func TestExecFile(t *testing.T) {
 	thread := &starlark.Thread{Load: load}
 	starlarktest.SetReporter(thread, t)
 	globals := starlark.StringDict{
-		"struct":         starlark.NewBuiltin("struct", starlarkstruct.Make),
-		"errors":         NewModule(),
-		"io_eof":         NewError(io.EOF),
-		"io_eof_wrapped": NewError(fmt.Errorf("wrapped: %w", io.EOF)),
-		"io_eof_func":    starlark.NewBuiltin("io_eof_func", ioEOF),
+		"struct":      starlark.NewBuiltin("struct", starlarkstruct.Make),
+		"errors":      NewModule(),
+		"io_eof":      NewError(io.EOF),
+		"io_eof_func": starlark.NewBuiltin("io_eof_func", ioEOF),
 	}
 
 	files, err := filepath.Glob("testdata/*.star")

@@ -35,3 +35,8 @@ assert.true(r3.err)
 
 # check error is type of io.EOF error
 assert.true(r3.err.kind(io_eof))
+
+# TODO: handle extracting error values
+#path_err = r4.err.as(io_path_err)
+#if path_err:
+#    print("got path error")
