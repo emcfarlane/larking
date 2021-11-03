@@ -6,6 +6,7 @@ package starlarkthread
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"go.starlark.net/starlark"
@@ -35,26 +36,45 @@ type Resource interface {
 
 const rsckey = "resources"
 
-func AddResource(thread *starlark.Thread, rsc Resource) {
-	if rscs, ok := thread.Local(rsckey).(*[]Resource); ok {
-		*rscs = append(*rscs, rsc)
-	}
-	thread.SetLocal(rsckey, &[]Resource{rsc})
+// ResourceStore is a thread local storage map for adding resources.
+type ResourceStore map[Resource]bool // resource whether it's living
+
+// WithResourceStore returns a cleanup function. It is required for
+// packages that add resources.
+func WithResourceStore(thread *starlark.Thread) func() error {
+	store := make(ResourceStore)
+	thread.SetLocal(rsckey, store)
+	return func() error { return CloseResources(thread) }
 }
 
-func Resources(thread *starlark.Thread) []Resource {
-	if rscs, ok := thread.Local(rsckey).(*[]Resource); ok {
-		return *rscs
+func AddResource(thread *starlark.Thread, rsc Resource) error {
+	// runtime.SetFinalizer?
+	//
+	store, ok := thread.Local(rsckey).(ResourceStore)
+	if !ok {
+		return fmt.Errorf("invalid thread resource store")
+	}
+	store[rsc] = true
+	return nil
+}
+
+func Resources(thread *starlark.Thread) ResourceStore {
+	if store, ok := thread.Local(rsckey).(ResourceStore); ok {
+		return store
 	}
 	return nil
 }
 
-func CloseResources(thread *starlark.Thread) error {
-	rscs := Resources(thread)
-	for _, rsc := range rscs {
-		if err := rsc.Close(); err != nil {
-			return err
+func CloseResources(thread *starlark.Thread) (firstErr error) {
+	store := Resources(thread)
+	for rsc, open := range store {
+		if !open {
+			continue
 		}
+		if err := rsc.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		store[rsc] = false
 	}
-	return nil
+	return
 }

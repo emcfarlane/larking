@@ -23,7 +23,10 @@ func load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
 	return nil, fmt.Errorf("unknown module %s", module)
 }
 
-//
+// ioEOF fails with an io.EOF error.
+func ioEOFWrapped(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	return nil, io.EOF
+}
 
 // ioEOF fails with an io.EOF error.
 func ioEOF(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {

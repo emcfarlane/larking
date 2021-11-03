@@ -1,4 +1,4 @@
-# Tests of Starlark 'proto' extension.
+# Tests of Starlark 'blob' extension.
 
 load("assert.star", "assert")
 

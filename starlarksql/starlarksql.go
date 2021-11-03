@@ -1,3 +1,7 @@
+// Copyright 2021 Edward McFarlane. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package starlarksql
 
 import (
@@ -10,6 +14,7 @@ import (
 	"time"
 
 	"github.com/emcfarlane/larking/starlarkthread"
+	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"gocloud.dev/mysql"
@@ -76,10 +81,14 @@ func Open(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwa
 		return nil, err
 	}
 
-	return &DB{
+	v := &DB{
 		name: name,
 		db:   db,
-	}, nil
+	}
+	if err := starlarkthread.AddResource(thread, v); err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 type DB struct {
@@ -104,6 +113,7 @@ var dbMethods = map[string]*starlark.Builtin{
 	"query":     starlark.NewBuiltin("sql.db.query", dbQuery),
 	"query_row": starlark.NewBuiltin("sql.db.query_row", dbQueryRow),
 	"ping":      starlark.NewBuiltin("sql.db.ping", dbPing),
+	"close":     starlark.NewBuiltin("sql.db.close", dbClose),
 }
 
 func (v *DB) Attr(name string) (starlark.Value, error) {
@@ -250,12 +260,15 @@ func dbQuery(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, 
 		mapping[col.Name()] = i
 	}
 
-	// TODO: resource
-	return &Rows{
+	r := &Rows{
 		columns: columns,
 		mapping: mapping,
 		rows:    rows,
-	}, nil
+	}
+	if err := starlarkthread.AddResource(thread, r); err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 func dbQueryRow(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -327,6 +340,14 @@ func dbPing(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, k
 	return starlark.None, nil
 }
 
+func dbClose(_ *starlark.Thread, b *starlark.Builtin, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
+	v := b.Receiver().(*DB)
+	if err := v.db.Close(); err != nil {
+		return nil, err
+	}
+	return starlark.None, nil
+}
+
 type Rows struct {
 	columns []string
 	mapping map[string]int
@@ -337,6 +358,10 @@ type Rows struct {
 	closeErr error
 }
 
+func (v *Rows) Close() error {
+	v.Freeze()
+	return v.closeErr
+}
 func (v *Rows) String() string { return fmt.Sprintf("<rows %s>", strings.Join(v.columns, ", ")) }
 func (v *Rows) Type() string   { return "sql.rows" }
 func (v *Rows) Freeze() {
@@ -423,7 +448,7 @@ func (r *Row) scanAt(index int) scanFn {
 		case string:
 			v = starlark.String(x)
 		case time.Time:
-			// TODO: starlark time module
+			v = starlarktime.Time(x)
 		case nil:
 			v = starlark.None
 		default:

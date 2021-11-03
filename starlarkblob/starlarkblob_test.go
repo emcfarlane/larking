@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/emcfarlane/larking/starlarkthread"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"go.starlark.net/starlarktest"
@@ -28,6 +29,12 @@ func load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
 
 func TestExecFile(t *testing.T) {
 	thread := &starlark.Thread{Load: load}
+	close := starlarkthread.WithResourceStore(thread)
+	defer func() {
+		if err := close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
 	starlarktest.SetReporter(thread, t)
 	globals := starlark.StringDict{
 		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),

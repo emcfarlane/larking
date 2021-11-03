@@ -1,3 +1,7 @@
+// Copyright 2021 Edward McFarlane. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package starlarkruntimevar
 
 import (
@@ -33,10 +37,14 @@ func Open(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwa
 		return nil, err
 	}
 
-	return &Variable{
+	v := &Variable{
 		name:     name,
 		variable: variable,
-	}, nil
+	}
+	if err := starlarkthread.AddResource(thread, v); err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 type Variable struct {

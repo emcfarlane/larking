@@ -16,24 +16,15 @@ import (
 )
 
 func NewModule() *starlarkstruct.Module {
-	p := NewBlob()
 	return &starlarkstruct.Module{
 		Name: "blob",
 		Members: starlark.StringDict{
-			"open": starlark.NewBuiltin("blob.open", p.Open),
+			"open": starlark.NewBuiltin("blob.open", Open),
 		},
 	}
 }
 
-type Blob struct {
-	// TODO
-}
-
-func NewBlob() *Blob {
-	return &Blob{}
-}
-
-func (v *Blob) Open(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func Open(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var name string
 	if err := starlark.UnpackPositionalArgs("blob.open", args, kwargs, 1, &name); err != nil {
 		return nil, err
@@ -45,7 +36,11 @@ func (v *Blob) Open(thread *starlark.Thread, b *starlark.Builtin, args starlark.
 		return nil, err
 	}
 
-	return NewBucket(name, bkt), nil
+	b := NewBucket(name, bkt)
+	if err := starlarkthread.AddResource(thread, b); err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
 type Bucket struct {
@@ -70,6 +65,7 @@ func (b *Bucket) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type:
 var bucketMethods = map[string]*starlark.Builtin{
 	"write_all": starlark.NewBuiltin("blob.bucket.write_all", bucketWriteAll),
 	"read_all":  starlark.NewBuiltin("blob.bucket.read_all", bucketReadAll),
+	"close":     starlark.NewBuiltin("blob.bucket.close", bucketClose),
 }
 
 func (v *Bucket) Attr(name string) (starlark.Value, error) {
@@ -172,4 +168,12 @@ func bucketReadAll(thread *starlark.Thread, b *starlark.Builtin, args starlark.T
 		return nil, err
 	}
 	return starlark.Bytes(p), nil
+}
+
+func bucketClose(_ *starlark.Thread, b *starlark.Builtin, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
+	v := b.Receiver().(*Bucket)
+	if err := v.bkt.Close(); err != nil {
+		return nil, err
+	}
+	return starlark.None, nil
 }
