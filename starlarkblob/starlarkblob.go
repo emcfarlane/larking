@@ -36,7 +36,7 @@ func Open(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwa
 		return nil, err
 	}
 
-	b := NewBucket(name, bkt)
+	b := &Bucket{name: name, bkt: bkt}
 	if err := starlarkthread.AddResource(thread, b); err != nil {
 		return nil, err
 	}
@@ -50,12 +50,7 @@ type Bucket struct {
 	frozen bool
 }
 
-func NewBucket(name string, bkt *blob.Bucket) *Bucket { return &Bucket{name: name, bkt: bkt} }
-
-func (b *Bucket) Close() error {
-	return b.bkt.Close()
-}
-
+func (b *Bucket) Close() error          { return b.bkt.Close() }
 func (b *Bucket) String() string        { return fmt.Sprintf("<bucket %q>", b.name) }
 func (b *Bucket) Type() string          { return "blob.bucket" }
 func (b *Bucket) Freeze()               { b.frozen = true }
