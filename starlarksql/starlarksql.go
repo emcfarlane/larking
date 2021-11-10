@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/emcfarlane/larking/starlarkerrors"
 	"github.com/emcfarlane/larking/starlarkthread"
 	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
@@ -26,6 +27,11 @@ func NewModule() *starlarkstruct.Module {
 		Name: "sql",
 		Members: starlark.StringDict{
 			"open": starlark.NewBuiltin("sql.open", Open),
+
+			// sql errors
+			"err_conn_done": starlarkerrors.NewError(sql.ErrConnDone),
+			"err_no_rows":   starlarkerrors.NewError(sql.ErrNoRows),
+			"err_tx_done":   starlarkerrors.NewError(sql.ErrTxDone),
 		},
 	}
 }
