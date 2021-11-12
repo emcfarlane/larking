@@ -549,15 +549,14 @@ func (m *Mux) loadState() *state {
 func (m *Mux) storeState(s *state) { m.state.Store(s) }
 
 func (s *state) pickMethodHandler(name string) (*handler, error) {
-	hds := s.handlers[name]
-	if len(hds) == 0 {
-		return nil, status.Errorf(
-			codes.Unimplemented,
-			fmt.Sprintf("method %s not implemented", name),
-		)
+	if s != nil {
+		hds := s.handlers[name]
+		if len(hds) > 0 {
+			hd := hds[rand.Intn(len(hds))]
+			return hd, nil
+		}
 	}
-	hd := hds[rand.Intn(len(hds))]
-	return hd, nil
+	return nil, status.Errorf(codes.Unimplemented, "method %s not implemented", name)
 }
 
 type streamHTTP struct {

@@ -15,10 +15,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/emcfarlane/larking/api"
+	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/soheilhy/cmux"
+	"go.starlark.net/starlark"
+	"go.starlark.net/syntax"
 	"golang.org/x/net/trace"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 )
 
 type Server struct {
@@ -30,6 +37,9 @@ type Server struct {
 	hs     *http.Server
 
 	events trace.EventLog
+
+	api.UnimplementedLarkingServer
+	threads map[string]*Thread // starlark.StringDict
 }
 
 // NewServer creates a new Proxy server.
@@ -104,6 +114,8 @@ func (s *Server) Serve(l net.Listener) error {
 	defer s.hs.Close()
 
 	// TODO: metrics/debug http server...?
+	// TODO: auth.
+	s.RegisterService(&api.Larking_ServiceDesc, s)
 
 	go func() {
 		if err := m.Serve(); !strings.Contains(err.Error(), "use of closed") {
@@ -185,4 +197,131 @@ func MuxOptions(muxOpts ...MuxOption) ServerOption {
 func (s *Server) RegisterService(desc *grpc.ServiceDesc, impl interface{}) {
 	s.gs.RegisterService(desc, impl)
 	s.mux.RegisterService(desc, impl)
+}
+
+type Thread struct {
+	name      string
+	globals   starlark.StringDict
+	createdAt time.Time
+}
+
+func NewThreadAt(name string, globals starlark.StringDict, at time.Time) *Thread {
+	for _, val := range globals {
+		val.Freeze() // freeze each value
+	}
+	return &Thread{
+		name:      name,
+		globals:   globals,
+		createdAt: at,
+	}
+}
+
+func (t *Thread) Predeclared() starlark.StringDict {
+	predeclared := make(starlark.StringDict, len(t.globals))
+	for key, val := range t.globals {
+		predeclared[key] = val
+	}
+	return predeclared
+}
+
+func soleExpr(f *syntax.File) syntax.Expr {
+	if len(f.Stmts) == 1 {
+		if stmt, ok := f.Stmts[0].(*syntax.ExprStmt); ok {
+			return stmt.X
+		}
+	}
+	return nil
+}
+
+// errorStatus creates a status from an error,
+// or its backtrace if it is a Starlark evaluation error.
+func errorStatus(err error) *status.Status {
+	st := status.New(codes.InvalidArgument, err.Error())
+	if evalErr, ok := err.(*starlark.EvalError); ok {
+		// Describes additional debugging info.
+		di := &errdetails.DebugInfo{
+			StackEntries: strings.Split(evalErr.Backtrace(), "\n"),
+			Detail:       "<repl>",
+		}
+		st, err = st.WithDetails(di)
+		if err != nil {
+			// If this errored, it will always error
+			// here, so better panic so we can figure
+			// out why than have this silently passing.
+			panic(fmt.Sprintf("Unexpected error: %v", err))
+		}
+	}
+	return st
+
+}
+
+// Create ServerStream...
+func (s *Server) RunOnThread(stream api.Larking_RunOnThreadServer) error {
+	ctx := stream.Context()
+
+	cmd, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+
+	serverThread, ok := s.threads[cmd.Name]
+	if !ok {
+		return status.Error(codes.NotFound, "unknown thread")
+	}
+
+	thread := new(starlark.Thread) // TODO: thread creation.
+
+	starlarkthread.SetContext(thread, ctx)
+	cleanup := starlarkthread.WithResourceStore(thread)
+	defer func() {
+		if err := cleanup(); err != nil {
+			fmt.Println("err:", err)
+		}
+	}()
+
+	// globals need to be copied...
+	globals := serverThread.Predeclared()
+
+	for {
+		f, err := syntax.Parse(serverThread.name, cmd.Input, 0)
+		//f, err := syntax.ParseCompoundStmt("<stdin>", readline)
+		if err != nil {
+			return errorStatus(err).Err()
+		}
+
+		var output string
+		if expr := soleExpr(f); expr != nil {
+			// eval
+			v, err := starlark.EvalExpr(thread, expr, globals)
+			if err != nil {
+				return errorStatus(err).Err()
+			}
+
+			// print
+			if v != starlark.None {
+				output = v.String()
+			}
+		} else if err := starlark.ExecREPLChunk(f, thread, globals); err != nil {
+			return errorStatus(err).Err()
+		} else {
+			output = ""
+		}
+
+		result := &api.Result{
+			Output: output,
+		}
+
+		if err = stream.Send(result); err != nil {
+			return err
+		}
+
+		cmd, err = stream.Recv()
+		if err != nil {
+			return err
+		}
+	}
+}
+
+func (s *Server) ListThreads(context.Context, *api.ListThreadsRequest) (*api.ListThreadsResponse, error) {
+	return nil, nil
 }

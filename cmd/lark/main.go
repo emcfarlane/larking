@@ -4,12 +4,24 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
 
 	"github.com/emcfarlane/larking"
 	"github.com/emcfarlane/starlarkrepl"
 	"go.starlark.net/repl"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
+)
+
+func env(key, def string) string {
+	if e := os.Getenv(key); e != "" {
+		return e
+	}
+	return def
+}
+
+var (
+	flagRemote = flag.String("remote", env("LARK_REMOTE", ""), "Remote server address to execute on.")
 )
 
 func run() error {
