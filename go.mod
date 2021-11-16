@@ -12,13 +12,13 @@ require (
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/peterh/liner v1.2.1 // indirect
 	github.com/soheilhy/cmux v0.1.5
-	go.starlark.net v0.0.0-20210602144842-1cdb82c9e17a
+	go.starlark.net v0.0.0-20211013185944-b0039bd2cfe3
 	gocloud.dev v0.24.0 // indirect
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	golang.org/x/mod v0.5.1 // indirect
 	golang.org/x/net v0.0.0-20211020060615-d418f374d309
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20211029165221-6e7872819dc8 // indirect
+	golang.org/x/sys v0.0.0-20211113001501-0c823b97ae02 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/tools v0.1.7 // indirect
 	google.golang.org/genproto v0.0.0-20211019152133-63b7e35f4404

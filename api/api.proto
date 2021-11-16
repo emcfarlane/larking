@@ -12,12 +12,26 @@ option go_package = "github.com/emcfarlane/larking/api;api";
 
 message Command {
   string name = 1;
-  string input = 2;
+  oneof exec {
+    string input = 2;
+    string complete = 3;
+  }
+}
+
+message Output {
+  string input = 1;  // formatted input
+  string output = 2; // printed output
+}
+
+message Completion {
+  repeated string completions = 3; // completions
 }
 
 message Result {
-  string input = 1; // formatted input
-  string output = 2;
+  oneof result {
+    Output output = 1;
+    Completion completion = 2;
+  }
 }
 
 message Thread { string name = 1; }

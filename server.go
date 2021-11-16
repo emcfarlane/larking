@@ -5,6 +5,7 @@
 package larking
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -202,6 +203,7 @@ func (s *Server) RegisterService(desc *grpc.ServiceDesc, impl interface{}) {
 type Thread struct {
 	name      string
 	globals   starlark.StringDict
+	loader    *Loader
 	createdAt time.Time
 }
 
@@ -255,6 +257,10 @@ func errorStatus(err error) *status.Status {
 
 }
 
+type funcReader func(p []byte) (n int, err error)
+
+func (f funcReader) Read(p []byte) (n int, err error) { return f(p) }
+
 // Create ServerStream...
 func (s *Server) RunOnThread(stream api.Larking_RunOnThreadServer) error {
 	ctx := stream.Context()
@@ -269,12 +275,27 @@ func (s *Server) RunOnThread(stream api.Larking_RunOnThreadServer) error {
 		return status.Error(codes.NotFound, "unknown thread")
 	}
 
-	thread := new(starlark.Thread) // TODO: thread creation.
+	// TODO: server loader
+	loader, err := NewLoader()
+	if err != nil {
+		return err
+	}
+
+	// TODO: better thread creation.
+	var buf bytes.Buffer
+	thread := &starlark.Thread{
+		Name: serverThread.name,
+		Print: func(_ *starlark.Thread, msg string) {
+			buf.WriteString(msg) //nolint
+		},
+		Load: loader.Load,
+	}
 
 	starlarkthread.SetContext(thread, ctx)
 	cleanup := starlarkthread.WithResourceStore(thread)
 	defer func() {
 		if err := cleanup(); err != nil {
+			// TODO: log
 			fmt.Println("err:", err)
 		}
 	}()
@@ -282,37 +303,90 @@ func (s *Server) RunOnThread(stream api.Larking_RunOnThreadServer) error {
 	// globals need to be copied...
 	globals := serverThread.Predeclared()
 
-	for {
-		f, err := syntax.Parse(serverThread.name, cmd.Input, 0)
-		//f, err := syntax.ParseCompoundStmt("<stdin>", readline)
-		if err != nil {
-			return errorStatus(err).Err()
-		}
+	c := Completer{globals}
 
-		var output string
-		if expr := soleExpr(f); expr != nil {
-			// eval
-			v, err := starlark.EvalExpr(thread, expr, globals)
+	// TODO: buffer by lines?
+	//var buf bytes.Buffer
+	//if _, err := buf.WriteString(cmd.Input); err != nil {
+	//	return err
+	//}
+	//reader := func(p []byte) (n int, err error) {
+	//	for buf.Len() == 0 {
+	//		cmd, err := stream.Recv()
+	//		if err != nil {
+	//			// err == io.EOF?
+	//			return 0, err
+	//		}
+	//		if _, err := buf.WriteString(cmd.Input); err != nil {
+	//			return 0, err
+	//		}
+	//	}
+	//	return buf.Read(p)
+	//}
+	//scanner := bufio.NewScanner(funcReader(reader))
+	//readline := func() ([]byte, error) {
+	//	for scanner.Scan() {
+	//		return scanner.Bytes(), nil
+	//	}
+	//	if err := scanner.Err(); err != nil {
+	//		return nil, err
+	//	}
+	//	return nil, io.EOF
+	//}
+
+	for {
+		switch v := cmd.Exec.(type) {
+		case *api.Command_Input:
+			buf.Reset()
+
+			f, err := syntax.Parse(serverThread.name, v.Input, 0)
+			//f, err := syntax.ParseCompoundStmt(fmt.Sprintf("<%s>", serverThread.name), readline)
 			if err != nil {
 				return errorStatus(err).Err()
 			}
 
-			// print
-			if v != starlark.None {
-				output = v.String()
+			if expr := soleExpr(f); expr != nil {
+				// eval
+				v, err := starlark.EvalExpr(thread, expr, globals)
+				if err != nil {
+					return errorStatus(err).Err()
+				}
+
+				// print
+				if v != starlark.None {
+					buf.WriteString(v.String())
+				}
+			} else if err := starlark.ExecREPLChunk(f, thread, globals); err != nil {
+				return errorStatus(err).Err()
 			}
-		} else if err := starlark.ExecREPLChunk(f, thread, globals); err != nil {
-			return errorStatus(err).Err()
-		} else {
-			output = ""
-		}
 
-		result := &api.Result{
-			Output: output,
-		}
+			result := &api.Result{
+				Result: &api.Result_Output{
+					Output: &api.Output{
+						Input:  v.Input,
+						Output: buf.String(),
+					},
+				},
+			}
 
-		if err = stream.Send(result); err != nil {
-			return err
+			if err = stream.Send(result); err != nil {
+				return err
+			}
+
+		case *api.Command_Complete:
+			completions := c.Complete(v.Complete)
+
+			result := &api.Result{
+				Result: &api.Result_Completion{
+					Completion: &api.Completion{
+						Completions: completions,
+					},
+				},
+			}
+
+			if err = stream.Send(result); err != nil {
+				return err
+			}
 		}
 
 		cmd, err = stream.Recv()

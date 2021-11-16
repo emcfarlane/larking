@@ -13,7 +13,7 @@ import (
 
 func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
-		Name: "docstore",
+		Name: "pubsub",
 		Members: starlark.StringDict{
 			"open": starlark.NewBuiltin("pubsub.open", Open),
 		},
