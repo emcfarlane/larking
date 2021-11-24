@@ -9,9 +9,12 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"runtime"
 	"strings"
 	"time"
@@ -28,6 +31,26 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 )
+
+// NewOSSignalContext tries to gracefully handle OS closure.
+func NewOSSignalContext(ctx context.Context) (context.Context, func()) {
+	// trap Ctrl+C and call cancel on the context
+	ctx, cancel := context.WithCancel(ctx)
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		select {
+		case <-c:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	return ctx, func() {
+		signal.Stop(c)
+		cancel()
+	}
+}
 
 type Server struct {
 	opts serverOptions
@@ -235,7 +258,22 @@ func soleExpr(f *syntax.File) syntax.Expr {
 	return nil
 }
 
-// errorStatus creates a status from an error,
+type statusError interface{ GRPCStatus() *status.Status }
+
+func FprintErr(w io.Writer, err error) {
+	switch v := err.(type) {
+	case *starlark.EvalError:
+		fmt.Fprintln(w, v.Backtrace())
+	case statusError:
+		s := v.GRPCStatus()
+		details := append([]interface{}{s.Message, s.Code}, s.Details()...)
+		fmt.Fprintln(w, details...)
+	default:
+		fmt.Fprintln(w, err)
+	}
+}
+
+// ErrorStatus creates a status from an error,
 // or its backtrace if it is a Starlark evaluation error.
 func errorStatus(err error) *status.Status {
 	st := status.New(codes.InvalidArgument, err.Error())

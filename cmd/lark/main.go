@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -16,7 +17,6 @@ import (
 	"github.com/emcfarlane/larking/api"
 	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/peterh/liner"
-	"go.starlark.net/repl"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
@@ -39,6 +39,7 @@ var (
 	flagRemote       = flag.String("remote", env("LARK_REMOTE", ""), "Remote server address to execute on.")
 	flagHistory      = flag.String("history", env("LARK_HISTORY", ""), "History file.")
 	flagAutocomplete = flag.Bool("autocomplete", true, "Enable autocomplete, defaults to true.")
+	flagExecprog     = flag.String("c", "", "execute program `prog`")
 )
 
 type Options struct {
@@ -93,7 +94,7 @@ func read(line *liner.State, buf *bytes.Buffer) (*syntax.File, error) {
 		if eof {
 			return nil, io.EOF
 		}
-		repl.PrintError(err)
+		larking.FprintErr(os.Stderr, err)
 		return nil, err
 	}
 	return f, nil
@@ -107,7 +108,21 @@ func remote(ctx context.Context, line *liner.State, client api.LarkingClient, au
 
 	if autocomplete {
 		line.SetCompleter(func(line string) []string {
-			return []string{} // TODO
+			if err := stream.SendMsg(&api.Command{
+				Exec: &api.Command_Complete{
+					Complete: line,
+				},
+			}); err != nil {
+				return nil
+			}
+			result, err := stream.Recv()
+			if err != nil {
+				return nil
+			}
+			if completion := result.GetCompletion(); completion != nil {
+				return completion.Completions
+			}
+			return nil
 		})
 	}
 
@@ -160,7 +175,7 @@ func local(ctx context.Context, line *liner.State, autocomplete bool) error {
 	defer starlarkthread.WithResourceStore(thread)()
 
 	if autocomplete {
-		c := larking.Completer{globals}
+		c := larking.Completer{StringDict: globals}
 		line.SetCompleter(c.Complete)
 	}
 
@@ -184,7 +199,7 @@ func local(ctx context.Context, line *liner.State, autocomplete bool) error {
 			// eval
 			v, err := starlark.EvalExpr(thread, expr, globals)
 			if err != nil {
-				repl.PrintError(err)
+				larking.FprintErr(os.Stderr, err)
 				return nil
 			}
 
@@ -193,7 +208,7 @@ func local(ctx context.Context, line *liner.State, autocomplete bool) error {
 				fmt.Println(v)
 			}
 		} else if err := starlark.ExecREPLChunk(f, thread, globals); err != nil {
-			repl.PrintError(err)
+			larking.FprintErr(os.Stderr, err)
 			return nil
 		}
 	}
@@ -220,7 +235,6 @@ func loop(ctx context.Context, options *Options) (err error) {
 	} else {
 		err = local(ctx, line, options.AutoComplete)
 	}
-
 	if options.HistoryFile != "" {
 		f, err := os.Create(options.HistoryFile)
 		if err != nil {
@@ -236,10 +250,7 @@ func loop(ctx context.Context, options *Options) (err error) {
 	return
 }
 
-func run() (err error) {
-	flag.Parse()
-	ctx := context.Background()
-
+func run(ctx context.Context) (err error) {
 	var client api.LarkingClient
 	if addr := *flagRemote; addr != "" {
 		cc, err := grpc.Dial(addr)
@@ -255,7 +266,7 @@ func run() (err error) {
 	if filename := *flagHistory; filename != "" {
 		history = filename
 	} else {
-		//
+		// Default history file
 		dirname, err := os.UserHomeDir()
 		if err != nil {
 			return err
@@ -271,13 +282,104 @@ func run() (err error) {
 	if err := loop(ctx, options); err != io.EOF {
 		return err
 	}
-	fmt.Println() // break EOF
+	os.Stdout.WriteString("\n") // break EOF
 	return err
+}
 
+func exec(ctx context.Context, filename, src string) error {
+	if addr := *flagRemote; addr != "" {
+		cc, err := grpc.Dial(addr)
+		if err != nil {
+			return err
+		}
+		defer cc.Close()
+
+		client := api.NewLarkingClient(cc)
+
+		stream, err := client.RunOnThread(ctx)
+		if err != nil {
+			return err
+		}
+
+		cmd := &api.Command{
+			Name: "default", // TODO: name?
+			Exec: &api.Command_Input{
+				Input: src,
+			},
+		}
+		if err := stream.Send(cmd); err != nil {
+			return err // TODO: retry?
+		}
+
+		res, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		if output := res.GetOutput(); output != nil {
+			if output.Output != "" {
+				fmt.Println(output.Output)
+			}
+		}
+		return nil
+	}
+
+	globals := larking.NewGlobals()
+	loader, err := larking.NewLoader()
+	if err != nil {
+		return err
+	}
+
+	thread := &starlark.Thread{
+		Name: filename,
+		Load: loader.Load,
+	}
+	starlarkthread.SetContext(thread, ctx)
+	defer starlarkthread.WithResourceStore(thread)()
+
+	if _, err = starlark.ExecFile(thread, filename, src, globals); err != nil {
+		return err
+	}
+	return nil
 }
 
 func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
+	ctx := context.Background()
+	log.SetPrefix("larking: ")
+	log.SetFlags(0)
+	flag.Parse()
+
+	switch {
+	case flag.NArg() == 1 || *flagExecprog != "":
+		var (
+			filename string
+			src      string
+		)
+		if *flagExecprog != "" {
+			// Execute provided program.
+			filename = "cmdline"
+			src = *flagExecprog
+		} else {
+			// Execute specified file.
+			filename = flag.Arg(0)
+
+			var err error
+			b, err := ioutil.ReadFile(filename)
+			if err != nil {
+				log.Fatal(err)
+			}
+			src = string(b)
+		}
+		if err := exec(ctx, filename, src); err != nil {
+			larking.FprintErr(os.Stderr, err)
+			os.Exit(1)
+		}
+	case flag.NArg() == 0:
+		fmt.Println("Welcome to Lark (larking.io)")
+		if err := run(ctx); err != nil {
+			log.Fatal(err)
+		}
+	default:
+		log.Fatal("want at most one Starlark file name")
 	}
+
 }

@@ -30,7 +30,7 @@ func (i *stringFlags) Set(value string) error {
 	return nil
 }
 
-func run() error {
+func run(ctx context.Context) error {
 	l, err := net.Listen("tcp", httpAddr)
 	if err != nil {
 		return err
@@ -42,7 +42,6 @@ func run() error {
 		return err
 	}
 
-	ctx := context.Background()
 	mux := s.Mux()
 
 	// TODO:
@@ -85,7 +84,11 @@ func main() {
 		usage()
 	}
 
-	if err := run(); err != nil {
+	ctx := context.Background()
+	ctx, cancel := larking.NewOSSignalContext(ctx)
+	defer cancel()
+
+	if err := run(ctx); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
