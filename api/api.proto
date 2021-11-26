@@ -19,8 +19,7 @@ message Command {
 }
 
 message Output {
-  string input = 1;  // formatted input
-  string output = 2; // printed output
+  string output = 1; // printed output
 }
 
 message Completion {

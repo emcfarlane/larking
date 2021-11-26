@@ -19,17 +19,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/emcfarlane/larking/api"
-	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/soheilhy/cmux"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
+	"golang.org/x/net/http2"
 	"golang.org/x/net/trace"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+
+	"github.com/emcfarlane/larking/api"
+	"github.com/emcfarlane/larking/starlarkthread"
 )
 
 // NewOSSignalContext tries to gracefully handle OS closure.
@@ -59,11 +61,9 @@ type Server struct {
 	closer chan bool
 	gs     *grpc.Server
 	hs     *http.Server
+	ls     *LarkingServer
 
 	events trace.EventLog
-
-	api.UnimplementedLarkingServer
-	threads map[string]*Thread // starlark.StringDict
 }
 
 // NewServer creates a new Proxy server.
@@ -88,15 +88,31 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 	var grpcOpts []grpc.ServerOption
 	grpcOpts = append(grpcOpts, grpc.UnknownServiceHandler(mux.StreamHandler()))
-	if c := svrOpts.tlsConfig; c != nil {
-		creds := credentials.NewTLS(c)
-		grpcOpts = append(grpcOpts, grpc.Creds(creds))
+
+	creds := insecure.NewCredentials()
+	//if config := svrOpts.tlsConfig; config != nil {
+	//	creds = credentials.NewTLS(config)
+	//}
+	grpcOpts = append(grpcOpts, grpc.Creds(creds))
+
+	if i := svrOpts.muxOpts.unaryInterceptor; i != nil {
+		grpcOpts = append(grpcOpts, grpc.UnaryInterceptor(i))
+	}
+	if i := svrOpts.muxOpts.streamInterceptor; i != nil {
+		grpcOpts = append(grpcOpts, grpc.StreamInterceptor(i))
+	}
+
+	var ls *LarkingServer
+	if svrOpts.enableLarking {
+		ls = &LarkingServer{
+			threads: make(map[string]*Thread),
+		}
 	}
 
 	gs := grpc.NewServer(grpcOpts...)
 	hs := &http.Server{
-		Handler:   mux,
-		TLSConfig: svrOpts.tlsConfig,
+		Handler: mux,
+		//TLSConfig: svrOpts.tlsConfig,
 	}
 
 	return &Server{
@@ -104,6 +120,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		mux:    mux,
 		gs:     gs,
 		hs:     hs,
+		ls:     ls,
 		events: events,
 	}, nil
 }
@@ -112,6 +129,15 @@ func (s *Server) Mux() *Mux { return s.mux }
 
 func (s *Server) Serve(l net.Listener) error {
 	s.closer = make(chan bool, 1)
+
+	if config := s.opts.tlsConfig; config != nil {
+		l = tls.NewListener(l, config)
+
+		// TODO: needed?
+		if err := http2.ConfigureServer(s.hs, nil); err != nil {
+			return err
+		}
+	}
 
 	m := cmux.New(l)
 	// grpcL := m.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
@@ -128,18 +154,24 @@ func (s *Server) Serve(l net.Listener) error {
 	defer s.gs.Stop()
 
 	go func() {
-		if s.opts.tlsConfig != nil {
-			// TLSConfig must have the cert object.
-			errs <- s.hs.ServeTLS(httpL, "", "")
-		} else {
-			errs <- s.hs.Serve(httpL)
-		}
+		errs <- s.hs.Serve(httpL)
+		//if s.opts.tlsConfig != nil {
+		//	// TLSConfig must have the cert object.
+		//       errs <- s.hs.ServeTLS(httpL, "", "")
+		//} else {
+		//}
 	}()
 	defer s.hs.Close()
 
 	// TODO: metrics/debug http server...?
 	// TODO: auth.
-	s.RegisterService(&api.Larking_ServiceDesc, s)
+	if s.ls != nil {
+		s.RegisterService(&api.Larking_ServiceDesc, s.ls)
+	}
+	//if s.healthServer != nil {
+	//	s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+	//	s.RegisterService(&healthpb.Health_ServiceDesc, s.healthServer)
+	//}
 
 	go func() {
 		if err := m.Serve(); !strings.Contains(err.Error(), "use of closed") {
@@ -186,8 +218,9 @@ const (
 )
 
 type serverOptions struct {
-	tlsConfig *tls.Config
-	muxOpts   muxOptions
+	tlsConfig     *tls.Config
+	enableLarking bool
+	muxOpts       muxOptions
 	//admin     string
 }
 
@@ -201,6 +234,12 @@ type ServerOption func(*serverOptions)
 func TLSCreds(c *tls.Config) ServerOption {
 	return func(opts *serverOptions) {
 		opts.tlsConfig = c
+	}
+}
+
+func EnableLarkingServer() ServerOption {
+	return func(opts *serverOptions) {
+		opts.enableLarking = true
 	}
 }
 
@@ -299,8 +338,14 @@ type funcReader func(p []byte) (n int, err error)
 
 func (f funcReader) Read(p []byte) (n int, err error) { return f(p) }
 
+type LarkingServer struct {
+	api.UnimplementedLarkingServer
+
+	threads map[string]*Thread // starlark.StringDict
+}
+
 // Create ServerStream...
-func (s *Server) RunOnThread(stream api.Larking_RunOnThreadServer) error {
+func (s *LarkingServer) RunOnThread(stream api.Larking_RunOnThreadServer) error {
 	ctx := stream.Context()
 
 	cmd, err := stream.Recv()
@@ -401,7 +446,7 @@ func (s *Server) RunOnThread(stream api.Larking_RunOnThreadServer) error {
 			result := &api.Result{
 				Result: &api.Result_Output{
 					Output: &api.Output{
-						Input:  v.Input,
+						//Input:  v.Input,
 						Output: buf.String(),
 					},
 				},
@@ -434,6 +479,14 @@ func (s *Server) RunOnThread(stream api.Larking_RunOnThreadServer) error {
 	}
 }
 
-func (s *Server) ListThreads(context.Context, *api.ListThreadsRequest) (*api.ListThreadsResponse, error) {
-	return nil, nil
+func (s *LarkingServer) ListThreads(context.Context, *api.ListThreadsRequest) (*api.ListThreadsResponse, error) {
+	var threads []*api.Thread
+	for _, v := range s.threads {
+		threads = append(threads, &api.Thread{
+			Name: v.name,
+		})
+	}
+	return &api.ListThreadsResponse{
+		Threads: threads,
+	}, nil
 }
