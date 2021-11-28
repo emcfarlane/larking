@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/soheilhy/cmux"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
@@ -103,9 +104,34 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	var ls *LarkingServer
-	if svrOpts.enableLarking {
+	if svrOpts.larkingEnabled {
+		loader, err := NewLoader()
+		if err != nil {
+			return nil, err
+		}
+
+		threads := make(map[string]*Thread)
+		for name, src := range svrOpts.larkingThreads {
+
+			var buf bytes.Buffer
+			thread := &starlark.Thread{
+				Name: name,
+				Print: func(_ *starlark.Thread, msg string) {
+					buf.WriteString(msg) //nolint
+				},
+				Load: loader.Load,
+			}
+			globals, err := starlark.ExecFile(thread, name, src, nil)
+			if err != nil {
+				return nil, err
+			}
+			threads[name] = &Thread{
+				name:    name,
+				globals: globals,
+			}
+		}
 		ls = &LarkingServer{
-			threads: make(map[string]*Thread),
+			threads: threads,
 		}
 	}
 
@@ -218,9 +244,11 @@ const (
 )
 
 type serverOptions struct {
-	tlsConfig     *tls.Config
-	enableLarking bool
-	muxOpts       muxOptions
+	tlsConfig      *tls.Config
+	larkingEnabled bool
+	larkingThreads map[string]string // name->src  TODO: something better
+	log            logr.Logger
+	muxOpts        muxOptions
 	//admin     string
 }
 
@@ -229,25 +257,36 @@ var defaultServerOptions = serverOptions{
 }
 
 // ServerOption is similar to grpc.ServerOption.
-type ServerOption func(*serverOptions)
+type ServerOption func(*serverOptions) error
 
-func TLSCreds(c *tls.Config) ServerOption {
-	return func(opts *serverOptions) {
+func TLSCredsOption(c *tls.Config) ServerOption {
+	return func(opts *serverOptions) error {
 		opts.tlsConfig = c
+		return nil
 	}
 }
 
-func EnableLarkingServer() ServerOption {
-	return func(opts *serverOptions) {
-		opts.enableLarking = true
+func LarkingServerOption(threads map[string]string) ServerOption {
+	return func(opts *serverOptions) error {
+		opts.larkingEnabled = true
+		opts.larkingThreads = threads
+		return nil
+	}
+}
+
+func LogOption(log logr.Logger) ServerOption {
+	return func(opts *serverOptions) error {
+		opts.log = log
+		return nil
 	}
 }
 
 func MuxOptions(muxOpts ...MuxOption) ServerOption {
-	return func(opts *serverOptions) {
+	return func(opts *serverOptions) error {
 		for _, mo := range muxOpts {
 			mo(&opts.muxOpts)
 		}
+		return nil
 	}
 }
 
@@ -305,8 +344,23 @@ func FprintErr(w io.Writer, err error) {
 		fmt.Fprintln(w, v.Backtrace())
 	case statusError:
 		s := v.GRPCStatus()
-		details := append([]interface{}{s.Message, s.Code}, s.Details()...)
-		fmt.Fprintln(w, details...)
+		p := s.Proto()
+		for _, detail := range p.Details {
+			m, err := detail.UnmarshalNew()
+			if err != nil {
+				fmt.Fprintf(w, "InternalError: %v\n", err)
+				continue
+			}
+			switch m := m.(type) {
+			case *errdetails.DebugInfo:
+				for _, se := range m.StackEntries {
+					fmt.Fprintln(w, se)
+				}
+			default:
+				fmt.Fprintf(w, "%v\n", m)
+			}
+		}
+		fmt.Fprintf(w, "RPC Error: %v: %s\n", s.Code(), s.Message())
 	default:
 		fmt.Fprintln(w, err)
 	}
@@ -347,11 +401,13 @@ type LarkingServer struct {
 // Create ServerStream...
 func (s *LarkingServer) RunOnThread(stream api.Larking_RunOnThreadServer) error {
 	ctx := stream.Context()
+	l := logr.FromContextOrDiscard(ctx)
 
 	cmd, err := stream.Recv()
 	if err != nil {
 		return err
 	}
+	l.Info("running on thread", "thread", cmd.Name)
 
 	serverThread, ok := s.threads[cmd.Name]
 	if !ok {

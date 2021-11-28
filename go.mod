@@ -6,6 +6,8 @@ require (
 	github.com/emcfarlane/starlarkassert v0.0.0-20210612114505-0b5ce3fc3821
 	github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82
 	github.com/emcfarlane/starlarkrepl v0.0.0-20200525000826-057477e78566
+	github.com/go-logr/logr v1.2.0 // indirect
+	github.com/go-logr/stdr v1.2.0 // indirect
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.6
 	github.com/mattn/go-isatty v0.0.14 // indirect

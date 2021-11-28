@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"go.starlark.net/starlark"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -302,8 +301,8 @@ func TestTLSServer(t *testing.T) {
 	}
 
 	s, err := NewServer(
-		EnableLarkingServer(),
-		TLSCreds(tlsConfig),
+		LarkingServerOption(map[string]string{"default": ""}),
+		TLSCredsOption(tlsConfig),
 		MuxOptions(
 			UnaryServerInterceptorOption(
 				func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
@@ -315,10 +314,6 @@ func TestTLSServer(t *testing.T) {
 			),
 		),
 	)
-	s.ls.threads["default"] = &Thread{name: "default"}
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	l, err := net.Listen("tcp", ":0")
 	if err != nil {
@@ -428,13 +423,9 @@ func TestTLSServer(t *testing.T) {
 }
 
 func TestAPIServer(t *testing.T) {
-	s, err := NewServer(EnableLarkingServer())
+	s, err := NewServer(LarkingServerOption(map[string]string{"default": ""}))
 	if err != nil {
 		t.Fatal(err)
-	}
-	s.ls.threads["default"] = &Thread{
-		name:    "default",
-		globals: starlark.StringDict{},
 	}
 
 	lis, err := net.Listen("tcp", "localhost:0")

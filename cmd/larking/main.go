@@ -7,10 +7,10 @@ import (
 	"log"
 	"net"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/emcfarlane/larking"
+	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
 	"google.golang.org/grpc"
 )
 
@@ -30,14 +30,52 @@ func (i *stringFlags) Set(value string) error {
 	return nil
 }
 
+type logStream struct {
+	grpc.ServerStream
+	log logr.Logger
+}
+
+func (s logStream) Context() context.Context {
+	return logr.NewContext(s.ServerStream.Context(), s.log)
+}
+
 func run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	l, err := net.Listen("tcp", httpAddr)
 	if err != nil {
 		return err
 	}
 	defer l.Close()
 
-	s, err := larking.NewServer()
+	stdr.SetVerbosity(1)
+	log := stdr.NewWithOptions(log.New(os.Stderr, "", log.LstdFlags), stdr.Options{LogCaller: stdr.All})
+	log = log.WithName("Larking")
+
+	unary := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		ctx = logr.NewContext(ctx, log)
+		return handler(ctx, req)
+	}
+
+	stream := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		return handler(srv, logStream{
+			ServerStream: ss,
+			log:          log,
+		})
+	}
+
+	s, err := larking.NewServer(
+		larking.MuxOptions(
+			larking.UnaryServerInterceptorOption(unary),
+			larking.StreamServerInterceptorOption(stream),
+		),
+		larking.LarkingServerOption(
+			map[string]string{
+				"default": "", // empty default
+			},
+		),
+	)
 	if err != nil {
 		return err
 	}
@@ -56,16 +94,15 @@ func run(ctx context.Context) error {
 		}
 	}
 
-	c := make(chan os.Signal)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		<-c
-		if err := s.Shutdown(ctx); err != nil {
-			log.Println(err)
+		log.Info("listening", "address", l.Addr().String())
+		if err := s.Serve(l); err != nil {
+			log.Error(err, "server stopped")
 		}
+		cancel()
 	}()
-
-	return s.Serve(l)
+	<-ctx.Done()
+	return s.Shutdown(ctx)
 }
 
 func usage() {
@@ -80,9 +117,9 @@ func main() {
 	flag.Var(&services, "svc", "GRPC service to proxy")
 	flag.Parse()
 
-	if len(services) == 0 {
-		usage()
-	}
+	//if len(services) == 0 {
+	//	usage()
+	//}
 
 	ctx := context.Background()
 	ctx, cancel := larking.NewOSSignalContext(ctx)

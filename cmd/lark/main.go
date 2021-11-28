@@ -21,6 +21,7 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func init() {
@@ -86,7 +87,11 @@ func read(line *liner.State, buf *bytes.Buffer) (*syntax.File, error) {
 		prompt = "... "
 		previous = s
 		line.AppendHistory(s)
-		return []byte(s + "\n"), nil
+		out := []byte(s + "\n")
+		if _, err := buf.Write(out); err != nil {
+			return nil, err
+		}
+		return out, nil
 	}
 
 	f, err := syntax.ParseCompoundStmt("<stdin>", readline)
@@ -131,9 +136,9 @@ func remote(ctx context.Context, line *liner.State, client api.LarkingClient, au
 		_, err := read(line, &buf)
 		if err != nil {
 			if err == io.EOF {
-				fmt.Println()
+				return err
 			}
-			return err
+			continue
 		}
 
 		cmd := &api.Command{
@@ -143,12 +148,20 @@ func remote(ctx context.Context, line *liner.State, client api.LarkingClient, au
 			},
 		}
 		if err := stream.Send(cmd); err != nil {
-			return err // TODO: retry?
+			if err == io.EOF {
+				return err
+			}
+			larking.FprintErr(os.Stderr, err)
+			continue
 		}
 
 		res, err := stream.Recv()
 		if err != nil {
-			return err // TODO: retry?
+			if err == io.EOF {
+				return err
+			}
+			larking.FprintErr(os.Stderr, err)
+			continue
 		}
 		if output := res.GetOutput(); output != nil {
 			if output.Output != "" {
@@ -192,7 +205,10 @@ func local(ctx context.Context, line *liner.State, autocomplete bool) error {
 	for ctx.Err() == nil {
 		f, err := read(line, &buf)
 		if err != nil {
-			return err
+			if err == io.EOF {
+				return err
+			}
+			continue
 		}
 
 		if expr := soleExpr(f); expr != nil {
@@ -200,7 +216,7 @@ func local(ctx context.Context, line *liner.State, autocomplete bool) error {
 			v, err := starlark.EvalExpr(thread, expr, globals)
 			if err != nil {
 				larking.FprintErr(os.Stderr, err)
-				return nil
+				continue
 			}
 
 			// print
@@ -209,7 +225,7 @@ func local(ctx context.Context, line *liner.State, autocomplete bool) error {
 			}
 		} else if err := starlark.ExecREPLChunk(f, thread, globals); err != nil {
 			larking.FprintErr(os.Stderr, err)
-			return nil
+			continue
 		}
 	}
 	return ctx.Err()
@@ -250,10 +266,19 @@ func loop(ctx context.Context, options *Options) (err error) {
 	return
 }
 
+func createRemoteConn(ctx context.Context, addr string) (*grpc.ClientConn, error) {
+	creds := insecure.NewCredentials()
+	cc, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(creds))
+	if err != nil {
+		return nil, err
+	}
+	return cc, nil
+}
+
 func run(ctx context.Context) (err error) {
 	var client api.LarkingClient
 	if addr := *flagRemote; addr != "" {
-		cc, err := grpc.Dial(addr)
+		cc, err := createRemoteConn(ctx, addr)
 		if err != nil {
 			return err
 		}
@@ -288,7 +313,7 @@ func run(ctx context.Context) (err error) {
 
 func exec(ctx context.Context, filename, src string) error {
 	if addr := *flagRemote; addr != "" {
-		cc, err := grpc.Dial(addr)
+		cc, err := createRemoteConn(ctx, addr)
 		if err != nil {
 			return err
 		}
@@ -308,7 +333,7 @@ func exec(ctx context.Context, filename, src string) error {
 			},
 		}
 		if err := stream.Send(cmd); err != nil {
-			return err // TODO: retry?
+			return err
 		}
 
 		res, err := stream.Recv()
