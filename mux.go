@@ -124,6 +124,9 @@ type Mux struct {
 	events trace.EventLog
 	mu     sync.Mutex   // Lock to sync writers
 	state  atomic.Value // Value of *state
+
+	// services is a list of registered services
+	services map[*grpc.ServiceDesc]interface{}
 }
 
 func NewMux(opts ...MuxOption) (*Mux, error) {

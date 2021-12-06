@@ -28,17 +28,19 @@ func TestWebsocket(t *testing.T) {
 			t.Fatal(err)
 		}
 	}()
-
-	s, err := NewServer(
-		MuxOptions(
-			UnaryServerInterceptorOption(o.unary()),
-			StreamServerInterceptorOption(o.stream()),
-		),
+	mux, err := NewMux(
+		UnaryServerInterceptorOption(o.unary()),
+		StreamServerInterceptorOption(o.stream()),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	testpb.RegisterChatRoomServer(s, fs)
+	mux.registerService(&testpb.ChatRoom_ServiceDesc, fs)
+
+	s, err := NewServer(mux)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	lis, err := net.Listen("tcp", "localhost:0")
 	if err != nil {

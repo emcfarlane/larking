@@ -70,11 +70,16 @@ func TestServer(t *testing.T) {
 	}
 	defer conn.Close()
 
-	ts, err := NewServer()
+	mux, err := NewMux()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.Mux().RegisterConn(context.Background(), conn); err != nil {
+	if err := mux.RegisterConn(context.Background(), conn); err != nil {
+		t.Fatal(err)
+	}
+
+	ts, err := NewServer(mux)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -300,20 +305,27 @@ func TestTLSServer(t *testing.T) {
 		return nil
 	}
 
-	s, err := NewServer(
-		LarkingServerOption(map[string]string{"default": ""}),
-		TLSCredsOption(tlsConfig),
-		MuxOptions(
-			UnaryServerInterceptorOption(
-				func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-					if err := verfiyPeer(ctx); err != nil {
-						return nil, err
-					}
-					return handler(ctx, req)
-				},
-			),
+	mux, err := NewMux(
+		UnaryServerInterceptorOption(
+			func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+				if err := verfiyPeer(ctx); err != nil {
+					return nil, err
+				}
+				return handler(ctx, req)
+			},
 		),
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := NewServer(mux,
+		LarkingServerOption(map[string]string{"default": ""}),
+		TLSCredsOption(tlsConfig),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	l, err := net.Listen("tcp", ":0")
 	if err != nil {
@@ -423,7 +435,12 @@ func TestTLSServer(t *testing.T) {
 }
 
 func TestAPIServer(t *testing.T) {
-	s, err := NewServer(LarkingServerOption(map[string]string{"default": ""}))
+	mux, err := NewMux()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := NewServer(mux, LarkingServerOption(map[string]string{"default": ""}))
 	if err != nil {
 		t.Fatal(err)
 	}

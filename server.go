@@ -68,10 +68,21 @@ type Server struct {
 }
 
 // NewServer creates a new Proxy server.
-func NewServer(opts ...ServerOption) (*Server, error) {
-	var svrOpts = defaultServerOptions
+func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
+	if mux == nil {
+		return nil, fmt.Errorf("invalid mux must not be nil")
+	}
+
+	var svrOpts serverOptions
 	for _, opt := range opts {
 		opt(&svrOpts)
+	}
+	svrOpts.serveMux = http.NewServeMux()
+	if len(svrOpts.muxPatterns) == 0 {
+		svrOpts.muxPatterns = []string{"/"}
+	}
+	for _, pattern := range svrOpts.muxPatterns {
+		svrOpts.serveMux.Handle(pattern, mux)
 	}
 
 	// TODO: use our own flag?
@@ -82,26 +93,21 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		events = trace.NewEventLog("larking.Server", fmt.Sprintf("%s:%d", file, line))
 	}
 
-	mux := &Mux{
-		opts:   svrOpts.muxOpts,
-		events: events,
-	}
-
 	var grpcOpts []grpc.ServerOption
+
 	grpcOpts = append(grpcOpts, grpc.UnknownServiceHandler(mux.StreamHandler()))
+	if i := mux.opts.unaryInterceptor; i != nil {
+		grpcOpts = append(grpcOpts, grpc.UnaryInterceptor(i))
+	}
+	if i := mux.opts.streamInterceptor; i != nil {
+		grpcOpts = append(grpcOpts, grpc.StreamInterceptor(i))
+	}
 
 	creds := insecure.NewCredentials()
 	//if config := svrOpts.tlsConfig; config != nil {
 	//	creds = credentials.NewTLS(config)
 	//}
 	grpcOpts = append(grpcOpts, grpc.Creds(creds))
-
-	if i := svrOpts.muxOpts.unaryInterceptor; i != nil {
-		grpcOpts = append(grpcOpts, grpc.UnaryInterceptor(i))
-	}
-	if i := svrOpts.muxOpts.streamInterceptor; i != nil {
-		grpcOpts = append(grpcOpts, grpc.StreamInterceptor(i))
-	}
 
 	var ls *LarkingServer
 	if svrOpts.larkingEnabled {
@@ -137,8 +143,13 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 	gs := grpc.NewServer(grpcOpts...)
 	hs := &http.Server{
-		Handler: mux,
+		Handler: svrOpts.serveMux,
 		//TLSConfig: svrOpts.tlsConfig,
+	}
+
+	// Register local gRPC services
+	for sd, ss := range mux.services {
+		gs.RegisterService(sd, ss)
 	}
 
 	return &Server{
@@ -150,8 +161,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		events: events,
 	}, nil
 }
-
-func (s *Server) Mux() *Mux { return s.mux }
 
 func (s *Server) Serve(l net.Listener) error {
 	s.closer = make(chan bool, 1)
@@ -192,7 +201,8 @@ func (s *Server) Serve(l net.Listener) error {
 	// TODO: metrics/debug http server...?
 	// TODO: auth.
 	if s.ls != nil {
-		s.RegisterService(&api.Larking_ServiceDesc, s.ls)
+		s.gs.RegisterService(&api.Larking_ServiceDesc, s.ls)
+		s.mux.RegisterService(&api.Larking_ServiceDesc, s.ls)
 	}
 	//if s.healthServer != nil {
 	//	s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
@@ -248,12 +258,13 @@ type serverOptions struct {
 	larkingEnabled bool
 	larkingThreads map[string]string // name->src  TODO: something better
 	log            logr.Logger
-	muxOpts        muxOptions
-	//admin     string
-}
 
-var defaultServerOptions = serverOptions{
-	muxOpts: defaultMuxOptions,
+	//mux      *Mux
+	muxPatterns []string
+	serveMux    *http.ServeMux
+
+	//muxOpts muxOptions
+	//admin     string
 }
 
 // ServerOption is similar to grpc.ServerOption.
@@ -281,11 +292,31 @@ func LogOption(log logr.Logger) ServerOption {
 	}
 }
 
-func MuxOptions(muxOpts ...MuxOption) ServerOption {
+//func MuxOptions(muxOpts ...MuxOption) ServerOption {
+//	return func(opts *serverOptions) error {
+//		for _, mo := range muxOpts {
+//			mo(&opts.muxOpts)
+//		}
+//		return nil
+//	}
+//}
+
+func MuxHandleOption(patterns ...string) ServerOption {
 	return func(opts *serverOptions) error {
-		for _, mo := range muxOpts {
-			mo(&opts.muxOpts)
+		if opts.muxPatterns != nil {
+			return fmt.Errorf("more than one mux registered")
 		}
+		opts.muxPatterns = patterns
+		return nil
+	}
+}
+
+func HTTPHandlerOption(pattern string, handler http.Handler) ServerOption {
+	return func(opts *serverOptions) error {
+		if opts.serveMux == nil {
+			opts.serveMux = http.NewServeMux()
+		}
+		opts.serveMux.Handle(pattern, handler)
 		return nil
 	}
 }
@@ -296,10 +327,12 @@ func MuxOptions(muxOpts ...MuxOption) ServerOption {
 //	}
 //}
 
-func (s *Server) RegisterService(desc *grpc.ServiceDesc, impl interface{}) {
-	s.gs.RegisterService(desc, impl)
-	s.mux.RegisterService(desc, impl)
-}
+//func (s *Server) RegisterService(desc *grpc.ServiceDesc, impl interface{}) {
+//	s.gs.RegisterService(desc, impl)
+//	if s.opts.mux != nil {
+//		s.opts.mux.RegisterService(desc, impl)
+//	}
+//}
 
 type Thread struct {
 	name      string
@@ -360,7 +393,9 @@ func FprintErr(w io.Writer, err error) {
 				fmt.Fprintf(w, "%v\n", m)
 			}
 		}
-		fmt.Fprintf(w, "RPC Error: %v: %s\n", s.Code(), s.Message())
+		if len(p.Details) == 0 {
+			fmt.Fprintf(w, "Error: %v: %s\n", s.Code(), s.Message())
+		}
 	default:
 		fmt.Fprintln(w, err)
 	}
