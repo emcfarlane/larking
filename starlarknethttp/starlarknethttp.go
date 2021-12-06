@@ -32,10 +32,8 @@ func NewModule() *starlarkstruct.Module {
 
 			// net/http errors
 			"err_not_supported":         starlarkerrors.NewError(http.ErrNotSupported),
-			"err_unexpected_trailer":    starlarkerrors.NewError(http.ErrUnexpectedTrailer),
 			"err_missing_boundary":      starlarkerrors.NewError(http.ErrMissingBoundary),
 			"err_not_multipart":         starlarkerrors.NewError(http.ErrNotMultipart),
-			"err_header_too_long":       starlarkerrors.NewError(http.ErrHeaderTooLong),
 			"err_body_not_allowed":      starlarkerrors.NewError(http.ErrBodyNotAllowed),
 			"err_hijacked":              starlarkerrors.NewError(http.ErrHijacked),
 			"err_content_length":        starlarkerrors.NewError(http.ErrContentLength),

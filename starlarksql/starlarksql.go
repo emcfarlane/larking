@@ -202,9 +202,9 @@ func makeArgs(args starlark.Tuple) ([]interface{}, error) {
 	return xs, nil
 }
 
-func dbBeginTx(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return nil, nil // TODO: Create struct TX.
-}
+//func dbBeginTx(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+//	return nil, nil // TODO: Create struct TX.
+//}
 
 func dbExec(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	v := b.Receiver().(*DB)

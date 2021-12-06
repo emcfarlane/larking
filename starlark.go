@@ -51,7 +51,8 @@ type Loader struct {
 // a starlarkstruct.Module:
 //     load("module.star", "module")
 func NewLoader() (*Loader, error) {
-	assert, err := starlarkassert.LoadAssertModule()
+	thread := new(starlark.Thread)
+	assert, err := starlarkassert.LoadAssertModule(thread)
 	if err != nil {
 		return nil, err
 	}

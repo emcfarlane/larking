@@ -167,6 +167,10 @@ github.com/dimchansky/utfbom v1.1.1/go.mod h1:SxdoEBH5qIqFocHMyGOXVAybYJdr71b1Q/
 github.com/dustin/go-humanize v1.0.0/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
 github.com/emcfarlane/starlarkassert v0.0.0-20210612114505-0b5ce3fc3821 h1:7oK3sOM+eDRecdOxrNfgZ9mxGFlBi+klql4uz+uNetk=
 github.com/emcfarlane/starlarkassert v0.0.0-20210612114505-0b5ce3fc3821/go.mod h1:uhXe4bPiNuqIXBXyNw+hr8KVzPyuOlMj1kR3rl17ERc=
+github.com/emcfarlane/starlarkassert v0.0.0-20211130104740-cb78f14f663e h1:4XE3GeCrxI0s91EnTPnFSFPH4VVaVbPhwKyIdaGN4CY=
+github.com/emcfarlane/starlarkassert v0.0.0-20211130104740-cb78f14f663e/go.mod h1:uhXe4bPiNuqIXBXyNw+hr8KVzPyuOlMj1kR3rl17ERc=
+github.com/emcfarlane/starlarkassert v0.0.0-20211206213449-e3675c3a5ad3 h1:ZlgP5n6PsrqxjeDekYp1ChElcptNC1kcej4/WFHTv3w=
+github.com/emcfarlane/starlarkassert v0.0.0-20211206213449-e3675c3a5ad3/go.mod h1:uhXe4bPiNuqIXBXyNw+hr8KVzPyuOlMj1kR3rl17ERc=
 github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82 h1:wKkXL3j8fRfFAhv8jBMS1IJHpMY/O1fSgolg5hvc8aU=
 github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82/go.mod h1:2XlWgRKiS//nDUSQcidcCwVQ0AtfjRwWnr5MUb1tH+Y=
 github.com/emcfarlane/starlarkrepl v0.0.0-20200525000826-057477e78566 h1:qU8DnnTNhS8GHuj/OxABn4zJOXvEocnHFFLk7ALwnW8=
@@ -421,6 +425,8 @@ go.starlark.net v0.0.0-20210602144842-1cdb82c9e17a h1:wDtSCWGrX9tusypq2Qq9xzaA3T
 go.starlark.net v0.0.0-20210602144842-1cdb82c9e17a/go.mod h1:t3mmBBPzAVvK0L0n1drDmrQsJ8FoIx4INCqVMTr/Zo0=
 go.starlark.net v0.0.0-20211013185944-b0039bd2cfe3 h1:oBcONsksxvpeodDrLjiMDaKHXKAVVfAydhe/792CE/o=
 go.starlark.net v0.0.0-20211013185944-b0039bd2cfe3/go.mod h1:t3mmBBPzAVvK0L0n1drDmrQsJ8FoIx4INCqVMTr/Zo0=
+go.starlark.net v0.0.0-20211203141949-70c0e40ae128 h1:bxH+EXOo87zEOwKDdZ8Tevgi6irRbqheRm/fr293c58=
+go.starlark.net v0.0.0-20211203141949-70c0e40ae128/go.mod h1:t3mmBBPzAVvK0L0n1drDmrQsJ8FoIx4INCqVMTr/Zo0=
 go.uber.org/atomic v1.7.0/go.mod h1:fEN4uk6kAWBTFdckzkM89CLk9XfWZrxpCo0nPH17wJc=
 go.uber.org/atomic v1.9.0/go.mod h1:fEN4uk6kAWBTFdckzkM89CLk9XfWZrxpCo0nPH17wJc=
 go.uber.org/goleak v1.1.10/go.mod h1:8a7PlsEVH3e/a/GLqe5IIrQx6GzcnRmZEufDUTk4A7A=
@@ -634,6 +640,8 @@ golang.org/x/sys v0.0.0-20211113001501-0c823b97ae02 h1:7NCfEGl0sfUojmX78nK9pBJuU
 golang.org/x/sys v0.0.0-20211113001501-0c823b97ae02/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.0.0-20211124211545-fe61309f8881 h1:TyHqChC80pFkXWraUUf6RuB5IqFdQieMLwwCJokV2pc=
 golang.org/x/sys v0.0.0-20211124211545-fe61309f8881/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.0.0-20211205182925-97ca703d548d h1:FjkYO/PPp4Wi0EAUOVLxePm7qVW4r4ctbWpURyuOD0E=
+golang.org/x/sys v0.0.0-20211205182925-97ca703d548d/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1 h1:v+OssWQX+hTHEmOBgwxdZxK4zHq3yOs8F9J7mk0PY8E=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
 golang.org/x/text v0.0.0-20170915032832-14c0d48ead0c/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=

@@ -172,7 +172,7 @@ func remote(ctx context.Context, line *liner.State, client api.LarkingClient, au
 	return ctx.Err()
 }
 
-func local(ctx context.Context, line *liner.State, autocomplete bool) error {
+func local(ctx context.Context, line *liner.State, autocomplete bool) (err error) {
 	globals := larking.NewGlobals()
 
 	loader, err := larking.NewLoader()
@@ -185,7 +185,13 @@ func local(ctx context.Context, line *liner.State, autocomplete bool) error {
 		Load: loader.Load,
 	}
 	starlarkthread.SetContext(thread, ctx)
-	defer starlarkthread.WithResourceStore(thread)()
+	close := starlarkthread.WithResourceStore(thread)
+	defer func() {
+		cerr := close()
+		if err == nil {
+			err = cerr
+		}
+	}()
 
 	if autocomplete {
 		c := larking.Completer{StringDict: globals}
@@ -298,10 +304,11 @@ func run(ctx context.Context) (err error) {
 		}
 		history = filepath.Join(dirname, ".lark_history")
 	}
+	autocomplete := *flagAutocomplete
 
 	options := &Options{
 		HistoryFile:  history,
-		AutoComplete: true,
+		AutoComplete: autocomplete,
 		Remote:       client,
 	}
 	if err := loop(ctx, options); err != io.EOF {
@@ -311,7 +318,7 @@ func run(ctx context.Context) (err error) {
 	return err
 }
 
-func exec(ctx context.Context, filename, src string) error {
+func exec(ctx context.Context, filename, src string) (err error) {
 	if addr := *flagRemote; addr != "" {
 		cc, err := createRemoteConn(ctx, addr)
 		if err != nil {
@@ -359,7 +366,13 @@ func exec(ctx context.Context, filename, src string) error {
 		Load: loader.Load,
 	}
 	starlarkthread.SetContext(thread, ctx)
-	defer starlarkthread.WithResourceStore(thread)()
+	close := starlarkthread.WithResourceStore(thread)
+	defer func() {
+		cerr := close()
+		if err == nil {
+			err = cerr
+		}
+	}()
 
 	if _, err = starlark.ExecFile(thread, filename, src, globals); err != nil {
 		return err

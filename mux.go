@@ -19,7 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/net/trace"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc"
@@ -120,10 +119,10 @@ func StreamServerInterceptorOption(interceptor grpc.StreamServerInterceptor) Mux
 }
 
 type Mux struct {
-	opts   muxOptions
-	events trace.EventLog
-	mu     sync.Mutex   // Lock to sync writers
-	state  atomic.Value // Value of *state
+	opts muxOptions
+	//events trace.EventLog TODO
+	mu    sync.Mutex   // Lock to sync writers
+	state atomic.Value // Value of *state
 
 	// services is a list of registered services
 	services map[*grpc.ServiceDesc]interface{}

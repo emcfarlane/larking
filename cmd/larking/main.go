@@ -65,11 +65,15 @@ func run(ctx context.Context) error {
 		})
 	}
 
-	s, err := larking.NewServer(
-		larking.MuxOptions(
-			larking.UnaryServerInterceptorOption(unary),
-			larking.StreamServerInterceptorOption(stream),
-		),
+	mux, err := larking.NewMux(
+		larking.UnaryServerInterceptorOption(unary),
+		larking.StreamServerInterceptorOption(stream),
+	)
+	if err != nil {
+		return err
+	}
+
+	s, err := larking.NewServer(mux,
 		larking.LarkingServerOption(
 			map[string]string{
 				"default": "", // empty default
@@ -79,8 +83,6 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
-	mux := s.Mux()
 
 	// TODO:
 	for _, svc := range services {

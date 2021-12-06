@@ -75,7 +75,9 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 
 	var svrOpts serverOptions
 	for _, opt := range opts {
-		opt(&svrOpts)
+		if err := opt(&svrOpts); err != nil {
+			return nil, err
+		}
 	}
 	svrOpts.serveMux = http.NewServeMux()
 	if len(svrOpts.muxPatterns) == 0 {
@@ -152,6 +154,17 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 		gs.RegisterService(sd, ss)
 	}
 
+	// TODO: metrics/debug http server...?
+	// TODO: auth.
+	if ls != nil {
+		gs.RegisterService(&api.Larking_ServiceDesc, ls)
+		mux.RegisterService(&api.Larking_ServiceDesc, ls)
+	}
+	//if s.healthServer != nil {
+	//	s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+	//	s.RegisterService(&healthpb.Health_ServiceDesc, s.healthServer)
+	//}
+
 	return &Server{
 		opts:   svrOpts,
 		mux:    mux,
@@ -197,17 +210,6 @@ func (s *Server) Serve(l net.Listener) error {
 		//}
 	}()
 	defer s.hs.Close()
-
-	// TODO: metrics/debug http server...?
-	// TODO: auth.
-	if s.ls != nil {
-		s.gs.RegisterService(&api.Larking_ServiceDesc, s.ls)
-		s.mux.RegisterService(&api.Larking_ServiceDesc, s.ls)
-	}
-	//if s.healthServer != nil {
-	//	s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
-	//	s.RegisterService(&healthpb.Health_ServiceDesc, s.healthServer)
-	//}
 
 	go func() {
 		if err := m.Serve(); !strings.Contains(err.Error(), "use of closed") {
@@ -423,9 +425,8 @@ func errorStatus(err error) *status.Status {
 
 }
 
-type funcReader func(p []byte) (n int, err error)
-
-func (f funcReader) Read(p []byte) (n int, err error) { return f(p) }
+//type funcReader func(p []byte) (n int, err error)
+//func (f funcReader) Read(p []byte) (n int, err error) { return f(p) }
 
 type LarkingServer struct {
 	api.UnimplementedLarkingServer
@@ -449,12 +450,6 @@ func (s *LarkingServer) RunOnThread(stream api.Larking_RunOnThreadServer) error 
 		return status.Error(codes.NotFound, "unknown thread")
 	}
 
-	// TODO: server loader
-	loader, err := NewLoader()
-	if err != nil {
-		return err
-	}
-
 	// TODO: better thread creation.
 	var buf bytes.Buffer
 	thread := &starlark.Thread{
@@ -462,7 +457,7 @@ func (s *LarkingServer) RunOnThread(stream api.Larking_RunOnThreadServer) error 
 		Print: func(_ *starlark.Thread, msg string) {
 			buf.WriteString(msg) //nolint
 		},
-		Load: loader.Load,
+		Load: serverThread.loader.Load,
 	}
 
 	starlarkthread.SetContext(thread, ctx)

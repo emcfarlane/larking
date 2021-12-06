@@ -187,15 +187,19 @@ func createCertificateAuthority() ([]byte, []byte, error) {
 	}
 
 	caPEM := new(bytes.Buffer)
-	pem.Encode(caPEM, &pem.Block{
+	if err := pem.Encode(caPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: caBytes,
-	})
+	}); err != nil {
+		return nil, nil, err
+	}
 	caPrivKeyPEM := new(bytes.Buffer)
-	pem.Encode(caPrivKeyPEM, &pem.Block{
+	if err := pem.Encode(caPrivKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(caPrivKey),
-	})
+	}); err != nil {
+		return nil, nil, err
+	}
 	return caPEM.Bytes(), caPrivKeyPEM.Bytes(), nil
 }
 
@@ -241,15 +245,19 @@ func createCertificate(caCertPEM, caKeyPEM []byte, commonName string) ([]byte, [
 	}
 
 	certPEM := new(bytes.Buffer)
-	pem.Encode(certPEM, &pem.Block{
+	if err := pem.Encode(certPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: certBytes,
-	})
+	}); err != nil {
+		return nil, nil, err
+	}
 	certPrivKeyPEM := new(bytes.Buffer)
-	pem.Encode(certPrivKeyPEM, &pem.Block{
+	if err := pem.Encode(certPrivKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
-	})
+	}); err != nil {
+		return nil, nil, err
+	}
 	return certPEM.Bytes(), certPrivKeyPEM.Bytes(), nil
 }
 
@@ -331,8 +339,17 @@ func TestTLSServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	go s.Serve(l)
-	defer s.Shutdown(ctx)
+
+	g := errgroup.Group{}
+	g.Go(func() error { return s.Serve(l) })
+	defer func() {
+		if err := s.Shutdown(ctx); err != nil {
+			t.Error(err)
+		}
+		if err := g.Wait(); err != nil && err != http.ErrServerClosed {
+			t.Error(err)
+		}
+	}()
 
 	certPEM, keyPEM, err = createCertificate(caCertPEM, caKeyPEM, "Client")
 	if err != nil {
