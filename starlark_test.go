@@ -182,7 +182,7 @@ func TestAutoComplete(t *testing.T) {
 			"abc": starlark.String("hello"),
 		},
 		line: "a",
-		want: []string{"abc", "all", "any"},
+		want: []string{"abc", "abs", "all", "any"},
 	}, {
 		name: "simple_semi",
 		globals: map[string]starlark.Value{
@@ -191,6 +191,7 @@ func TestAutoComplete(t *testing.T) {
 		line: "abc = \"hello\"; a",
 		want: []string{
 			"abc = \"hello\"; abc",
+			"abc = \"hello\"; abs",
 			"abc = \"hello\"; all",
 			"abc = \"hello\"; any",
 		},
@@ -202,6 +203,7 @@ func TestAutoComplete(t *testing.T) {
 		line: "abc = a",
 		want: []string{
 			"abc = abc",
+			"abc = abs",
 			"abc = all",
 			"abc = any",
 		},
@@ -219,7 +221,10 @@ func TestAutoComplete(t *testing.T) {
 			"hello": mod,
 		},
 		line: "hello.dict[ab",
-		want: []string{"hello.dict[abc"},
+		want: []string{
+			"hello.dict[abc",
+			"hello.dict[abs",
+		},
 	}, {
 		name: "dict_string",
 		globals: map[string]starlark.Value{
