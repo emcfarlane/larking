@@ -4,23 +4,28 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
 	"github.com/emcfarlane/larking"
 	"github.com/emcfarlane/larking/api"
+	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/peterh/liner"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -37,17 +42,25 @@ func env(key, def string) string {
 }
 
 var (
-	flagRemote       = flag.String("remote", env("LARK_REMOTE", ""), "Remote server address to execute on.")
-	flagHistory      = flag.String("history", env("LARK_HISTORY", ""), "History file.")
+	flagRemoteAddr   = flag.String("remote", env("LARK_REMOTE", ""), "Remote server address to execute on.")
+	flagCacheDir     = flag.String("cache", env("LARK_CACHE", ""), "Cache directory.")
 	flagAutocomplete = flag.Bool("autocomplete", true, "Enable autocomplete, defaults to true.")
 	flagExecprog     = flag.String("c", "", "execute program `prog`")
+	flagControlAddr  = flag.String("control", "https://larking.io", "Control server for credentials.")
+	flagInsecure     = flag.Bool("insecure", false, "Insecure, disable credentials.")
 )
 
 type Options struct {
 	_            struct{}          // pragma: no unkeyed literals
+	CacheDir     string            // Path to cache directory
 	HistoryFile  string            // Path to file for storing history
 	AutoComplete bool              // Experimental autocompletion
 	Remote       api.LarkingClient // Remote thread execution
+	//RemoteAddr          string // Remote worker address.
+	//CredentialsFile string // Path to file for remote credentials
+	//Creds map[string]string // Loaded credentials.
+	Filename string
+	Source   string
 }
 
 func read(line *liner.State, buf *bytes.Buffer) (*syntax.File, error) {
@@ -237,13 +250,17 @@ func local(ctx context.Context, line *liner.State, autocomplete bool) (err error
 	return ctx.Err()
 }
 
-func loop(ctx context.Context, options *Options) (err error) {
+func loop(ctx context.Context, opts *Options) (err error) {
 	line := liner.NewLiner()
 	defer line.Close()
 
-	if options.HistoryFile != "" {
-		if f, err := os.Open(options.HistoryFile); err == nil {
+	if opts.HistoryFile != "" {
+		if f, err := os.Open(opts.HistoryFile); err == nil {
+			if err != nil {
+				return nil
+			}
 			if _, err := line.ReadHistory(f); err != nil {
+				f.Close() //nolint
 				return err
 			}
 			if err := f.Close(); err != nil {
@@ -252,17 +269,18 @@ func loop(ctx context.Context, options *Options) (err error) {
 		}
 	}
 
-	if client := options.Remote; client != nil {
-		err = remote(ctx, line, client, options.AutoComplete)
+	if client := opts.Remote; client != nil {
+		err = remote(ctx, line, client, opts.AutoComplete)
 	} else {
-		err = local(ctx, line, options.AutoComplete)
+		err = local(ctx, line, opts.AutoComplete)
 	}
-	if options.HistoryFile != "" {
-		f, err := os.Create(options.HistoryFile)
+	if opts.HistoryFile != "" {
+		f, err := os.Create(opts.HistoryFile)
 		if err != nil {
 			return err
 		}
 		if _, err := line.WriteHistory(f); err != nil {
+			f.Close() //nolint
 			return err
 		}
 		if err := f.Close(); err != nil {
@@ -272,8 +290,52 @@ func loop(ctx context.Context, options *Options) (err error) {
 	return
 }
 
-func createRemoteConn(ctx context.Context, addr string) (*grpc.ClientConn, error) {
-	creds := insecure.NewCredentials()
+func loadClientCredentials(ctx context.Context, filename string) (credentials.TransportCredentials, error) {
+	if *flagInsecure {
+		return insecure.NewCredentials(), nil
+	}
+
+	//
+	addr := *flagControlAddr
+	if addr == "" {
+		return nil, fmt.Errorf("missing control address")
+	}
+
+	ctrl, err := control.NewClient(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	creds, err := ctrl.LoadCredentials(ctx, filename)
+	if err != nil {
+		return nil, err
+	}
+	// GRPC creds...
+
+	publicKey := []byte(creds["public_key"])
+	privateKey := []byte(creds["private_key"])
+	rootKey := []byte(creds["root_public_key"])
+
+	certPool := x509.NewCertPool()
+	if ok := certPool.AppendCertsFromPEM(rootKey); !ok {
+		return nil, fmt.Errorf("cert pool failure")
+	}
+
+	certificate, err := tls.X509KeyPair(publicKey, privateKey)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig := &tls.Config{
+		//ClientAuth:   tls.RequireAndVerifyClientCert,
+		Certificates: []tls.Certificate{certificate},
+		RootCAs:      certPool,
+	}
+
+	return credentials.NewTLS(tlsConfig), nil
+
+}
+
+func createRemoteConn(ctx context.Context, addr string, creds credentials.TransportCredentials) (*grpc.ClientConn, error) {
 	cc, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return nil, err
@@ -281,52 +343,23 @@ func createRemoteConn(ctx context.Context, addr string) (*grpc.ClientConn, error
 	return cc, nil
 }
 
-func run(ctx context.Context) (err error) {
-	var client api.LarkingClient
-	if addr := *flagRemote; addr != "" {
-		cc, err := createRemoteConn(ctx, addr)
-		if err != nil {
-			return err
-		}
-		defer cc.Close()
-
-		client = api.NewLarkingClient(cc)
-	}
-
-	var history string
-	if filename := *flagHistory; filename != "" {
-		history = filename
-	} else {
-		// Default history file
-		dirname, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
-		history = filepath.Join(dirname, ".lark_history")
-	}
-	autocomplete := *flagAutocomplete
-
-	options := &Options{
-		HistoryFile:  history,
-		AutoComplete: autocomplete,
-		Remote:       client,
-	}
-	if err := loop(ctx, options); err != io.EOF {
+func run(ctx context.Context, opts *Options) (err error) {
+	if err := loop(ctx, opts); err != io.EOF {
 		return err
 	}
 	os.Stdout.WriteString("\n") // break EOF
 	return err
 }
 
-func exec(ctx context.Context, filename, src string) (err error) {
-	if addr := *flagRemote; addr != "" {
-		cc, err := createRemoteConn(ctx, addr)
-		if err != nil {
-			return err
-		}
-		defer cc.Close()
-
-		client := api.NewLarkingClient(cc)
+func exec(ctx context.Context, opts *Options) (err error) {
+	src := opts.Source
+	if client := opts.Remote; client != nil {
+		//cc, err := createRemoteConn(ctx, addr, creds)
+		//if err != nil {
+		//	return err
+		//}
+		//defer cc.Close()
+		//client := api.NewLarkingClient(cc)
 
 		stream, err := client.RunOnThread(ctx)
 		if err != nil {
@@ -362,7 +395,7 @@ func exec(ctx context.Context, filename, src string) (err error) {
 	}
 
 	thread := &starlark.Thread{
-		Name: filename,
+		Name: opts.Filename,
 		Load: loader.Load,
 	}
 	starlarkthread.SetContext(thread, ctx)
@@ -374,10 +407,71 @@ func exec(ctx context.Context, filename, src string) (err error) {
 		}
 	}()
 
-	if _, err = starlark.ExecFile(thread, filename, src, globals); err != nil {
+	if _, err = starlark.ExecFile(thread, opts.Filename, src, globals); err != nil {
 		return err
 	}
 	return nil
+}
+
+func start(ctx context.Context, filename, src string) error {
+	var dir string
+	if name := *flagCacheDir; name != "" {
+		if f, err := os.Stat(name); err != nil {
+			return fmt.Errorf("error: invalid cache dir: %w", err)
+		} else if !f.IsDir() {
+			return fmt.Errorf("error: invalid cache dir: %s", name)
+		}
+		dir = name
+	}
+
+	if dir == "" {
+		dirname, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		dir = filepath.Join(dirname, ".cache", "larking")
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+			return err
+		}
+	}
+
+	var client api.LarkingClient
+	if remoteAddr := *flagRemoteAddr; remoteAddr != "" {
+		credsFile := path.Join(dir, "credentials.json")
+
+		creds, err := loadClientCredentials(ctx, credsFile)
+		if err != nil {
+			return err
+		}
+
+		cc, err := createRemoteConn(ctx, remoteAddr, creds)
+		if err != nil {
+			return err
+		}
+		defer cc.Close()
+
+		client = api.NewLarkingClient(cc)
+	}
+
+	var historyFile string
+	if dir != "" {
+		historyFile = filepath.Join(dir, "history.txt")
+	}
+	autocomplete := *flagAutocomplete
+
+	opts := &Options{
+		CacheDir:     dir,
+		HistoryFile:  historyFile,
+		AutoComplete: autocomplete,
+		Remote:       client,
+		Filename:     filename,
+		Source:       src,
+	}
+
+	if opts.Source != "" { // TODO: flag better?
+		return exec(ctx, opts)
+	}
+	return run(ctx, opts)
 }
 
 func main() {
@@ -407,13 +501,15 @@ func main() {
 			}
 			src = string(b)
 		}
-		if err := exec(ctx, filename, src); err != nil {
+		//if err := exec(ctx, filename, src); err != nil {
+		if err := start(ctx, filename, src); err != nil {
 			larking.FprintErr(os.Stderr, err)
 			os.Exit(1)
 		}
 	case flag.NArg() == 0:
 		fmt.Println("Welcome to Lark (larking.io)")
-		if err := run(ctx); err != nil {
+		//if err := run(ctx); err != nil {
+		if err := start(ctx, "<stdin>", ""); err != nil {
 			log.Fatal(err)
 		}
 	default:
