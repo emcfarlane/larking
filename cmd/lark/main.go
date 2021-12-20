@@ -190,6 +190,12 @@ func remote(ctx context.Context, line *liner.State, client api.LarkingClient, au
 	return ctx.Err()
 }
 
+func printer() func(*starlark.Thread, string) {
+	return func(_ *starlark.Thread, msg string) {
+		os.Stdout.WriteString(msg + "\n")
+	}
+}
+
 func local(ctx context.Context, line *liner.State, autocomplete bool) (err error) {
 	globals := larking.NewGlobals()
 
@@ -199,8 +205,9 @@ func local(ctx context.Context, line *liner.State, autocomplete bool) (err error
 	}
 
 	thread := &starlark.Thread{
-		Name: "<stdin>",
-		Load: loader.Load,
+		Name:  "<stdin>",
+		Load:  loader.Load,
+		Print: printer(),
 	}
 	starlarkthread.SetContext(thread, ctx)
 	close := starlarkthread.WithResourceStore(thread)
@@ -400,8 +407,9 @@ func exec(ctx context.Context, opts *Options) (err error) {
 	}
 
 	thread := &starlark.Thread{
-		Name: opts.Filename,
-		Load: loader.Load,
+		Name:  opts.Filename,
+		Load:  loader.Load,
+		Print: printer(),
 	}
 	starlarkthread.SetContext(thread, ctx)
 	close := starlarkthread.WithResourceStore(thread)
