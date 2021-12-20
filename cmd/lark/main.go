@@ -15,11 +15,13 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"testing"
 
 	"github.com/emcfarlane/larking"
 	"github.com/emcfarlane/larking/api"
 	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/starlarkthread"
+	"github.com/emcfarlane/starlarkassert"
 	"github.com/peterh/liner"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
@@ -27,6 +29,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+
+	_ "gocloud.dev/blob/fileblob"
+	_ "gocloud.dev/blob/memblob"
 )
 
 func init() {
@@ -474,13 +479,65 @@ func start(ctx context.Context, filename, src string) error {
 	return run(ctx, opts)
 }
 
+func test(ctx context.Context, pattern string) int {
+	runner := func(thread *starlark.Thread, handler func() error) (err error) {
+		loader, err := larking.NewLoader()
+		if err != nil {
+			return err
+		}
+		thread.Load = loader.Load
+
+		starlarkthread.SetContext(thread, ctx)
+
+		close := starlarkthread.WithResourceStore(thread)
+		defer func() {
+			cerr := close()
+			if err == nil {
+				err = cerr
+			}
+		}()
+		return handler()
+	}
+
+	globals := larking.NewGlobals()
+
+	tests := []testing.InternalTest{{
+		Name: "Lark",
+		F: func(t *testing.T) {
+			starlarkassert.RunTests(t, pattern, globals, runner)
+		},
+	}}
+
+	deps := &testDeps{importPath: "<stdin>"}
+	return testing.MainStart(deps, tests, nil, nil).Run()
+}
+
 func main() {
 	ctx := context.Background()
 	log.SetPrefix("larking: ")
 	log.SetFlags(0)
 	flag.Parse()
 
+	var arg0 string
+	if flag.NArg() >= 1 {
+		arg0 = flag.Arg(0)
+	}
+
+	const fileExt = ".star"
+
 	switch {
+	case arg0 == "fmt":
+		// TODO: format
+		log.Fatal("fmt not implemented")
+
+	case arg0 == "test":
+		pattern := "*_test" + fileExt
+		if flag.NArg() == 2 {
+			pattern = filepath.Join(flag.Arg(1), "*_test"+fileExt)
+		}
+		code := test(ctx, pattern)
+		os.Exit(code)
+
 	case flag.NArg() == 1 || *flagExecprog != "":
 		var (
 			filename string
@@ -492,7 +549,7 @@ func main() {
 			src = *flagExecprog
 		} else {
 			// Execute specified file.
-			filename = flag.Arg(0)
+			filename = arg0
 
 			var err error
 			b, err := ioutil.ReadFile(filename)

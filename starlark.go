@@ -23,6 +23,7 @@ import (
 	starlarkjson "go.starlark.net/lib/json"
 	starlarkmath "go.starlark.net/lib/math"
 	starlarktime "go.starlark.net/lib/time"
+	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"google.golang.org/grpc"
@@ -35,6 +36,11 @@ import (
 
 // Bootstrap...
 // TODO: xDS
+
+func init() {
+	// TODO: global...
+	resolve.AllowSet = true
+}
 
 func NewGlobals() starlark.StringDict {
 	return starlark.StringDict{
