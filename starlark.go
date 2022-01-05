@@ -3,7 +3,6 @@ package larking
 import (
 	"context"
 	"io"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +17,8 @@ import (
 	"github.com/emcfarlane/larking/starlarkpubsub"
 	"github.com/emcfarlane/larking/starlarkruntimevar"
 	"github.com/emcfarlane/larking/starlarksql"
+	"github.com/emcfarlane/larking/starlarkstruct"
+	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/starlarkassert"
 	"github.com/emcfarlane/starlarkproto"
 	starlarkjson "go.starlark.net/lib/json"
@@ -25,7 +26,7 @@ import (
 	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkstruct"
+	"gocloud.dev/blob"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -38,25 +39,32 @@ import (
 // TODO: xDS
 
 func init() {
-	// TODO: global...
 	resolve.AllowSet = true
+	resolve.AllowRecursion = true
 }
 
 func NewGlobals() starlark.StringDict {
 	return starlark.StringDict{
 		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
+		"module": starlark.NewBuiltin("module", starlarkstruct.MakeModule),
 	}
 }
 
 type Loader struct {
-	mu    sync.RWMutex
+	mu    sync.Mutex
 	store map[string]starlark.StringDict
+	bkt   *blob.Bucket
 }
 
 // NewLoader creates a starlark loader with modules that support loading themselves as
 // a starlarkstruct.Module:
 //     load("module.star", "module")
-func NewLoader() (*Loader, error) {
+func NewLoader(ctx context.Context, urlstr string) (*Loader, error) {
+	bkt, err := blob.OpenBucket(ctx, urlstr)
+	if err != nil {
+		return nil, err
+	}
+
 	thread := new(starlark.Thread)
 	assert, err := starlarkassert.LoadAssertModule(thread)
 	if err != nil {
@@ -103,18 +111,35 @@ func NewLoader() (*Loader, error) {
 
 	return &Loader{
 		store: store,
+		bkt:   bkt,
 	}, nil
 }
 
-func (l *Loader) Load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	if e, ok := l.store[module]; ok {
+func (l *Loader) Load(thread *starlark.Thread, filename string) (starlark.StringDict, error) {
+	l.mu.Lock()
+	if e, ok := l.store[filename]; ok {
+		l.mu.Unlock()
 		return e, nil
 	}
-	// TODO: an error of sorts.
-	return nil, os.ErrNotExist
+	l.mu.Unlock()
+
+	// TODO: singleflight.
+	// TODO: third-party module loading.
+	ctx := starlarkthread.Context(thread)
+
+	src, err := l.bkt.ReadAll(ctx, filename)
+	if err != nil {
+		return nil, err
+	}
+
+	module, err := starlark.ExecFile(thread, filename, src, nil)
+	if err != nil {
+		return nil, err
+	}
+	l.mu.Lock()
+	l.store[filename] = module
+	l.mu.Unlock()
+	return module, nil
 }
 
 func NewModule(mux *Mux) *starlarkstruct.Module {
@@ -143,10 +168,7 @@ func (s *Starlark) Dial(thread *starlark.Thread, b *starlark.Builtin, args starl
 		return nil, err
 	}
 
-	ctx, ok := thread.Local("context").(context.Context)
-	if !ok {
-		ctx = context.Background()
-	}
+	ctx := starlarkthread.Context(thread)
 
 	// TODO: handle security, opts.
 	dialCtx, cancel := context.WithTimeout(ctx, time.Second*5)
@@ -305,10 +327,7 @@ func (s *StarlarkMethod) Truth() starlark.Bool  { return starlark.True }
 func (s *StarlarkMethod) Hash() (uint32, error) { return 0, nil }
 func (s *StarlarkMethod) Name() string          { return "" }
 func (s *StarlarkMethod) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	ctx, ok := thread.Local("context").(context.Context)
-	if !ok {
-		ctx = context.Background()
-	}
+	ctx := starlarkthread.Context(thread)
 
 	opts := &s.mux.opts
 	stream := &streamStar{
