@@ -113,7 +113,10 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 
 	var ls *LarkingServer
 	if svrOpts.larkingEnabled {
-		loader, err := NewLoader()
+		// TODO: fix me
+		ctx := context.Background()
+		dir := "file://"
+		loader, err := NewLoader(ctx, dir)
 		if err != nil {
 			return nil, err
 		}

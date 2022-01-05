@@ -46,14 +46,12 @@ func Open(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwa
 type Bucket struct {
 	name string
 	bkt  *blob.Bucket
-
-	frozen bool
 }
 
 func (b *Bucket) Close() error          { return b.bkt.Close() }
 func (b *Bucket) String() string        { return fmt.Sprintf("<bucket %q>", b.name) }
 func (b *Bucket) Type() string          { return "blob.bucket" }
-func (b *Bucket) Freeze()               { b.frozen = true }
+func (b *Bucket) Freeze()               {} // concurrent safe
 func (b *Bucket) Truth() starlark.Bool  { return b.bkt != nil }
 func (b *Bucket) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %s", b.Type()) }
 
@@ -84,9 +82,6 @@ func bucketWriteAll(thread *starlark.Thread, b *starlark.Builtin, args starlark.
 		return nil, fmt.Errorf("group.go: missing function arg")
 	}
 	v := b.Receiver().(*Bucket)
-	if v.frozen {
-		return nil, fmt.Errorf("bucket: frozen")
-	}
 
 	var (
 		key   string
@@ -145,9 +140,6 @@ func bucketReadAll(thread *starlark.Thread, b *starlark.Builtin, args starlark.T
 	}
 
 	v := b.Receiver().(*Bucket)
-	if v.frozen {
-		return nil, fmt.Errorf("bucket: frozen")
-	}
 
 	var (
 		key string

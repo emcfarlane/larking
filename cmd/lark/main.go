@@ -53,6 +53,9 @@ var (
 	flagExecprog     = flag.String("c", "", "execute program `prog`")
 	flagControlAddr  = flag.String("control", "https://larking.io", "Control server for credentials.")
 	flagInsecure     = flag.Bool("insecure", false, "Insecure, disable credentials.")
+
+	// TODO: relative/absolute pathing needs to be resolved...
+	flagDir = flag.String("dir", "file://", "Set the module loading directory")
 )
 
 type Options struct {
@@ -199,7 +202,7 @@ func printer() func(*starlark.Thread, string) {
 func local(ctx context.Context, line *liner.State, autocomplete bool) (err error) {
 	globals := larking.NewGlobals()
 
-	loader, err := larking.NewLoader()
+	loader, err := larking.NewLoader(ctx, *flagDir)
 	if err != nil {
 		return err
 	}
@@ -401,7 +404,7 @@ func exec(ctx context.Context, opts *Options) (err error) {
 	}
 
 	globals := larking.NewGlobals()
-	loader, err := larking.NewLoader()
+	loader, err := larking.NewLoader(ctx, *flagDir)
 	if err != nil {
 		return err
 	}
@@ -420,7 +423,16 @@ func exec(ctx context.Context, opts *Options) (err error) {
 		}
 	}()
 
-	if _, err = starlark.ExecFile(thread, opts.Filename, src, globals); err != nil {
+	module, err := starlark.ExecFile(thread, opts.Filename, src, globals)
+	if err != nil {
+		return err
+	}
+
+	mainFn, ok := module["main"]
+	if !ok {
+		return nil
+	}
+	if _, err := starlark.Call(thread, mainFn, nil, nil); err != nil {
 		return err
 	}
 	return nil
@@ -489,7 +501,7 @@ func start(ctx context.Context, filename, src string) error {
 
 func test(ctx context.Context, pattern string) int {
 	runner := func(thread *starlark.Thread, handler func() error) (err error) {
-		loader, err := larking.NewLoader()
+		loader, err := larking.NewLoader(ctx, *flagDir)
 		if err != nil {
 			return err
 		}
@@ -566,14 +578,12 @@ func main() {
 			}
 			src = string(b)
 		}
-		//if err := exec(ctx, filename, src); err != nil {
 		if err := start(ctx, filename, src); err != nil {
 			larking.FprintErr(os.Stderr, err)
 			os.Exit(1)
 		}
 	case flag.NArg() == 0:
 		fmt.Println("Welcome to Lark (larking.io)")
-		//if err := run(ctx); err != nil {
 		if err := start(ctx, "<stdin>", ""); err != nil {
 			log.Fatal(err)
 		}

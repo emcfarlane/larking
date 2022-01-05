@@ -19,7 +19,7 @@ func NewModule() *starlarkstruct.Module {
 		Name: "errors",
 		Members: starlark.StringDict{
 			"new":  starlark.NewBuiltin("errors.new", MakeError),
-			"call": starlark.NewBuiltin("errors.result", MakeCall),
+			"call": starlark.NewBuiltin("errors.call", MakeCall),
 		},
 	}
 }
