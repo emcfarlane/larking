@@ -1,3 +1,7 @@
+// Copyright 2021 Edward McFarlane. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 // lark
 package main
 
@@ -19,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/emcfarlane/larking"
-	"github.com/emcfarlane/larking/api"
+	"github.com/emcfarlane/larking/api/workerpb"
 	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"
@@ -52,20 +56,21 @@ var (
 	flagRemoteAddr   = flag.String("remote", env("LARK_REMOTE", ""), "Remote server address to execute on.")
 	flagCacheDir     = flag.String("cache", env("LARK_CACHE", ""), "Cache directory.")
 	flagAutocomplete = flag.Bool("autocomplete", true, "Enable autocomplete, defaults to true.")
-	flagExecprog     = flag.String("c", "", "execute program `prog`")
+	flagExecprog     = flag.String("c", "", "Execute program `prog`.")
 	flagControlAddr  = flag.String("control", "https://larking.io", "Control server for credentials.")
 	flagInsecure     = flag.Bool("insecure", false, "Insecure, disable credentials.")
+	flagThread       = flag.String("thread", "", "Thread to run on.")
 
 	// TODO: relative/absolute pathing needs to be resolved...
 	flagDir = flag.String("dir", "file://", "Set the module loading directory")
 )
 
 type Options struct {
-	_            struct{}          // pragma: no unkeyed literals
-	CacheDir     string            // Path to cache directory
-	HistoryFile  string            // Path to file for storing history
-	AutoComplete bool              // Experimental autocompletion
-	Remote       api.LarkingClient // Remote thread execution
+	_            struct{}              // pragma: no unkeyed literals
+	CacheDir     string                // Path to cache directory
+	HistoryFile  string                // Path to file for storing history
+	AutoComplete bool                  // Experimental autocompletion
+	Remote       workerpb.WorkerClient // Remote thread execution
 	//RemoteAddr          string // Remote worker address.
 	//CredentialsFile string // Path to file for remote credentials
 	//Creds map[string]string // Loaded credentials.
@@ -128,7 +133,7 @@ func read(line *liner.State, buf *bytes.Buffer) (*syntax.File, error) {
 	return f, nil
 }
 
-func remote(ctx context.Context, line *liner.State, client api.LarkingClient, autocomplete bool) error {
+func remote(ctx context.Context, line *liner.State, client workerpb.WorkerClient, autocomplete bool) error {
 	stream, err := client.RunOnThread(ctx)
 	if err != nil {
 		return err
@@ -136,8 +141,8 @@ func remote(ctx context.Context, line *liner.State, client api.LarkingClient, au
 
 	if autocomplete {
 		line.SetCompleter(func(line string) []string {
-			if err := stream.SendMsg(&api.Command{
-				Exec: &api.Command_Complete{
+			if err := stream.SendMsg(&workerpb.Command{
+				Exec: &workerpb.Command_Complete{
 					Complete: line,
 				},
 			}); err != nil {
@@ -164,15 +169,15 @@ func remote(ctx context.Context, line *liner.State, client api.LarkingClient, au
 			continue
 		}
 
-		cmd := &api.Command{
-			Name: "default", // TODO: name?
-			Exec: &api.Command_Input{
+		cmd := &workerpb.Command{
+			Name: *flagThread,
+			Exec: &workerpb.Command_Input{
 				Input: buf.String(),
 			},
 		}
 		if err := stream.Send(cmd); err != nil {
-			fmt.Println("WHAT", err)
 			if err == io.EOF {
+				fmt.Fprint(os.Stderr, "eof")
 				return err
 			}
 			starlib.FprintErr(os.Stderr, err)
@@ -181,7 +186,6 @@ func remote(ctx context.Context, line *liner.State, client api.LarkingClient, au
 
 		res, err := stream.Recv()
 		if err != nil {
-			fmt.Println("RECV", err)
 			if err == io.EOF {
 				return err
 			}
@@ -290,9 +294,7 @@ func loop(ctx context.Context, opts *Options) (err error) {
 	}
 
 	if client := opts.Remote; client != nil {
-		fmt.Println("running remote")
 		err = remote(ctx, line, client, opts.AutoComplete)
-		fmt.Println("ERR", err)
 	} else {
 		err = local(ctx, line, opts.AutoComplete)
 	}
@@ -376,21 +378,14 @@ func run(ctx context.Context, opts *Options) (err error) {
 func exec(ctx context.Context, opts *Options) (err error) {
 	src := opts.Source
 	if client := opts.Remote; client != nil {
-		//cc, err := createRemoteConn(ctx, addr, creds)
-		//if err != nil {
-		//	return err
-		//}
-		//defer cc.Close()
-		//client := api.NewLarkingClient(cc)
-
 		stream, err := client.RunOnThread(ctx)
 		if err != nil {
 			return err
 		}
 
-		cmd := &api.Command{
+		cmd := &workerpb.Command{
 			Name: "default", // TODO: name?
-			Exec: &api.Command_Input{
+			Exec: &workerpb.Command_Input{
 				Input: src,
 			},
 		}
@@ -467,7 +462,7 @@ func start(ctx context.Context, filename, src string) error {
 		}
 	}
 
-	var client api.LarkingClient
+	var client workerpb.WorkerClient
 	if remoteAddr := *flagRemoteAddr; remoteAddr != "" {
 		credsFile := path.Join(dir, "credentials.json")
 
@@ -482,7 +477,9 @@ func start(ctx context.Context, filename, src string) error {
 		}
 		defer cc.Close()
 
-		client = api.NewLarkingClient(cc)
+		log.Printf("remote: %s, status: %s", cc.Target(), cc.GetState())
+
+		client = workerpb.NewWorkerClient(cc)
 	}
 
 	var historyFile string
@@ -541,7 +538,7 @@ func test(ctx context.Context, pattern string) int {
 
 func main() {
 	ctx := context.Background()
-	log.SetPrefix("larking: ")
+	log.SetPrefix("")
 	log.SetFlags(0)
 	flag.Parse()
 
