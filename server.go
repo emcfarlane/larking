@@ -22,7 +22,6 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/trace"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -69,6 +68,10 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 			return nil, err
 		}
 	}
+	if svrOpts.tlsConfig == nil && !svrOpts.insecure {
+		return nil, fmt.Errorf("credentials must be set")
+	}
+
 	svrOpts.serveMux = http.NewServeMux()
 	if len(svrOpts.muxPatterns) == 0 {
 		svrOpts.muxPatterns = []string{"/"}
@@ -95,12 +98,8 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 		grpcOpts = append(grpcOpts, grpc.StreamInterceptor(i))
 	}
 
+	// TLS termination controlled by listeners in Serve.
 	creds := insecure.NewCredentials()
-	if config := svrOpts.tlsConfig; config != nil {
-		creds = credentials.NewTLS(config)
-	} else if !svrOpts.insecure {
-		return nil, fmt.Errorf("credentials must be set")
-	}
 	grpcOpts = append(grpcOpts, grpc.Creds(creds))
 
 	gs := grpc.NewServer(grpcOpts...)

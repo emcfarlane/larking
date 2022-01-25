@@ -1,4 +1,4 @@
-// Copyright 2021 Edward McFarlane. All rights reserved.
+// Copyright 2022 Edward McFarlane. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
+	testing_logr "github.com/go-logr/logr/testing"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -32,9 +34,19 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"github.com/emcfarlane/larking/api"
+	"github.com/emcfarlane/larking/api/healthpb"
+	"github.com/emcfarlane/larking/api/workerpb"
+	"github.com/emcfarlane/larking/health"
 	"github.com/emcfarlane/larking/testpb"
+	"github.com/emcfarlane/larking/worker"
 )
+
+func testContext(t *testing.T) context.Context {
+	ctx := context.Background()
+	log := testing_logr.NewTestLogger(t)
+	ctx = logr.NewContext(ctx, log)
+	return ctx
+}
 
 func TestServer(t *testing.T) {
 	ms := &testpb.UnimplementedMessagingServer{}
@@ -134,7 +146,7 @@ func TestServer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			o.reset(t, "test", tt.inouts)
 
-			ctx := context.Background()
+			ctx := testContext(t)
 			ctx = metadata.AppendToOutgoingContext(ctx, "test", tt.method)
 
 			s, err := cc.NewStream(ctx, tt.desc, tt.method)
@@ -262,7 +274,7 @@ func createCertificate(caCertPEM, caKeyPEM []byte, commonName string) ([]byte, [
 }
 
 func TestTLSServer(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(testContext(t))
 	defer cancel()
 
 	// certPool
@@ -326,9 +338,11 @@ func TestTLSServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	healthServer := health.NewServer()
+	defer healthServer.Shutdown()
+	mux.RegisterService(&healthpb.Health_ServiceDesc, healthServer)
 
 	s, err := NewServer(mux,
-		//LarkingServerOption(map[string]string{"default": ""}),
 		TLSCredsOption(tlsConfig),
 	)
 	if err != nil {
@@ -373,7 +387,7 @@ func TestTLSServer(t *testing.T) {
 				TLSClientConfig: tlsConfig,
 			},
 		}
-		rsp, err := client.Get("https://" + l.Addr().String() + "/v1/threads")
+		rsp, err := client.Get("https://" + l.Addr().String() + "/v1/health")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -386,11 +400,11 @@ func TestTLSServer(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		var threads api.ListThreadsResponse
-		if err := protojson.Unmarshal(b, &threads); err != nil {
+		var check healthpb.HealthCheckResponse
+		if err := protojson.Unmarshal(b, &check); err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("http threads: %+v", &threads)
+		t.Logf("http threads: %+v", &check)
 	})
 	t.Run("grpcClient", func(t *testing.T) {
 		creds := credentials.NewTLS(tlsConfig)
@@ -400,13 +414,13 @@ func TestTLSServer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		client := api.NewLarkingClient(cc)
+		client := healthpb.NewHealthClient(cc)
 
-		threads, err := client.ListThreads(ctx, &api.ListThreadsRequest{})
+		check, err := client.Check(ctx, &healthpb.HealthCheckRequest{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("grpc threads: %+v", threads)
+		t.Logf("grpc threads: %+v", check)
 	})
 	t.Run("httpNoMTLS", func(t *testing.T) {
 		client := &http.Client{
@@ -414,7 +428,7 @@ func TestTLSServer(t *testing.T) {
 				TLSClientConfig: tlsInsecure,
 			},
 		}
-		_, err := client.Get("https://" + l.Addr().String() + "/v1/threads")
+		_, err := client.Get("https://" + l.Addr().String() + "/v1/health")
 		if err == nil {
 			t.Fatal("got nil error")
 		}
@@ -437,11 +451,12 @@ func TestTLSServer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		client := api.NewLarkingClient(cc)
+		client := healthpb.NewHealthClient(cc)
 
 		// TODO: why NIL NIL!?!
-		if threads, err := client.ListThreads(ctx, &api.ListThreadsRequest{}); threads != nil && err != nil {
-			t.Fatal("got nil error", threads, nil)
+		check, err := client.Check(ctx, &healthpb.HealthCheckRequest{})
+		if check != nil && err != nil {
+			t.Fatal("got nil error", check, err)
 		}
 		for err != nil {
 			t.Logf("%T", err)
@@ -452,12 +467,21 @@ func TestTLSServer(t *testing.T) {
 }
 
 func TestAPIServer(t *testing.T) {
-	mux, err := NewMux()
+	log := testing_logr.NewTestLogger(t)
+	unary := NewUnaryContextLogr(log)
+	stream := NewStreamContextLogr(log)
+
+	mux, err := NewMux(
+		UnaryServerInterceptorOption(unary),
+		StreamServerInterceptorOption(stream),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+	workerServer := worker.NewServer()
+	mux.RegisterService(&workerpb.Worker_ServiceDesc, workerServer)
 
-	s, err := NewServer(mux, InsecureServerOption()) //LarkingServerOption(map[string]string{"default": ""}))
+	s, err := NewServer(mux, InsecureServerOption())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -493,17 +517,17 @@ func TestAPIServer(t *testing.T) {
 	}
 	defer conn.Close()
 
-	client := api.NewLarkingClient(conn)
+	client := workerpb.NewWorkerClient(conn)
 
 	tests := []struct {
 		name string
-		ins  []*api.Command
-		outs []*api.Result
+		ins  []*workerpb.Command
+		outs []*workerpb.Result
 	}{{
 		name: "fibonacci",
-		ins: []*api.Command{{
-			Name: "default",
-			Exec: &api.Command_Input{
+		ins: []*workerpb.Command{{
+			Name: "",
+			Exec: &workerpb.Command_Input{
 				Input: `def fibonacci(n):
 	    res = list(range(n))
 	    for i in res[2:]:
@@ -511,29 +535,29 @@ func TestAPIServer(t *testing.T) {
 	    return res
 `},
 		}, {
-			Exec: &api.Command_Input{
+			Exec: &workerpb.Command_Input{
 				Input: "fibonacci(10)\n",
 			},
 		}},
-		outs: []*api.Result{{
-			Result: &api.Result_Output{
-				Output: &api.Output{
+		outs: []*workerpb.Result{{
+			Result: &workerpb.Result_Output{
+				Output: &workerpb.Output{
 					Output: "",
 				},
 			},
 		}, {
-			Result: &api.Result_Output{
-				Output: &api.Output{
+			Result: &workerpb.Result_Output{
+				Output: &workerpb.Output{
 					Output: "[0, 1, 1, 2, 3, 5, 8, 13, 21, 34]",
 				},
 			},
 		}},
 	}}
-	ctx := context.Background()
 	cmpOpts := cmp.Options{protocmp.Transform()}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctx := testContext(t)
 
 			if len(tt.ins) < len(tt.outs) {
 				t.Fatal("invalid args")

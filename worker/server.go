@@ -6,11 +6,13 @@ package worker
 
 import (
 	"bytes"
-	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/emcfarlane/larking/api/workerpb"
 	"github.com/emcfarlane/larking/starlarkthread"
@@ -38,7 +40,6 @@ func soleExpr(f *syntax.File) syntax.Expr {
 
 // Create ServerStream...
 func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err error) {
-	fmt.Println("RUN ON THREAD")
 	ctx := stream.Context()
 	l := logr.FromContextOrDiscard(ctx)
 
@@ -65,13 +66,20 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 		}
 	}()
 
+	module := strings.TrimPrefix(cmd.Name, "thread/")
+
 	var globals starlark.StringDict
-	if cmd.Name != "" {
-		globals, err = s.Load(thread, cmd.Name)
+	if module != "" {
+		if s.Load == nil {
+			return status.Error(codes.Unavailable, "module loading not avaliable")
+		}
+		globals, err = s.Load(thread, module)
 		if err != nil {
 			return err
 		}
-		thread.Name = "<worker:" + cmd.Name + ">"
+		thread.Name = "<worker:" + module + ">"
+	} else {
+		globals = make(starlark.StringDict)
 	}
 
 	c := starlib.Completer{StringDict: globals}
