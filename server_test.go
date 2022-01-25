@@ -78,7 +78,7 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ts, err := NewServer(mux)
+	ts, err := NewServer(mux, InsecureServerOption())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +328,7 @@ func TestTLSServer(t *testing.T) {
 	}
 
 	s, err := NewServer(mux,
-		LarkingServerOption(map[string]string{"default": ""}),
+		//LarkingServerOption(map[string]string{"default": ""}),
 		TLSCredsOption(tlsConfig),
 	)
 	if err != nil {
@@ -457,7 +457,7 @@ func TestAPIServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err := NewServer(mux, LarkingServerOption(map[string]string{"default": ""}))
+	s, err := NewServer(mux, InsecureServerOption()) //LarkingServerOption(map[string]string{"default": ""}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -563,5 +563,5 @@ func TestAPIServer(t *testing.T) {
 			}
 		})
 	}
-	t.Logf("thread: %v", s.ls.threads["default"])
+	//t.Logf("thread: %v", s.ls.threads["default"])
 }

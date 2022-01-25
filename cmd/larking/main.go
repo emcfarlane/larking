@@ -9,6 +9,11 @@ import (
 	"os"
 
 	"github.com/emcfarlane/larking"
+	"github.com/emcfarlane/larking/api/healthpb"
+	"github.com/emcfarlane/larking/api/workerpb"
+	"github.com/emcfarlane/larking/health"
+	"github.com/emcfarlane/larking/starlib"
+	"github.com/emcfarlane/larking/worker"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"google.golang.org/grpc"
@@ -16,19 +21,19 @@ import (
 
 const defaultAddr = "localhost:6060" // default webserver address
 
-// TODO: config, for now flags!
-var (
-	httpAddr string
-	services stringFlags
-)
-
-type stringFlags []string
-
-func (i *stringFlags) String() string { return fmt.Sprintf("%#v", i) }
-func (i *stringFlags) Set(value string) error {
-	*i = append(*i, value)
-	return nil
+func env(key, def string) string {
+	if e := os.Getenv(key); e != "" {
+		return e
+	}
+	return def
 }
+
+var (
+	flagAddr        = flag.String("addr", env("LARKING_ADDRESS", defaultAddr), "Local address to listen on.")
+	flagControlAddr = flag.String("control", "https://larking.io", "Control server for credentials.")
+	flagMain        = flag.String("main", "", "Main thread for worker.")
+	flagInsecure    = flag.Bool("insecure", false, "Insecure, disabled credentials.")
+)
 
 type logStream struct {
 	grpc.ServerStream
@@ -43,7 +48,7 @@ func run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	l, err := net.Listen("tcp", httpAddr)
+	l, err := net.Listen("tcp", *flagAddr)
 	if err != nil {
 		return err
 	}
@@ -54,47 +59,64 @@ func run(ctx context.Context) error {
 	log = log.WithName("Larking")
 
 	unary := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		log.Info("unary", info)
 		ctx = logr.NewContext(ctx, log)
+		defer log.Info("unary end", info)
 		return handler(ctx, req)
 	}
 
 	stream := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		log.Info("stream", info)
+		defer log.Info("stream end", info)
 		return handler(srv, logStream{
 			ServerStream: ss,
 			log:          log,
 		})
 	}
 
-	mux, err := larking.NewMux(
+	var muxOpts = []larking.MuxOption{
 		larking.UnaryServerInterceptorOption(unary),
 		larking.StreamServerInterceptorOption(stream),
-	)
+	}
+
+	mux, err := larking.NewMux(muxOpts...)
 	if err != nil {
 		return err
 	}
 
-	s, err := larking.NewServer(mux,
-		larking.LarkingServerOption(
-			map[string]string{
-				"default": "", // empty default
-			},
-		),
+	healthServer := health.NewServer()
+	defer healthServer.Shutdown()
+	mux.RegisterService(&healthpb.Health_ServiceDesc, healthServer)
+
+	workerServer := worker.NewServer()
+	workerServer.Load = starlib.StdLoad
+	mux.RegisterService(&workerpb.Worker_ServiceDesc, workerServer)
+	healthServer.SetServingStatus(
+		workerpb.Worker_ServiceDesc.ServiceName,
+		healthpb.HealthCheckResponse_SERVING,
 	)
+
+	var svrOpts []larking.ServerOption
+
+	if *flagInsecure {
+		svrOpts = append(svrOpts, larking.InsecureServerOption())
+	}
+
+	s, err := larking.NewServer(mux, svrOpts...)
 	if err != nil {
 		return err
 	}
 
-	// TODO:
-	for _, svc := range services {
-		cc, err := grpc.DialContext(ctx, svc, grpc.WithInsecure())
-		if err != nil {
-			return err
-		}
-
-		if err := mux.RegisterConn(ctx, cc); err != nil {
-			return err
-		}
-	}
+	//// TODO:
+	//for _, svc := range services {
+	//	cc, err := grpc.DialContext(ctx, svc, grpc.WithInsecure())
+	//	if err != nil {
+	//		return err
+	//	}
+	//	if err := mux.RegisterConn(ctx, cc); err != nil {
+	//		return err
+	//	}
+	//}
 
 	go func() {
 		log.Info("listening", "address", l.Addr().String())
@@ -115,8 +137,6 @@ func usage() {
 
 func main() {
 	flag.Usage = usage
-	flag.StringVar(&httpAddr, "addr", defaultAddr, "HTTP service address")
-	flag.Var(&services, "svc", "GRPC service to proxy")
 	flag.Parse()
 
 	//if len(services) == 0 {

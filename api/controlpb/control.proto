@@ -1,0 +1,28 @@
+// Copyright 2022 Edward McFarlane. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+syntax = "proto3";
+
+package larking.api.control;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/emcfarlane/larking/api/controlpb;controlpb";
+
+message AuthorizeRequest {
+  string name = 1;
+  string token = 2;
+  string thread = 3;
+}
+
+message AuthorizeResponse {}
+
+service Control {
+  rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse) {
+    option (google.api.http) = {
+      custom : {kind : "websocket" path : "/v1/{name=worker/*}"}
+      body : "*"
+    };
+  }
+}

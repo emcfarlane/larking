@@ -37,7 +37,7 @@ func TestWebsocket(t *testing.T) {
 	}
 	mux.RegisterService(&testpb.ChatRoom_ServiceDesc, fs)
 
-	s, err := NewServer(mux)
+	s, err := NewServer(mux, InsecureServerOption())
 	if err != nil {
 		t.Fatal(err)
 	}

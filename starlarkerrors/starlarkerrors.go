@@ -18,8 +18,8 @@ func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
 		Name: "errors",
 		Members: starlark.StringDict{
-			"new":  starlark.NewBuiltin("errors.new", MakeError),
-			"call": starlark.NewBuiltin("errors.call", MakeCall),
+			"new":   starlark.NewBuiltin("errors.new", MakeError),
+			"catch": starlark.NewBuiltin("errors.result", MakeCatch),
 		},
 	}
 }
@@ -110,9 +110,9 @@ func (v Result) Freeze()               {} // immutable
 func (v Result) Truth() starlark.Bool  { return starlark.Bool(!v.isErr) }
 func (v Result) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %s", v.Type()) }
 
-// MakeCall evaluates f() and returns its evaluation error message
+// MakeCatch evaluates f() and returns its evaluation error message
 // if it failed or the value if it succeeded.
-func MakeCall(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func MakeCatch(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(args) == 0 {
 		return Result{value: starlark.None}, nil
 	}

@@ -561,6 +561,13 @@ func (s *state) pickMethodHandler(name string) (*handler, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method %s not implemented", name)
 }
 
+func (s *state) match(route, verb string) (*method, params, error) {
+	if s == nil {
+		return nil, nil, status.Error(codes.NotFound, "not found")
+	}
+	return s.path.match(route, verb)
+}
+
 type streamHTTP struct {
 	ctx    context.Context
 	w      http.ResponseWriter
@@ -771,7 +778,7 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		verb = kindWebsocket
 	}
 
-	method, params, err := s.path.match(r.URL.Path, verb)
+	method, params, err := s.match(r.URL.Path, verb)
 	if err != nil {
 		return err
 	}

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/emcfarlane/larking/api"
 	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/starlarkthread"
+	"github.com/emcfarlane/larking/starlib"
 	"github.com/emcfarlane/starlarkassert"
 	"github.com/peterh/liner"
 	"go.starlark.net/resolve"
@@ -120,7 +122,7 @@ func read(line *liner.State, buf *bytes.Buffer) (*syntax.File, error) {
 		if eof {
 			return nil, io.EOF
 		}
-		larking.FprintErr(os.Stderr, err)
+		starlib.FprintErr(os.Stderr, err)
 		return nil, err
 	}
 	return f, nil
@@ -169,19 +171,21 @@ func remote(ctx context.Context, line *liner.State, client api.LarkingClient, au
 			},
 		}
 		if err := stream.Send(cmd); err != nil {
+			fmt.Println("WHAT", err)
 			if err == io.EOF {
 				return err
 			}
-			larking.FprintErr(os.Stderr, err)
+			starlib.FprintErr(os.Stderr, err)
 			continue
 		}
 
 		res, err := stream.Recv()
 		if err != nil {
+			fmt.Println("RECV", err)
 			if err == io.EOF {
 				return err
 			}
-			larking.FprintErr(os.Stderr, err)
+			starlib.FprintErr(os.Stderr, err)
 			continue
 		}
 		if output := res.GetOutput(); output != nil {
@@ -190,6 +194,7 @@ func remote(ctx context.Context, line *liner.State, client api.LarkingClient, au
 			}
 		}
 	}
+	fmt.Println("ctxErr()", ctx.Err())
 	return ctx.Err()
 }
 
@@ -222,7 +227,7 @@ func local(ctx context.Context, line *liner.State, autocomplete bool) (err error
 	}()
 
 	if autocomplete {
-		c := larking.Completer{StringDict: globals}
+		c := starlib.Completer{StringDict: globals}
 		line.SetCompleter(c.Complete)
 	}
 
@@ -249,7 +254,7 @@ func local(ctx context.Context, line *liner.State, autocomplete bool) (err error
 			// eval
 			v, err := starlark.EvalExpr(thread, expr, globals)
 			if err != nil {
-				larking.FprintErr(os.Stderr, err)
+				starlib.FprintErr(os.Stderr, err)
 				continue
 			}
 
@@ -258,7 +263,7 @@ func local(ctx context.Context, line *liner.State, autocomplete bool) (err error
 				fmt.Println(v)
 			}
 		} else if err := starlark.ExecREPLChunk(f, thread, globals); err != nil {
-			larking.FprintErr(os.Stderr, err)
+			starlib.FprintErr(os.Stderr, err)
 			continue
 		}
 	}
@@ -285,7 +290,9 @@ func loop(ctx context.Context, opts *Options) (err error) {
 	}
 
 	if client := opts.Remote; client != nil {
+		fmt.Println("running remote")
 		err = remote(ctx, line, client, opts.AutoComplete)
+		fmt.Println("ERR", err)
 	} else {
 		err = local(ctx, line, opts.AutoComplete)
 	}
@@ -579,11 +586,16 @@ func main() {
 			src = string(b)
 		}
 		if err := start(ctx, filename, src); err != nil {
-			larking.FprintErr(os.Stderr, err)
+			starlib.FprintErr(os.Stderr, err)
 			os.Exit(1)
 		}
 	case flag.NArg() == 0:
-		fmt.Println("Welcome to Lark (larking.io)")
+		text := `   _,
+  ( '>   Welcome to lark
+ / ) )   (larking.io, %s)
+ /|^^
+`
+		fmt.Printf(text, runtime.Version())
 		if err := start(ctx, "<stdin>", ""); err != nil {
 			log.Fatal(err)
 		}
