@@ -42,7 +42,8 @@ func TestBoot(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := run(ctx); err != nil {
+	opts := &Options{}
+	if err := run(ctx, opts); err != nil {
 		t.Fatal(err)
 	}
 	b, err := ioutil.ReadFile(tmpout.Name())
@@ -56,7 +57,11 @@ func TestBootFile(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := exec(ctx, "cmdline", "a = 1+1"); err != nil {
+	opts := &Options{
+		Filename: "<stdin>",
+		Source:   "a = 1+1",
+	}
+	if err := exec(ctx, opts); err != nil {
 		t.Fatal(err)
 	}
 }

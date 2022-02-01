@@ -6,14 +6,17 @@ package worker
 
 import (
 	"bytes"
+	"context"
 	"strings"
 
 	"github.com/go-logr/logr"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/emcfarlane/larking/api/controlpb"
 	"github.com/emcfarlane/larking/api/workerpb"
 	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"
@@ -21,15 +24,39 @@ import (
 
 type Server struct {
 	workerpb.UnimplementedWorkerServer
-	load func(thread *starlark.Thread, module string) (starlark.StringDict, error)
+	load    func(thread *starlark.Thread, module string) (starlark.StringDict, error)
+	control controlpb.ControlClient
 }
 
 func NewServer(
 	load func(thread *starlark.Thread, module string) (starlark.StringDict, error),
+	control controlpb.ControlClient,
 ) *Server {
 	return &Server{
-		load: load,
+		load:    load,
+		control: control,
 	}
+}
+
+func (s *Server) authorize(ctx context.Context, name string) error {
+	var mdpb map[string]*controlpb.Values
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		mdpb = make(map[string]*controlpb.Values)
+		for key, vals := range md {
+			mdpb[key] = &controlpb.Values{Values: vals}
+		}
+	}
+	req := &controlpb.AuthorizeRequest{
+		Name:     name,
+		Resource: nil, // TODO
+		Metadata: mdpb,
+	}
+
+	_, err := s.control.Authorize(ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func soleExpr(f *syntax.File) syntax.Expr {
@@ -51,6 +78,11 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 		return err
 	}
 	l.Info("running on thread", "thread", cmd.Name)
+
+	if err := s.authorize(ctx, cmd.Name); err != nil {
+		l.Error(err, "failed to authorize request")
+		return err
+	}
 
 	var buf bytes.Buffer
 	thread := &starlark.Thread{

@@ -18,14 +18,12 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/go-logr/logr"
 	testing_logr "github.com/go-logr/logr/testing"
 	"github.com/google/go-cmp/cmp"
-	"go.starlark.net/starlark"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -37,11 +35,8 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 
 	"github.com/emcfarlane/larking/api/healthpb"
-	"github.com/emcfarlane/larking/api/workerpb"
 	"github.com/emcfarlane/larking/health"
 	"github.com/emcfarlane/larking/testpb"
-	"github.com/emcfarlane/larking/worker"
-	"github.com/emcfarlane/starlarkassert"
 )
 
 func testContext(t *testing.T) context.Context {
@@ -467,164 +462,4 @@ func TestTLSServer(t *testing.T) {
 		}
 
 	})
-}
-
-func TestAPIServer(t *testing.T) {
-	log := testing_logr.NewTestLogger(t)
-	unary := NewUnaryContextLogr(log)
-	stream := NewStreamContextLogr(log)
-
-	mux, err := NewMux(
-		UnaryServerInterceptorOption(unary),
-		StreamServerInterceptorOption(stream),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	workerServer := worker.NewServer(
-		func(thread *starlark.Thread, module string) (starlark.StringDict, error) {
-			if module == "assert.star" {
-				assert, err := starlarkassert.LoadAssertModule(thread)
-				if err != nil {
-					return nil, err
-				}
-				return assert, nil
-			}
-			return nil, os.ErrNotExist
-		},
-	)
-	mux.RegisterService(&workerpb.Worker_ServiceDesc, workerServer)
-
-	s, err := NewServer(mux, InsecureServerOption())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	lis, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	defer lis.Close()
-
-	var g errgroup.Group
-	defer func() {
-		if err := g.Wait(); err != nil {
-			t.Fatal(err)
-		}
-	}()
-	g.Go(func() error {
-		if err := s.Serve(lis); err != nil && err != http.ErrServerClosed {
-			return err
-		}
-		return nil
-	})
-	defer func() {
-		if err := s.Shutdown(context.Background()); err != nil {
-			t.Fatal(err)
-		}
-	}()
-
-	// Create the client.
-	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("cannot connect to server: %v", err)
-	}
-	defer conn.Close()
-
-	client := workerpb.NewWorkerClient(conn)
-
-	tests := []struct {
-		name string
-		ins  []*workerpb.Command
-		outs []*workerpb.Result
-	}{{
-		name: "fibonacci",
-		ins: []*workerpb.Command{{
-			Name: "",
-			Exec: &workerpb.Command_Input{
-				Input: `def fibonacci(n):
-	    res = list(range(n))
-	    for i in res[2:]:
-		res[i] = res[i-2] + res[i-1]
-	    return res
-`},
-		}, {
-			Exec: &workerpb.Command_Input{
-				Input: "fibonacci(10)\n",
-			},
-		}},
-		outs: []*workerpb.Result{{
-			Result: &workerpb.Result_Output{
-				Output: &workerpb.Output{
-					Output: "",
-				},
-			},
-		}, {
-			Result: &workerpb.Result_Output{
-				Output: &workerpb.Output{
-					Output: "[0, 1, 1, 2, 3, 5, 8, 13, 21, 34]",
-				},
-			},
-		}},
-	}, {
-		name: "load",
-		ins: []*workerpb.Command{{
-			Name: "",
-			Exec: &workerpb.Command_Input{
-				Input: `load("assert.star", "assert")`,
-			},
-		}, {
-			Exec: &workerpb.Command_Input{
-				Input: "assert.eq(1, 1)",
-			},
-		}},
-		outs: []*workerpb.Result{{
-			Result: &workerpb.Result_Output{
-				Output: &workerpb.Output{
-					Output: "",
-				},
-			},
-		}, {
-			Result: &workerpb.Result_Output{
-				Output: &workerpb.Output{
-					Output: "True",
-				},
-			},
-		}},
-	}}
-	cmpOpts := cmp.Options{protocmp.Transform()}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := testContext(t)
-
-			if len(tt.ins) < len(tt.outs) {
-				t.Fatal("invalid args")
-			}
-
-			stream, err := client.RunOnThread(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			for i := 0; i < len(tt.ins); i++ {
-				in := tt.ins[i]
-				if err := stream.Send(in); err != nil {
-					t.Fatal(err)
-				}
-
-				out, err := stream.Recv()
-				if err != nil {
-					t.Fatal(err)
-				}
-				t.Logf("out: %v", out)
-
-				diff := cmp.Diff(out, tt.outs[i], cmpOpts...)
-				if diff != "" {
-					t.Error(diff)
-				}
-			}
-		})
-	}
-	//t.Logf("thread: %v", s.ls.threads["default"])
 }

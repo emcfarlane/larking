@@ -34,18 +34,12 @@ func getValues(s string) (string, url.Values, error) {
 //
 // TODO: load syntax for git modules...
 func resolveModuleURL(name string, module string) (bktURL string, pathStr string, err error) {
-
-	vs := strings.SplitN(name, "?", 2)
-	bktURL = vs[0]
-
 	var vals url.Values
-	if len(vs) == 2 {
-		vals, err = url.ParseQuery(vs[1])
-		if err != nil {
-			return
-		}
+	bktURL, vals, err = getValues(name)
+	if err != nil {
+		return
 	}
-	fmt.Println("vals", vals, vals.Get("key"))
+
 	key := vals.Get(keyParam)
 	dir := path.Dir(key)
 
@@ -67,6 +61,4 @@ func resolveModuleURL(name string, module string) (bktURL string, pathStr string
 	return
 }
 
-func setKey(key string) {
-
-}
+//func setKey(key string) {}

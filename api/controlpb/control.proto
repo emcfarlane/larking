@@ -7,13 +7,19 @@ syntax = "proto3";
 package larking.api.control;
 
 import "google/api/annotations.proto";
+import "google/protobuf/any.proto";
 
 option go_package = "github.com/emcfarlane/larking/api/controlpb;controlpb";
 
+// TODO:
+// https://github.com/googleapis/googleapis/blob/master/google/rpc/context/attribute_context.proto
+
+message Values { repeated string values = 1; }
+
 message AuthorizeRequest {
   string name = 1;
-  string token = 2;
-  string thread = 3;
+  google.protobuf.Any resource = 2;
+  map<string, Values> metadata = 3;
 }
 
 message AuthorizeResponse {}

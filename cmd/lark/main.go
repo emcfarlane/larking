@@ -55,7 +55,7 @@ var (
 	flagThread       = flag.String("thread", "", "Thread to run on.")
 
 	// TODO: relative/absolute pathing needs to be resolved...
-	flagDir = flag.String("dir", "file://", "Set the module loading directory")
+	//flagDir = flag.String("dir", "file://", "Set the module loading directory")
 )
 
 type Options struct {

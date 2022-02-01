@@ -9,14 +9,17 @@ import (
 	"os"
 
 	"github.com/emcfarlane/larking"
+	"github.com/emcfarlane/larking/api/controlpb"
 	"github.com/emcfarlane/larking/api/healthpb"
 	"github.com/emcfarlane/larking/api/workerpb"
+	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/health"
 	"github.com/emcfarlane/larking/starlib"
 	"github.com/emcfarlane/larking/worker"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 const defaultAddr = "localhost:6060" // default webserver address
@@ -31,8 +34,10 @@ func env(key, def string) string {
 var (
 	flagAddr        = flag.String("addr", env("LARKING_ADDRESS", defaultAddr), "Local address to listen on.")
 	flagControlAddr = flag.String("control", "https://larking.io", "Control server for credentials.")
-	flagMain        = flag.String("main", "", "Main thread for worker.")
 	flagInsecure    = flag.Bool("insecure", false, "Insecure, disabled credentials.")
+
+	// TODO: main
+	//flagMain        = flag.String("main", "", "Main thread for worker.")
 )
 
 type logStream struct {
@@ -59,14 +64,14 @@ func run(ctx context.Context) error {
 	log = log.WithName("Larking")
 
 	unary := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		log.Info("unary", info)
+		log.Info("unary request", "info", info)
 		ctx = logr.NewContext(ctx, log)
 		defer log.Info("unary end", info)
 		return handler(ctx, req)
 	}
 
 	stream := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		log.Info("stream", info)
+		log.Info("stream request", "info", info)
 		defer log.Info("stream end", info)
 		return handler(srv, logStream{
 			ServerStream: ss,
@@ -91,8 +96,24 @@ func run(ctx context.Context) error {
 	loader := starlib.NewLoader()
 	defer loader.Close()
 
+	var controlClient controlpb.ControlClient = control.InsecureControlClient{}
+	if !*flagInsecure {
+		// TODO: load creds.
+		creds := insecure.NewCredentials()
+		addr := *flagControlAddr
+
+		cc, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(creds))
+		if err != nil {
+			return err
+		}
+		defer cc.Close()
+
+		controlClient = controlpb.NewControlClient(cc)
+	}
+
 	workerServer := worker.NewServer(
 		loader.Load,
+		controlClient,
 	)
 	mux.RegisterService(&workerpb.Worker_ServiceDesc, workerServer)
 	healthServer.SetServingStatus(
