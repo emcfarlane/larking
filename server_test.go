@@ -18,12 +18,14 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/go-logr/logr"
 	testing_logr "github.com/go-logr/logr/testing"
 	"github.com/google/go-cmp/cmp"
+	"go.starlark.net/starlark"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -39,6 +41,7 @@ import (
 	"github.com/emcfarlane/larking/health"
 	"github.com/emcfarlane/larking/testpb"
 	"github.com/emcfarlane/larking/worker"
+	"github.com/emcfarlane/starlarkassert"
 )
 
 func testContext(t *testing.T) context.Context {
@@ -478,7 +481,18 @@ func TestAPIServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	workerServer := worker.NewServer()
+	workerServer := worker.NewServer(
+		func(thread *starlark.Thread, module string) (starlark.StringDict, error) {
+			if module == "assert.star" {
+				assert, err := starlarkassert.LoadAssertModule(thread)
+				if err != nil {
+					return nil, err
+				}
+				return assert, nil
+			}
+			return nil, os.ErrNotExist
+		},
+	)
 	mux.RegisterService(&workerpb.Worker_ServiceDesc, workerServer)
 
 	s, err := NewServer(mux, InsecureServerOption())
@@ -549,6 +563,31 @@ func TestAPIServer(t *testing.T) {
 			Result: &workerpb.Result_Output{
 				Output: &workerpb.Output{
 					Output: "[0, 1, 1, 2, 3, 5, 8, 13, 21, 34]",
+				},
+			},
+		}},
+	}, {
+		name: "load",
+		ins: []*workerpb.Command{{
+			Name: "",
+			Exec: &workerpb.Command_Input{
+				Input: `load("assert.star", "assert")`,
+			},
+		}, {
+			Exec: &workerpb.Command_Input{
+				Input: "assert.eq(1, 1)",
+			},
+		}},
+		outs: []*workerpb.Result{{
+			Result: &workerpb.Result_Output{
+				Output: &workerpb.Output{
+					Output: "",
+				},
+			},
+		}, {
+			Result: &workerpb.Result_Output{
+				Output: &workerpb.Output{
+					Output: "True",
 				},
 			},
 		}},

@@ -5,6 +5,7 @@ import (
 	"go.starlark.net/starlarkstruct"
 )
 
+// Module is an alias of "go.starlark.net/starlarkstruct.Module"
 type Module = starlarkstruct.Module
 
 // MakeModule may be used as the implementation of a Starlark built-in

@@ -17,7 +17,13 @@ import (
 // errorStatus creates a status from an error,
 // or its backtrace if it is a Starlark evaluation error.
 func errorStatus(err error) *status.Status {
-	st := status.New(codes.InvalidArgument, err.Error())
+	if err == nil {
+		return nil
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		st = status.New(codes.InvalidArgument, err.Error())
+	}
 	if evalErr, ok := err.(*starlark.EvalError); ok {
 		// Describes additional debugging info.
 		di := &errdetails.DebugInfo{

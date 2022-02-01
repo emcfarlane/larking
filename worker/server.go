@@ -21,12 +21,15 @@ import (
 
 type Server struct {
 	workerpb.UnimplementedWorkerServer
-
-	Load func(thread *starlark.Thread, module string) (starlark.StringDict, error)
+	load func(thread *starlark.Thread, module string) (starlark.StringDict, error)
 }
 
-func NewServer() *Server {
-	return &Server{}
+func NewServer(
+	load func(thread *starlark.Thread, module string) (starlark.StringDict, error),
+) *Server {
+	return &Server{
+		load: load,
+	}
 }
 
 func soleExpr(f *syntax.File) syntax.Expr {
@@ -55,7 +58,7 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 		Print: func(_ *starlark.Thread, msg string) {
 			buf.WriteString(msg) //nolint
 		},
-		Load: s.Load,
+		Load: s.load,
 	}
 
 	starlarkthread.SetContext(thread, ctx)
@@ -64,79 +67,78 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 		if cerr := cleanup(); err == nil {
 			err = cerr
 		}
+		l.Info("thread closed", "err", err)
 	}()
 
 	module := strings.TrimPrefix(cmd.Name, "thread/")
 
-	var globals starlark.StringDict
+	globals := starlib.NewGlobals()
 	if module != "" {
-		if s.Load == nil {
+		if s.load == nil {
 			return status.Error(codes.Unavailable, "module loading not avaliable")
 		}
-		globals, err = s.Load(thread, module)
+		predeclared, err := s.load(thread, module)
 		if err != nil {
 			return err
 		}
+		for key, val := range predeclared {
+			globals[key] = val // copy thread values to globals
+		}
 		thread.Name = "<worker:" + module + ">"
-	} else {
-		globals = make(starlark.StringDict)
+	}
+
+	run := func(input string) error {
+		buf.Reset()
+		f, err := syntax.Parse(thread.Name, input, 0)
+		if err != nil {
+			return err
+		}
+
+		if expr := soleExpr(f); expr != nil {
+			// eval
+			v, err := starlark.EvalExpr(thread, expr, globals)
+			if err != nil {
+				return err
+			}
+
+			// print
+			if v != starlark.None {
+				buf.WriteString(v.String())
+			}
+		} else if err := starlark.ExecREPLChunk(f, thread, globals); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	c := starlib.Completer{StringDict: globals}
-
 	for {
+		result := &workerpb.Result{}
+
 		switch v := cmd.Exec.(type) {
 		case *workerpb.Command_Input:
-			buf.Reset()
-
-			f, err := syntax.Parse(thread.Name, v.Input, 0)
-			//f, err := syntax.ParseCompoundStmt(fmt.Sprintf("<%s>", serverThread.name), readline)
+			err := run(v.Input)
 			if err != nil {
-				return errorStatus(err).Err()
+				l.Info("thread error", "err", err)
 			}
-
-			if expr := soleExpr(f); expr != nil {
-				// eval
-				v, err := starlark.EvalExpr(thread, expr, globals)
-				if err != nil {
-					return errorStatus(err).Err()
-				}
-
-				// print
-				if v != starlark.None {
-					buf.WriteString(v.String())
-				}
-			} else if err := starlark.ExecREPLChunk(f, thread, globals); err != nil {
-				return errorStatus(err).Err()
-			}
-
-			result := &workerpb.Result{
-				Result: &workerpb.Result_Output{
-					Output: &workerpb.Output{
-						//Input:  v.Input,
-						Output: buf.String(),
-					},
+			result.Result = &workerpb.Result_Output{
+				Output: &workerpb.Output{
+					Output: buf.String(),
+					Status: errorStatus(err).Proto(),
 				},
-			}
-
-			if err = stream.Send(result); err != nil {
-				return err
 			}
 
 		case *workerpb.Command_Complete:
 			completions := c.Complete(v.Complete)
-
-			result := &workerpb.Result{
-				Result: &workerpb.Result_Completion{
-					Completion: &workerpb.Completion{
-						Completions: completions,
-					},
+			result.Result = &workerpb.Result_Completion{
+				Completion: &workerpb.Completion{
+					Completions: completions,
 				},
 			}
 
-			if err = stream.Send(result); err != nil {
-				return err
-			}
+		}
+		if err = stream.Send(result); err != nil {
+			return err
 		}
 
 		cmd, err = stream.Recv()

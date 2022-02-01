@@ -22,14 +22,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/emcfarlane/larking"
 	"github.com/emcfarlane/larking/api/workerpb"
 	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"
 	"github.com/emcfarlane/starlarkassert"
 	"github.com/peterh/liner"
-	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 	"google.golang.org/grpc"
@@ -39,11 +37,6 @@ import (
 	_ "gocloud.dev/blob/fileblob"
 	_ "gocloud.dev/blob/memblob"
 )
-
-func init() {
-	// TODO: fix this repl issue.
-	resolve.LoadBindsGlobally = true
-}
 
 func env(key, def string) string {
 	if e := os.Getenv(key); e != "" {
@@ -190,11 +183,14 @@ func remote(ctx context.Context, line *liner.State, client workerpb.WorkerClient
 				return err
 			}
 			starlib.FprintErr(os.Stderr, err)
-			continue
+			return err
 		}
 		if output := res.GetOutput(); output != nil {
 			if output.Output != "" {
 				fmt.Println(output.Output)
+			}
+			if output.Status != nil {
+				starlib.FprintStatus(os.Stderr, output.Status)
 			}
 		}
 	}
@@ -209,12 +205,9 @@ func printer() func(*starlark.Thread, string) {
 }
 
 func local(ctx context.Context, line *liner.State, autocomplete bool) (err error) {
-	globals := larking.NewGlobals()
-
-	loader, err := larking.NewLoader(ctx, *flagDir)
-	if err != nil {
-		return err
-	}
+	globals := starlib.NewGlobals()
+	loader := starlib.NewLoader()
+	defer loader.Close()
 
 	thread := &starlark.Thread{
 		Name:  "<stdin>",
@@ -224,8 +217,7 @@ func local(ctx context.Context, line *liner.State, autocomplete bool) (err error
 	starlarkthread.SetContext(thread, ctx)
 	close := starlarkthread.WithResourceStore(thread)
 	defer func() {
-		cerr := close()
-		if err == nil {
+		if cerr := close(); err == nil {
 			err = cerr
 		}
 	}()
@@ -401,15 +393,16 @@ func exec(ctx context.Context, opts *Options) (err error) {
 			if output.Output != "" {
 				fmt.Println(output.Output)
 			}
+			if output.Status != nil {
+				starlib.FprintStatus(os.Stderr, output.Status)
+			}
 		}
 		return nil
 	}
 
-	globals := larking.NewGlobals()
-	loader, err := larking.NewLoader(ctx, *flagDir)
-	if err != nil {
-		return err
-	}
+	globals := starlib.NewGlobals()
+	loader := starlib.NewLoader()
+	defer loader.Close()
 
 	thread := &starlark.Thread{
 		Name:  opts.Filename,
@@ -504,11 +497,10 @@ func start(ctx context.Context, filename, src string) error {
 }
 
 func test(ctx context.Context, pattern string) int {
+	loader := starlib.NewLoader()
+	defer loader.Close()
+
 	runner := func(thread *starlark.Thread, handler func() error) (err error) {
-		loader, err := larking.NewLoader(ctx, *flagDir)
-		if err != nil {
-			return err
-		}
 		thread.Load = loader.Load
 
 		starlarkthread.SetContext(thread, ctx)
@@ -523,8 +515,7 @@ func test(ctx context.Context, pattern string) int {
 		return handler()
 	}
 
-	globals := larking.NewGlobals()
-
+	globals := starlib.NewGlobals()
 	tests := []testing.InternalTest{{
 		Name: "Lark",
 		F: func(t *testing.T) {

@@ -10,10 +10,32 @@ import (
 
 	"go.starlark.net/starlark"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/status"
 )
 
 type statusError interface{ GRPCStatus() *status.Status }
+
+func FprintStatus(w io.Writer, status *spb.Status) {
+	for _, detail := range status.Details {
+		m, err := detail.UnmarshalNew()
+		if err != nil {
+			fmt.Fprintf(w, "InternalError: %v\n", err)
+			continue
+		}
+		switch m := m.(type) {
+		case *errdetails.DebugInfo:
+			for _, se := range m.StackEntries {
+				fmt.Fprintln(w, se)
+			}
+		default:
+			fmt.Fprintf(w, "%v\n", m)
+		}
+	}
+	if len(status.Details) == 0 {
+		fmt.Fprintf(w, "Error: %v: %s\n", status.Code, status.Message)
+	}
+}
 
 func FprintErr(w io.Writer, err error) {
 	switch v := err.(type) {
@@ -22,24 +44,7 @@ func FprintErr(w io.Writer, err error) {
 	case statusError:
 		s := v.GRPCStatus()
 		p := s.Proto()
-		for _, detail := range p.Details {
-			m, err := detail.UnmarshalNew()
-			if err != nil {
-				fmt.Fprintf(w, "InternalError: %v\n", err)
-				continue
-			}
-			switch m := m.(type) {
-			case *errdetails.DebugInfo:
-				for _, se := range m.StackEntries {
-					fmt.Fprintln(w, se)
-				}
-			default:
-				fmt.Fprintf(w, "%v\n", m)
-			}
-		}
-		if len(p.Details) == 0 {
-			fmt.Fprintf(w, "Error: %v: %s\n", s.Code(), s.Message())
-		}
+		FprintStatus(w, p)
 	default:
 		fmt.Fprintln(w, err)
 	}

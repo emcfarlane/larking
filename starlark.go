@@ -4,140 +4,21 @@ import (
 	"context"
 	"io"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/emcfarlane/larking/starlarkblob"
-	"github.com/emcfarlane/larking/starlarkdocstore"
-	"github.com/emcfarlane/larking/starlarkerrors"
-	"github.com/emcfarlane/larking/starlarknethttp"
-	"github.com/emcfarlane/larking/starlarkpubsub"
-	"github.com/emcfarlane/larking/starlarkruntimevar"
-	"github.com/emcfarlane/larking/starlarksql"
 	"github.com/emcfarlane/larking/starlarkstruct"
 	"github.com/emcfarlane/larking/starlarkthread"
-	"github.com/emcfarlane/starlarkassert"
 	"github.com/emcfarlane/starlarkproto"
-	starlarkjson "go.starlark.net/lib/json"
-	starlarkmath "go.starlark.net/lib/math"
-	starlarktime "go.starlark.net/lib/time"
-	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
-	"gocloud.dev/blob"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 // Bootstrap...
 // TODO: xDS
-
-func init() {
-	resolve.AllowSet = true
-	resolve.AllowRecursion = true
-}
-
-func NewGlobals() starlark.StringDict {
-	return starlark.StringDict{
-		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
-		"module": starlark.NewBuiltin("module", starlarkstruct.MakeModule),
-	}
-}
-
-type Loader struct {
-	mu    sync.Mutex
-	store map[string]starlark.StringDict
-	bkt   *blob.Bucket
-}
-
-// NewLoader creates a starlark loader with modules that support loading themselves as
-// a starlarkstruct.Module:
-//     load("module.star", "module")
-func NewLoader(ctx context.Context, urlstr string) (*Loader, error) {
-	bkt, err := blob.OpenBucket(ctx, urlstr)
-	if err != nil {
-		return nil, err
-	}
-
-	thread := new(starlark.Thread)
-	assert, err := starlarkassert.LoadAssertModule(thread)
-	if err != nil {
-		return nil, err
-	}
-	// SetReporter to default to threads default.
-
-	store := map[string]starlark.StringDict{
-		"assert.star": assert,
-	}
-
-	// create mux
-	mux, err := NewMux()
-	if err != nil {
-		return nil, err
-	}
-
-	modules := []*starlarkstruct.Module{
-		starlarkblob.NewModule(),
-		starlarkdocstore.NewModule(),
-		starlarkerrors.NewModule(),
-		starlarknethttp.NewModule(),
-		starlarkpubsub.NewModule(),
-		starlarkruntimevar.NewModule(),
-		starlarksql.NewModule(),
-		starlarkproto.NewModule(protoregistry.GlobalFiles),
-
-		// TODO: move to thread variables?
-		NewModule(mux),
-
-		// starlark native modules
-		starlarkjson.Module,
-		starlarkmath.Module,
-		starlarktime.Module,
-	}
-	for _, module := range modules {
-		dict := make(starlark.StringDict, len(module.Members)+1)
-		for key, val := range module.Members {
-			dict[key] = val
-		}
-		dict[module.Name] = module
-		store[module.Name+".star"] = dict
-	}
-
-	return &Loader{
-		store: store,
-		bkt:   bkt,
-	}, nil
-}
-
-func (l *Loader) Load(thread *starlark.Thread, filename string) (starlark.StringDict, error) {
-	l.mu.Lock()
-	if e, ok := l.store[filename]; ok {
-		l.mu.Unlock()
-		return e, nil
-	}
-	l.mu.Unlock()
-
-	// TODO: singleflight.
-	// TODO: third-party module loading.
-	ctx := starlarkthread.Context(thread)
-
-	src, err := l.bkt.ReadAll(ctx, filename)
-	if err != nil {
-		return nil, err
-	}
-
-	module, err := starlark.ExecFile(thread, filename, src, nil)
-	if err != nil {
-		return nil, err
-	}
-	l.mu.Lock()
-	l.store[filename] = module
-	l.mu.Unlock()
-	return module, nil
-}
 
 func NewModule(mux *Mux) *starlarkstruct.Module {
 	s := NewStarlark(mux)

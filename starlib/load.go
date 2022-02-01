@@ -6,6 +6,7 @@ package starlib
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -19,18 +20,71 @@ import (
 	"github.com/emcfarlane/larking/starlarkpubsub"
 	"github.com/emcfarlane/larking/starlarkruntimevar"
 	"github.com/emcfarlane/larking/starlarksql"
+	"github.com/emcfarlane/larking/starlarkstruct"
+	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/starlarkassert"
 	"github.com/emcfarlane/starlarkproto"
 	starlarkjson "go.starlark.net/lib/json"
 	starlarkmath "go.starlark.net/lib/math"
 	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkstruct"
+	"gocloud.dev/blob"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
-// TODO: load syntax
-// git modules...
+var (
+	stdOnce sync.Once
+	stdLib  map[string]starlark.StringDict
+)
+
+func stdOnceLoad(thread *starlark.Thread) error {
+	assert, err := starlarkassert.LoadAssertModule(thread)
+	if err != nil {
+		return err
+	}
+	stdLib = map[string]starlark.StringDict{
+		"assert.star": assert,
+	}
+	modules := []*starlarkstruct.Module{
+		starlarkblob.NewModule(),
+		starlarkdocstore.NewModule(),
+		starlarkerrors.NewModule(),
+		starlarknethttp.NewModule(),
+		starlarkpubsub.NewModule(),
+		starlarkruntimevar.NewModule(),
+		starlarksql.NewModule(),
+		starlarkproto.NewModule(protoregistry.GlobalFiles),
+
+		// TODO: starlarkgrpc...
+
+		// starlark native modules
+		starlarkjson.Module,
+		starlarkmath.Module,
+		starlarktime.Module,
+	}
+	for _, module := range modules {
+		dict := make(starlark.StringDict, len(module.Members)+1)
+		for key, val := range module.Members {
+			dict[key] = val
+		}
+		dict[module.Name] = module
+		stdLib[module.Name+".star"] = dict
+	}
+	return nil
+}
+
+func StdLoad(thread *starlark.Thread, module string) (starlark.StringDict, error) {
+	var lderr error
+	if stdOnce.Do(func() {
+		lderr = stdOnceLoad(thread)
+	}); lderr != nil {
+		return nil, lderr
+	}
+	if e, ok := stdLib[module]; ok {
+		return e, nil
+	}
+	return nil, os.ErrNotExist
+}
 
 // call is an in-flight or completed load call
 type call struct {
@@ -43,9 +97,15 @@ type call struct {
 }
 
 type Loader struct {
-	mu sync.Mutex       // protects m
-	m  map[string]*call // lazily initialized
+	mu   sync.Mutex       // protects m
+	m    map[string]*call // lazily initialized
+	bkts map[string]*blob.Bucket
 
+	//
+}
+
+func NewLoader() *Loader {
+	return &Loader{}
 }
 
 // errCycle indicates the load caused a cycle.
@@ -85,14 +145,13 @@ func (l *Loader) Load(thread *starlark.Thread, module string) (starlark.StringDi
 			l.mu.Unlock()
 			return nil, errCycle
 		}
-		c.callers[thread] = true
 		l.mu.Unlock()
 		c.wg.Wait()
 		return c.val, c.err
 	}
 	c := new(call)
 	c.wg.Add(1)
-	c.callers[thread] = true
+	c.callers = map[*starlark.Thread]bool{thread: true}
 	l.m[key] = c
 	l.mu.Unlock()
 
@@ -113,61 +172,70 @@ func (l *Loader) Load(thread *starlark.Thread, module string) (starlark.StringDi
 	return c.val, c.err
 }
 
-func (l *Loader) load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
-	// TODO
-	return nil, os.ErrNotExist
-}
+func (l *Loader) loadBucket(ctx context.Context, bktURL string) (*blob.Bucket, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-var (
-	stdOnce sync.Once
-	stdLib  map[string]starlark.StringDict
-)
+	if bkt, ok := l.bkts[bktURL]; ok {
+		return bkt, nil
+	}
 
-func stdOnceLoad(thread *starlark.Thread) error {
-	assert, err := starlarkassert.LoadAssertModule(thread)
+	bkt, err := blob.OpenBucket(ctx, bktURL)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	store := map[string]starlark.StringDict{
-		"assert.star": assert,
-	}
-	modules := []*starlarkstruct.Module{
-		starlarkblob.NewModule(),
-		starlarkdocstore.NewModule(),
-		starlarkerrors.NewModule(),
-		starlarknethttp.NewModule(),
-		starlarkpubsub.NewModule(),
-		starlarkruntimevar.NewModule(),
-		starlarksql.NewModule(),
-		starlarkproto.NewModule(protoregistry.GlobalFiles),
-
-		// TODO: starlarkgrpc...
-
-		// starlark native modules
-		starlarkjson.Module,
-		starlarkmath.Module,
-		starlarktime.Module,
-	}
-	for _, module := range modules {
-		dict := make(starlark.StringDict, len(module.Members)+1)
-		for key, val := range module.Members {
-			dict[key] = val
-		}
-		dict[module.Name] = module
-		store[module.Name+".star"] = dict
-	}
-	return nil
+	l.bkts[bktURL] = bkt
+	return bkt, nil
 }
 
-func StdLoad(thread *starlark.Thread, module string) (starlark.StringDict, error) {
-	var lderr error
-	if stdOnce.Do(func() {
-		lderr = stdOnceLoad(thread)
-	}); lderr != nil {
-		return nil, lderr
+func (l *Loader) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var firstErr error
+	for _, bkt := range l.bkts {
+		if err := bkt.Close(); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
 	}
-	if e, ok := stdLib[module]; ok {
-		return e, nil
+	return firstErr
+}
+
+func (l *Loader) load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
+	ctx := starlarkthread.Context(thread)
+
+	v, err := StdLoad(thread, module)
+	if err == nil {
+		return v, nil
 	}
-	return nil, os.ErrNotExist
+	if err != os.ErrNotExist {
+		return nil, err
+	}
+
+	bktURL, key, err := resolveModuleURL(thread.Name, module)
+	if err != nil {
+		return nil, err
+	}
+
+	bkt, err := l.loadBucket(ctx, bktURL)
+	if err != nil {
+		return nil, err
+	}
+
+	src, err := bkt.ReadAll(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+
+	oldName, newName := thread.Name, bktURL
+	thread.Name = newName
+	defer func() { thread.Name = oldName }()
+
+	v, err = starlark.ExecFile(thread, key, src, nil)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
 }

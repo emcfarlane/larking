@@ -7,6 +7,7 @@ syntax = "proto3";
 package larking.api.worker;
 
 import "google/api/annotations.proto";
+import "google/rpc/status.proto";
 
 option go_package = "github.com/emcfarlane/larking/api/workerpb;workerpb";
 
@@ -20,6 +21,7 @@ message Command {
 
 message Output {
   string output = 1; // printed output
+  google.rpc.Status status = 2;
 }
 
 message Completion {

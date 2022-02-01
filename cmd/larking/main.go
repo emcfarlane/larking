@@ -88,8 +88,12 @@ func run(ctx context.Context) error {
 	defer healthServer.Shutdown()
 	mux.RegisterService(&healthpb.Health_ServiceDesc, healthServer)
 
-	workerServer := worker.NewServer()
-	workerServer.Load = starlib.StdLoad
+	loader := starlib.NewLoader()
+	defer loader.Close()
+
+	workerServer := worker.NewServer(
+		loader.Load,
+	)
 	mux.RegisterService(&workerpb.Worker_ServiceDesc, workerServer)
 	healthServer.SetServingStatus(
 		workerpb.Worker_ServiceDesc.ServiceName,
