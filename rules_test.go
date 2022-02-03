@@ -333,6 +333,20 @@ func TestMessageServer(t *testing.T) {
 			msg:        &emptypb.Empty{},
 		},
 	}, {
+		name: "actionResource",
+		req:  httptest.NewRequest(http.MethodGet, "/v1/actions/123:fetch", nil),
+		in: in{
+			method: "/larking.testpb.Messaging/ActionResource",
+			msg:    &testpb.Message{Text: "actions/123"},
+		},
+		out: out{
+			msg: &emptypb.Empty{},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &emptypb.Empty{},
+		},
+	}, {
 		name: "actionSegments",
 		req: httptest.NewRequest(http.MethodPost, "/v1/name/id:watch", strings.NewReader(
 			`{ "message_id": "123" }`,

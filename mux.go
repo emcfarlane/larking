@@ -118,6 +118,11 @@ func StreamServerInterceptorOption(interceptor grpc.StreamServerInterceptor) Mux
 	return func(opts *muxOptions) { opts.streamInterceptor = interceptor }
 }
 
+//// LogOption adds a logr with a unary and stream contexts.
+//func LogOption(log logr.Logger) MuxOption {
+//	return func(opts *muxOption) { opts.log = log }
+//}
+
 type Mux struct {
 	opts muxOptions
 	//events trace.EventLog TODO
@@ -613,6 +618,7 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 	s.sendN += 1
 	reply := m.(proto.Message)
 
+	accept := s.r.Header.Get("Accept")
 	acceptEncoding := s.r.Header.Get("Accept-Encoding")
 
 	if fRsp, ok := s.w.(http.Flusher); ok {
@@ -640,8 +646,7 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 
 	msg := cur.Interface()
 
-	switch cur.Descriptor().FullName() {
-	case "google.api.HttpBody":
+	if cur.Descriptor().FullName() == "google.api.HttpBody" {
 		fds := cur.Descriptor().Fields()
 		fdContentType := fds.ByName(protoreflect.Name("content_type"))
 		fdData := fds.ByName(protoreflect.Name("data"))
@@ -653,14 +658,25 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 			return err
 		}
 		return nil
+	}
+
+	switch accept {
+	case "application/protobuf", "application/octet-stream":
+		b, err := proto.Marshal(msg)
+		if err != nil {
+			return err
+		}
+		s.w.Header().Set("Content-Type", accept)
+		if _, err := io.Copy(resp, bytes.NewReader(b)); err != nil {
+			return err
+		}
+		return nil
 
 	default:
-		// TODO: contentType check?
 		b, err := protojson.Marshal(msg)
 		if err != nil {
 			return err
 		}
-
 		s.w.Header().Set("Content-Type", "application/json")
 		if _, err := io.Copy(resp, bytes.NewReader(b)); err != nil {
 			return err
@@ -701,8 +717,7 @@ func (s *streamHTTP) decodeRequestArgs(args proto.Message) error {
 
 	msg := cur.Interface()
 
-	switch fullname {
-	case "google.api.HttpBody":
+	if fullname == "google.api.HttpBody" {
 		rfl := msg.ProtoReflect()
 		fds := rfl.Descriptor().Fields()
 		fdContentType := fds.ByName(protoreflect.Name("content_type"))
@@ -710,9 +725,16 @@ func (s *streamHTTP) decodeRequestArgs(args proto.Message) error {
 		rfl.Set(fdContentType, protoreflect.ValueOfString(contentType))
 		rfl.Set(fdData, protoreflect.ValueOfBytes(b))
 		// TODO: extensions?
+		return nil
+	}
+
+	switch contentType {
+	case "application/protobuf", "application/octet-stream":
+		if err := proto.Unmarshal(b, msg); err != nil {
+			return err
+		}
 
 	default:
-		// TODO: contentType check?
 		// What marshalling options should we support?
 		if err := protojson.Unmarshal(b, msg); err != nil {
 			return err
