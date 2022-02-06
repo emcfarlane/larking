@@ -8,13 +8,19 @@ import (
 	"context"
 
 	"github.com/emcfarlane/larking/api/controlpb"
+	status "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 )
 
 type InsecureControlClient struct{}
 
-func (InsecureControlClient) Authorize(
-	ctx context.Context, in *controlpb.AuthorizeRequest, opts ...grpc.CallOption,
-) (*controlpb.AuthorizeResponse, error) {
-	return &controlpb.AuthorizeResponse{}, nil
+func (InsecureControlClient) Check(
+	ctx context.Context, in *controlpb.CheckRequest, opts ...grpc.CallOption,
+) (*controlpb.CheckResponse, error) {
+	return &controlpb.CheckResponse{
+		Status: &status.Status{
+			Code:    0, // okay
+			Message: "insecure check",
+		},
+	}, nil
 }

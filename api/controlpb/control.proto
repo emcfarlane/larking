@@ -7,27 +7,56 @@ syntax = "proto3";
 package larking.api.control;
 
 import "google/api/annotations.proto";
-import "google/protobuf/any.proto";
+import "google/rpc/status.proto";
 
 option go_package = "github.com/emcfarlane/larking/api/controlpb;controlpb";
 
-// TODO:
-// https://github.com/googleapis/googleapis/blob/master/google/rpc/context/attribute_context.proto
+// Based on google APIs Service Control:
+// https://github.com/googleapis/googleapis/blob/master/google/api/servicecontrol/v1/service_controller.proto
+
+message Credentials {
+  // The resource name.
+  string name = 1;
+
+  // BearerToken is a credential type.
+  // Include the access token as metadata in all requests.
+  message BearerToken {
+    // The access token.
+    string access_token = 2;
+    // The public key, optional.
+    string public_key = 3;
+  }
+
+  oneof type {
+    bool insecure = 2;
+    BearerToken bearer = 3;
+  }
+}
 
 message Values { repeated string values = 1; }
 
-message AuthorizeRequest {
+message Operation {
+  // The operation name.
   string name = 1;
-  google.protobuf.Any resource = 2;
-  map<string, Values> metadata = 3;
+  // The operation credentials if user initiated.
+  Credentials credentials = 2;
 }
 
-message AuthorizeResponse {}
+// Request message for the Check method.
+message CheckRequest {
+  // The resource name.
+  string name = 1;
+
+  // The operation to be checked.
+  Operation operation = 2;
+}
+
+message CheckResponse { google.rpc.Status status = 1; }
 
 service Control {
-  rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse) {
+  rpc Check(CheckRequest) returns (CheckResponse) {
     option (google.api.http) = {
-      custom : {kind : "websocket" path : "/v1/{name=worker/*}"}
+      post : "/v1/{name=**}:check"
       body : "*"
     };
   }

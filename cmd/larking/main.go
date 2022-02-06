@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"log"
@@ -19,7 +20,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 )
 
 const defaultAddr = "localhost:6060" // default webserver address
@@ -35,6 +36,7 @@ var (
 	flagAddr        = flag.String("addr", env("LARKING_ADDRESS", defaultAddr), "Local address to listen on.")
 	flagControlAddr = flag.String("control", "https://larking.io", "Control server for credentials.")
 	flagInsecure    = flag.Bool("insecure", false, "Insecure, disabled credentials.")
+	flagCreds       = flag.String("credentials", "", "Runtime variable for credentials.")
 
 	// TODO: main
 	//flagMain        = flag.String("main", "", "Main thread for worker.")
@@ -96,13 +98,31 @@ func run(ctx context.Context) error {
 	loader := starlib.NewLoader()
 	defer loader.Close()
 
-	var controlClient controlpb.ControlClient = control.InsecureControlClient{}
+	var (
+		controlClient controlpb.ControlClient = control.InsecureControlClient{}
+		name          string
+	)
 	if !*flagInsecure {
-		// TODO: load creds.
-		creds := insecure.NewCredentials()
-		addr := *flagControlAddr
+		perRPC, err := control.OpenRPCCredentials(ctx, *flagCreds)
+		if err != nil {
+			return err
+		}
+		defer perRPC.Close()
 
-		cc, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(creds))
+		name = perRPC.Name()
+
+		// TODO: load creds.
+		pool, err := x509.SystemCertPool()
+		if err != nil {
+			return err
+		}
+		creds := credentials.NewClientTLSFromCert(pool, "")
+
+		cc, err := grpc.DialContext(
+			ctx, *flagControlAddr,
+			grpc.WithTransportCredentials(creds),
+			grpc.WithPerRPCCredentials(perRPC),
+		)
 		if err != nil {
 			return err
 		}
@@ -114,6 +134,7 @@ func run(ctx context.Context) error {
 	workerServer := worker.NewServer(
 		loader.Load,
 		controlClient,
+		name,
 	)
 	mux.RegisterService(&workerpb.Worker_ServiceDesc, workerServer)
 	healthServer.SetServingStatus(

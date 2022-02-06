@@ -18,7 +18,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ControlClient interface {
-	Authorize(ctx context.Context, in *AuthorizeRequest, opts ...grpc.CallOption) (*AuthorizeResponse, error)
+	Check(ctx context.Context, in *CheckRequest, opts ...grpc.CallOption) (*CheckResponse, error)
 }
 
 type controlClient struct {
@@ -29,9 +29,9 @@ func NewControlClient(cc grpc.ClientConnInterface) ControlClient {
 	return &controlClient{cc}
 }
 
-func (c *controlClient) Authorize(ctx context.Context, in *AuthorizeRequest, opts ...grpc.CallOption) (*AuthorizeResponse, error) {
-	out := new(AuthorizeResponse)
-	err := c.cc.Invoke(ctx, "/larking.api.control.Control/Authorize", in, out, opts...)
+func (c *controlClient) Check(ctx context.Context, in *CheckRequest, opts ...grpc.CallOption) (*CheckResponse, error) {
+	out := new(CheckResponse)
+	err := c.cc.Invoke(ctx, "/larking.api.control.Control/Check", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (c *controlClient) Authorize(ctx context.Context, in *AuthorizeRequest, opt
 // All implementations must embed UnimplementedControlServer
 // for forward compatibility
 type ControlServer interface {
-	Authorize(context.Context, *AuthorizeRequest) (*AuthorizeResponse, error)
+	Check(context.Context, *CheckRequest) (*CheckResponse, error)
 	mustEmbedUnimplementedControlServer()
 }
 
@@ -50,8 +50,8 @@ type ControlServer interface {
 type UnimplementedControlServer struct {
 }
 
-func (UnimplementedControlServer) Authorize(context.Context, *AuthorizeRequest) (*AuthorizeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Authorize not implemented")
+func (UnimplementedControlServer) Check(context.Context, *CheckRequest) (*CheckResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Check not implemented")
 }
 func (UnimplementedControlServer) mustEmbedUnimplementedControlServer() {}
 
@@ -66,20 +66,20 @@ func RegisterControlServer(s grpc.ServiceRegistrar, srv ControlServer) {
 	s.RegisterService(&Control_ServiceDesc, srv)
 }
 
-func _Control_Authorize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AuthorizeRequest)
+func _Control_Check_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ControlServer).Authorize(ctx, in)
+		return srv.(ControlServer).Check(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/larking.api.control.Control/Authorize",
+		FullMethod: "/larking.api.control.Control/Check",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ControlServer).Authorize(ctx, req.(*AuthorizeRequest))
+		return srv.(ControlServer).Check(ctx, req.(*CheckRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -92,8 +92,8 @@ var Control_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*ControlServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Authorize",
-			Handler:    _Control_Authorize_Handler,
+			MethodName: "Check",
+			Handler:    _Control_Check_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
