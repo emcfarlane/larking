@@ -9,7 +9,7 @@ print(err_val)
 def failing_func():
     fail("something went wrong")
 
-r1 = errors.call(failing_func)
+r1 = errors.catch(failing_func)
 
 assert.true(not r1)
 assert.true(r1.err)  # error is truthy
@@ -24,13 +24,13 @@ assert.fails(access_value, "something went wrong")
 def hello(name):
     return "hello, " + name
 
-r2 = errors.call(hello, "world")
+r2 = errors.catch(hello, "world")
 assert.true(r2)
 assert.true(not r2.err)
 
 assert.eq(r2.val, "hello, world")
 
-r3 = errors.call(io_eof_func)
+r3 = errors.catch(io_eof_func)
 assert.true(r3.err)
 
 # check error is type of io.EOF error

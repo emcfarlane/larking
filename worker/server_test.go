@@ -42,6 +42,7 @@ func TestAPIServer(t *testing.T) {
 			return nil, os.ErrNotExist
 		},
 		control.InsecureControlClient{},
+		"worker",
 	)
 
 	var opts []grpc.ServerOption
