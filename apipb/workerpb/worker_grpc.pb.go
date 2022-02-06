@@ -129,5 +129,5 @@ var Worker_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "api/workerpb/worker.proto",
+	Metadata: "apipb/workerpb/worker.proto",
 }

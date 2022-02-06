@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/emcfarlane/larking/api/workerpb"
+	"github.com/emcfarlane/larking/apipb/workerpb"
 	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"

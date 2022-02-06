@@ -9,7 +9,7 @@ package larking.api.worker;
 import "google/api/annotations.proto";
 import "google/rpc/status.proto";
 
-option go_package = "github.com/emcfarlane/larking/api/workerpb;workerpb";
+option go_package = "github.com/emcfarlane/larking/apipb/workerpb;workerpb";
 
 message Command {
   string name = 1;

@@ -16,8 +16,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/emcfarlane/larking/api/controlpb"
-	"github.com/emcfarlane/larking/api/workerpb"
+	"github.com/emcfarlane/larking/apipb/controlpb"
+	"github.com/emcfarlane/larking/apipb/workerpb"
 	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"
 )

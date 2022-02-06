@@ -10,9 +10,9 @@ import (
 	"os"
 
 	"github.com/emcfarlane/larking"
-	"github.com/emcfarlane/larking/api/controlpb"
-	"github.com/emcfarlane/larking/api/healthpb"
-	"github.com/emcfarlane/larking/api/workerpb"
+	"github.com/emcfarlane/larking/apipb/controlpb"
+	"github.com/emcfarlane/larking/apipb/healthpb"
+	"github.com/emcfarlane/larking/apipb/workerpb"
 	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/health"
 	"github.com/emcfarlane/larking/starlib"

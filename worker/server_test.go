@@ -10,7 +10,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/emcfarlane/larking/api/workerpb"
+	"github.com/emcfarlane/larking/apipb/workerpb"
 	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/worker"
 

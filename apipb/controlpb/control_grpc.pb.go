@@ -97,5 +97,5 @@ var Control_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "api/controlpb/control.proto",
+	Metadata: "apipb/controlpb/control.proto",
 }

@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/emcfarlane/larking/api/controlpb"
+	"github.com/emcfarlane/larking/apipb/controlpb"
 	"gocloud.dev/runtimevar"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

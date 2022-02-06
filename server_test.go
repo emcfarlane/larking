@@ -34,7 +34,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"github.com/emcfarlane/larking/api/healthpb"
+	"github.com/emcfarlane/larking/apipb/healthpb"
 	"github.com/emcfarlane/larking/health"
 	"github.com/emcfarlane/larking/testpb"
 )

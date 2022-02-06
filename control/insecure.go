@@ -7,7 +7,7 @@ package control
 import (
 	"context"
 
-	"github.com/emcfarlane/larking/api/controlpb"
+	"github.com/emcfarlane/larking/apipb/controlpb"
 	status "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 )
