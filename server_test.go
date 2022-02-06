@@ -173,6 +173,73 @@ func TestServer(t *testing.T) {
 	}
 }
 
+func TestMuxHandleOption(t *testing.T) {
+	mux, err := NewMux()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hs := health.NewServer()
+	defer hs.Shutdown()
+	mux.RegisterService(&healthpb.Health_ServiceDesc, hs)
+
+	s, err := NewServer(
+		mux,
+		InsecureServerOption(),
+		MuxHandleOption("/", "/api/", "/pfx"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lis, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lis.Close()
+
+	var g errgroup.Group
+	defer func() {
+		if err := g.Wait(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	g.Go(func() (err error) {
+		if err := s.Serve(lis); err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		return nil
+	})
+	defer func() {
+		if err := s.Shutdown(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	for _, tt := range []struct {
+		path string
+		okay bool
+	}{
+		{"/v1/health", true},
+		{"/api/v1/health", true},
+		{"/pfx/v1/health", true},
+		{"/bad/v1/health", false},
+		{"/v1/health/bad", false},
+	} {
+		t.Run(tt.path, func(t *testing.T) {
+			rsp, err := http.Get("http://" + lis.Addr().String() + tt.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			okay := rsp.StatusCode == 200
+			if okay != tt.okay {
+				t.Errorf("request got %t for %s", okay, tt.path)
+			}
+		})
+	}
+}
+
 func createCertificateAuthority() ([]byte, []byte, error) {
 	ca := &x509.Certificate{
 		SerialNumber: big.NewInt(2021),

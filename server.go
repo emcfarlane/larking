@@ -77,7 +77,12 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 		svrOpts.muxPatterns = []string{"/"}
 	}
 	for _, pattern := range svrOpts.muxPatterns {
-		svrOpts.serveMux.Handle(pattern, mux)
+		prefix := strings.TrimSuffix(pattern, "/")
+		if len(prefix) > 0 {
+			svrOpts.serveMux.Handle(prefix+"/", http.StripPrefix(prefix, mux))
+		} else {
+			svrOpts.serveMux.Handle("/", mux)
+		}
 	}
 
 	// TODO: use our own flag?
