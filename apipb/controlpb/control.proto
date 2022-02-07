@@ -27,9 +27,21 @@ message Credentials {
     string public_key = 3;
   }
 
+  // Basic is a credential type.
+  // Include the username and password in all requests.
+  message BasicAuth {
+    // The username.
+    string username = 1;
+    // The password.
+    string password = 2;
+    // The public key, optional.
+    string public_key = 3;
+  }
+
   oneof type {
     bool insecure = 2;
     BearerToken bearer = 3;
+    BasicAuth basic = 4;
   }
 }
 

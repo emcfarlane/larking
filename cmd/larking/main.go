@@ -36,7 +36,7 @@ var (
 	flagAddr        = flag.String("addr", env("LARKING_ADDRESS", defaultAddr), "Local address to listen on.")
 	flagControlAddr = flag.String("control", "https://larking.io", "Control server for credentials.")
 	flagInsecure    = flag.Bool("insecure", false, "Insecure, disabled credentials.")
-	flagCreds       = flag.String("credentials", "", "Runtime variable for credentials.")
+	flagCreds       = flag.String("credentials", env("WORKER_CREDENTIALS", ""), "Runtime variable for credentials.")
 
 	// TODO: main
 	//flagMain        = flag.String("main", "", "Main thread for worker.")
@@ -102,7 +102,9 @@ func run(ctx context.Context) error {
 		controlClient controlpb.ControlClient = control.InsecureControlClient{}
 		name          string
 	)
-	if !*flagInsecure {
+	if !*flagInsecure || *flagCreds != "" {
+		log.Info("loading worker credentials")
+
 		perRPC, err := control.OpenRPCCredentials(ctx, *flagCreds)
 		if err != nil {
 			return err

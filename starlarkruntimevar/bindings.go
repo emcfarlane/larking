@@ -7,5 +7,6 @@ package starlarkruntimevar
 import (
 	_ "gocloud.dev/runtimevar/blobvar"
 	_ "gocloud.dev/runtimevar/constantvar"
+	_ "gocloud.dev/runtimevar/filevar"
 	_ "gocloud.dev/runtimevar/httpvar"
 )

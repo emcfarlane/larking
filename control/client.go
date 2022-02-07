@@ -6,53 +6,33 @@ package control
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
+	"sync"
 
+	"github.com/emcfarlane/larking/apipb/controlpb"
 	"github.com/pkg/browser"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/encoding/protojson"
 )
+
+// TODO: use OAuth2 libraries directly.
 
 // Client is the client that connects to a larkingcontrol server for a node.
 type Client struct {
-	httpc  *http.Client // HTTP client used to talk to larkcontrol
-	svrURL *url.URL     // URL of the larkcontrol server
-	//timeNow   func() time.Time
-	//authorization string
+	httpc    *http.Client // HTTP client used to talk to larkcontrol
+	svrURL   *url.URL     // URL of the larkcontrol server
+	cacheDir string       // Cache directory
 
-	//lastPrintMap           time.Time
-	//newDecompressor        func() (Decompressor, error)
-	//keepAlive              bool
-	//logf                   logger.Logf
-	//linkMon                *monitor.Mon // or nil
-	//discoPubKey            key.DiscoPublic
-	//getMachinePrivKey      func() (key.MachinePrivate, error)
-	//debugFlags             []string
-	//keepSharerAndUserSplit bool
-	//skipIPForwardingCheck  bool
-	//pinger                 Pinger
-
-	//mu           sync.Mutex // mutex guards the following fields
-	//serverKey    key.MachinePublic
-	//persist      persist.Persist
-	//authKey      string
-	//tryingNewKey key.NodePrivate
-	//expiry       *time.Time
-	//// hostinfo is mutated in-place while mu is held.
-	//hostinfo      *tailcfg.Hostinfo // always non-nil
-	//endpoints     []tailcfg.Endpoint
-	//everEndpoints bool   // whether we've ever had non-empty endpoints
-	//localPort     uint16 // or zero to mean auto
-	//lastPingURL   string // last PingRequest.URL received, for dup suppression
+	mu     sync.Mutex
+	perRPC *PerRPCCredentials
 }
 
-func NewClient(addr string) (*Client, error) {
+func NewClient(addr, cacheDir string) (*Client, error) {
 	svrURL, err := url.Parse(addr)
 	if err != nil {
 		return nil, err
@@ -61,69 +41,119 @@ func NewClient(addr string) (*Client, error) {
 	httpc := http.DefaultClient
 
 	return &Client{
-		httpc:  httpc,
-		svrURL: svrURL,
+		httpc:    httpc,
+		svrURL:   svrURL,
+		cacheDir: cacheDir,
 	}, nil
 
 }
 
-type Credentials struct {
-	Name       string `json:"name"`
-	PublicKey  string `json:"public_key"`
-	PrivateKey string `json:"private_key"`
+// OpenPerRPCCredentials at the control server address.
+func (c *Client) OpenRPCCredentials(ctx context.Context) (*PerRPCCredentials, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.perRPC != nil {
+		return c.perRPC, nil
+	}
+
+	// Login, save creds to file.
+	credFile := path.Join(c.cacheDir, "credentials.json")
+
+	creds, err := c.doLogin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("doLogin: %w", err)
+	}
+
+	b, err := protojson.Marshal(creds)
+	if err != nil {
+		return nil, err
+	}
+	if err := ioutil.WriteFile(credFile, b, 0644); err != nil {
+		return nil, err
+	}
+
+	u := "file://" + credFile
+	perRPC, err := OpenRPCCredentials(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+	c.perRPC = perRPC
+	return perRPC, nil
 }
 
-func (c *Client) getCredentials(ctx context.Context) (map[string]string, error) {
+func (c *Client) doLogin(ctx context.Context) (*controlpb.Credentials, error) {
 	// open browser
 
-	l, err := net.Listen("tcp", ":0")
+	l, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		return nil, err
 	}
 
 	newURL := *c.svrURL
-	newURL.Path = path.Join(newURL.Path, "/client")
+	newURL.Path = path.Join(newURL.Path, "/login")
 	values := newURL.Query()
-	values.Add("redirect_uri", l.Addr().String())
+	values.Add("mode", "select")
+	values.Add("signInSuccessUrl", "http://"+l.Addr().String())
 	newURL.RawQuery = values.Encode()
 
+	fmt.Println("Opening URL to complete login flow: ", newURL.String())
 	if err := browser.OpenURL(newURL.String()); err != nil {
 		return nil, err
 	}
 
-	creds := make(chan map[string]string)
+	var (
+		cred  *controlpb.Credentials
+		creds = make(chan *controlpb.Credentials)
+	)
+
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		if err := func() error {
-			b, err := ioutil.ReadAll(r.Body)
-			if err != nil {
-				return err
-			}
-			defer r.Body.Close()
+			//body, err := httputil.DumpRequest(r, true)
+			//if err != nil {
+			//	return err
+			//}
+			//fmt.Println("--- body ---")
+			//fmt.Println(string(body))
+			//fmt.Println()
 
-			var m map[string]string
-			if err := json.Unmarshal(b, &m); err != nil {
-				return err
+			if r.Method != http.MethodGet || r.URL.Path != "/" {
+				okURL := *c.svrURL
+				okURL.Path = r.URL.Path
+				http.Redirect(w, r, okURL.String(), http.StatusFound)
+				return nil
+			}
+
+			q := r.URL.Query()
+			name := q.Get("name")
+			accessToken := q.Get("accessToken")
+
+			v := controlpb.Credentials{
+				Name: name,
+				Type: &controlpb.Credentials_Bearer{
+					Bearer: &controlpb.Credentials_BearerToken{
+						AccessToken: accessToken,
+					},
+				},
 			}
 
 			select {
-			case creds <- m:
-				return nil
+			case creds <- &v:
 			case <-ctx.Done():
 				return ctx.Err()
 			}
+
+			okURL := *c.svrURL
+			okURL.Path = path.Join(okURL.Path, "/success")
+			http.Redirect(w, r, okURL.String(), http.StatusFound)
+			return nil
 		}(); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 	})
 	server := &http.Server{Handler: handler}
 
-	var cred map[string]string
-	g, _ := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		cred = <-creds
-		return server.Close()
-	})
+	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		if err := server.Serve(l); err != nil {
 			if err != http.ErrServerClosed {
@@ -132,38 +162,17 @@ func (c *Client) getCredentials(ctx context.Context) (map[string]string, error) 
 		}
 		return nil
 	})
+	g.Go(func() error {
+		select {
+		case v := <-creds:
+			cred = v
+		case <-gctx.Done():
+			return gctx.Err()
+		}
+		return server.Close()
+	})
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-
 	return cred, nil
-}
-
-func (c *Client) LoadCredentials(ctx context.Context, filename string) (map[string]string, error) {
-	if data, err := ioutil.ReadFile(filename); err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-	} else {
-		var creds map[string]string
-		if err := json.Unmarshal(data, &creds); err != nil {
-			return nil, err
-		}
-		return creds, nil
-	}
-
-	creds, err := c.getCredentials(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := json.Marshal(creds)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := ioutil.WriteFile(filename, data, os.ModePerm); err != nil {
-		return nil, err
-	}
-	return creds, nil
 }

@@ -8,7 +8,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"flag"
 	"fmt"
@@ -16,7 +15,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -194,7 +192,6 @@ func remote(ctx context.Context, line *liner.State, client workerpb.WorkerClient
 			}
 		}
 	}
-	fmt.Println("ctxErr()", ctx.Err())
 	return ctx.Err()
 }
 
@@ -306,53 +303,34 @@ func loop(ctx context.Context, opts *Options) (err error) {
 	return
 }
 
-func loadClientCredentials(ctx context.Context, filename string) (credentials.TransportCredentials, error) {
+func loadTransportCredentials(ctx context.Context) (credentials.TransportCredentials, error) {
 	if *flagInsecure {
 		return insecure.NewCredentials(), nil
 	}
-
-	//
-	addr := *flagControlAddr
-	if addr == "" {
-		return nil, fmt.Errorf("missing control address")
-	}
-
-	ctrl, err := control.NewClient(addr)
+	pool, err := x509.SystemCertPool()
 	if err != nil {
 		return nil, err
 	}
-
-	creds, err := ctrl.LoadCredentials(ctx, filename)
-	if err != nil {
-		return nil, err
-	}
-	// GRPC creds...
-
-	publicKey := []byte(creds["public_key"])
-	privateKey := []byte(creds["private_key"])
-	rootKey := []byte(creds["root_public_key"])
-
-	certPool := x509.NewCertPool()
-	if ok := certPool.AppendCertsFromPEM(rootKey); !ok {
-		return nil, fmt.Errorf("cert pool failure")
-	}
-
-	certificate, err := tls.X509KeyPair(publicKey, privateKey)
-	if err != nil {
-		return nil, err
-	}
-	tlsConfig := &tls.Config{
-		//ClientAuth:   tls.RequireAndVerifyClientCert,
-		Certificates: []tls.Certificate{certificate},
-		RootCAs:      certPool,
-	}
-
-	return credentials.NewTLS(tlsConfig), nil
-
+	return credentials.NewClientTLSFromCert(pool, ""), nil
 }
 
-func createRemoteConn(ctx context.Context, addr string, creds credentials.TransportCredentials) (*grpc.ClientConn, error) {
-	cc, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(creds))
+func createRemoteConn(ctx context.Context, addr string, ctrlClient *control.Client) (*grpc.ClientConn, error) {
+	var opts []grpc.DialOption
+	if !*flagInsecure {
+		perRPC, err := ctrlClient.OpenRPCCredentials(ctx)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, grpc.WithPerRPCCredentials(perRPC))
+	}
+
+	creds, err := loadTransportCredentials(ctx)
+	if err != nil {
+		return nil, err
+	}
+	opts = append(opts, grpc.WithTransportCredentials(creds))
+
+	cc, err := grpc.DialContext(ctx, addr, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -455,16 +433,14 @@ func start(ctx context.Context, filename, src string) error {
 		}
 	}
 
+	ctrl, err := control.NewClient(*flagControlAddr, dir)
+	if err != nil {
+		return err
+	}
+
 	var client workerpb.WorkerClient
 	if remoteAddr := *flagRemoteAddr; remoteAddr != "" {
-		credsFile := path.Join(dir, "credentials.json")
-
-		creds, err := loadClientCredentials(ctx, credsFile)
-		if err != nil {
-			return err
-		}
-
-		cc, err := createRemoteConn(ctx, remoteAddr, creds)
+		cc, err := createRemoteConn(ctx, remoteAddr, ctrl)
 		if err != nil {
 			return err
 		}

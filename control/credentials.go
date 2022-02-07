@@ -7,8 +7,10 @@ package control
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/emcfarlane/larking/apipb/controlpb"
 	"gocloud.dev/runtimevar"
@@ -59,7 +61,12 @@ func (c *PerRPCCredentials) watch(ctx context.Context) error {
 	return err
 }
 
+// OpenRPCCredentials accepts a runetimevar URL as a credential store.
+// The credentials are watched and reload when changed. Close must be called.
 func OpenRPCCredentials(ctx context.Context, u string) (*PerRPCCredentials, error) {
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel()
+
 	v, err := runtimevar.OpenVariable(ctx, u)
 	if err != nil {
 		return nil, fmt.Errorf("OpenRPCCredentials: %w", err)
@@ -87,6 +94,11 @@ func OpenRPCCredentials(ctx context.Context, u string) (*PerRPCCredentials, erro
 
 func (c *PerRPCCredentials) Close() error { return c.v.Close() }
 
+func basicAuth(username, password string) string {
+	auth := username + ":" + password
+	return base64.StdEncoding.EncodeToString([]byte(auth))
+}
+
 func (c *PerRPCCredentials) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -101,6 +113,13 @@ func (c *PerRPCCredentials) GetRequestMetadata(ctx context.Context, uri ...strin
 	case *controlpb.Credentials_Bearer:
 		return map[string]string{
 			"authorization": "bearer " + v.Bearer.AccessToken,
+		}, nil
+	case *controlpb.Credentials_Basic:
+		return map[string]string{
+			"authorization": "basic " + basicAuth(
+				v.Basic.Username,
+				v.Basic.Password,
+			),
 		}, nil
 	default:
 		return nil, status.Errorf(codes.Unimplemented, "RPCCredentials unknown credential type")
