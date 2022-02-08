@@ -22,7 +22,7 @@ import (
 
 func load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
 	if module == "assert.star" {
-		return starlarkassert.LoadAssertModule()
+		return starlarkassert.LoadAssertModule(thread)
 	}
 	return nil, fmt.Errorf("unknown module %s", module)
 }
@@ -34,10 +34,10 @@ func TestStarlark(t *testing.T) {
 	gs := grpc.NewServer(
 		grpc.UnaryInterceptor(
 			func(
-				ctx context.Context,
+				_ context.Context,
 				req interface{},
 				info *grpc.UnaryServerInfo,
-				handler grpc.UnaryHandler,
+				_ grpc.UnaryHandler,
 			) (interface{}, error) {
 				wantMethod := "/larking.testpb.Messaging/GetMessageOne"
 				if info.FullMethod != wantMethod {

@@ -6,15 +6,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/emcfarlane/larking/starlarkstruct"
+	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/starlarkproto"
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkstruct"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
+
+// Bootstrap...
+// TODO: xDS
 
 func NewModule(mux *Mux) *starlarkstruct.Module {
 	s := NewStarlark(mux)
@@ -42,10 +46,7 @@ func (s *Starlark) Dial(thread *starlark.Thread, b *starlark.Builtin, args starl
 		return nil, err
 	}
 
-	ctx, ok := thread.Local("context").(context.Context)
-	if !ok {
-		ctx = context.Background()
-	}
+	ctx := starlarkthread.Context(thread)
 
 	// TODO: handle security, opts.
 	dialCtx, cancel := context.WithTimeout(ctx, time.Second*5)
@@ -204,10 +205,7 @@ func (s *StarlarkMethod) Truth() starlark.Bool  { return starlark.True }
 func (s *StarlarkMethod) Hash() (uint32, error) { return 0, nil }
 func (s *StarlarkMethod) Name() string          { return "" }
 func (s *StarlarkMethod) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	ctx, ok := thread.Local("context").(context.Context)
-	if !ok {
-		ctx = context.Background()
-	}
+	ctx := starlarkthread.Context(thread)
 
 	opts := &s.mux.opts
 	stream := &streamStar{

@@ -15,7 +15,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/genproto/googleapis/api/httpbody"
@@ -311,11 +310,11 @@ func TestMessageServer(t *testing.T) {
 			msg:    &testpb.Message{MessageId: "123", Text: "action"},
 		},
 		out: out{
-			msg: &empty.Empty{},
+			msg: &emptypb.Empty{},
 		},
 		want: want{
 			statusCode: 200,
-			msg:        &empty.Empty{},
+			msg:        &emptypb.Empty{},
 		},
 	}, {
 		name: "actionSegment",
@@ -327,11 +326,25 @@ func TestMessageServer(t *testing.T) {
 			msg:    &testpb.Message{MessageId: "123", Text: "name"},
 		},
 		out: out{
-			msg: &empty.Empty{},
+			msg: &emptypb.Empty{},
 		},
 		want: want{
 			statusCode: 200,
-			msg:        &empty.Empty{},
+			msg:        &emptypb.Empty{},
+		},
+	}, {
+		name: "actionResource",
+		req:  httptest.NewRequest(http.MethodGet, "/v1/actions/123:fetch", nil),
+		in: in{
+			method: "/larking.testpb.Messaging/ActionResource",
+			msg:    &testpb.Message{Text: "actions/123"},
+		},
+		out: out{
+			msg: &emptypb.Empty{},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &emptypb.Empty{},
 		},
 	}, {
 		name: "actionSegments",
@@ -343,11 +356,11 @@ func TestMessageServer(t *testing.T) {
 			msg:    &testpb.Message{MessageId: "123", Text: "name/id"},
 		},
 		out: out{
-			msg: &empty.Empty{},
+			msg: &emptypb.Empty{},
 		},
 		want: want{
 			statusCode: 200,
-			msg:        &empty.Empty{},
+			msg:        &emptypb.Empty{},
 		},
 	}, {
 		name: "batchGet",
@@ -356,14 +369,14 @@ func TestMessageServer(t *testing.T) {
 		)),
 		in: in{
 			method: "/larking.testpb.Messaging/BatchGet",
-			msg:    &empty.Empty{},
+			msg:    &emptypb.Empty{},
 		},
 		out: out{
-			msg: &empty.Empty{},
+			msg: &emptypb.Empty{},
 		},
 		want: want{
 			statusCode: 200,
-			msg:        &empty.Empty{},
+			msg:        &emptypb.Empty{},
 		},
 	}, {
 		name: "404",
@@ -495,11 +508,11 @@ func TestMessageServer(t *testing.T) {
 			msg:    &testpb.Message{Text: "version"},
 		},
 		out: out{
-			msg: &empty.Empty{},
+			msg: &emptypb.Empty{},
 		},
 		want: want{
 			statusCode: 200,
-			msg:        &empty.Empty{},
+			msg:        &emptypb.Empty{},
 		},
 	}, {
 		name: "variable_two",
@@ -509,11 +522,11 @@ func TestMessageServer(t *testing.T) {
 			msg:    &testpb.Message{Text: "version"},
 		},
 		out: out{
-			msg: &empty.Empty{},
+			msg: &emptypb.Empty{},
 		},
 		want: want{
 			statusCode: 200,
-			msg:        &empty.Empty{},
+			msg:        &emptypb.Empty{},
 		},
 	}, {
 		name: "shelf_name_get",

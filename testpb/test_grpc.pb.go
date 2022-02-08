@@ -44,6 +44,7 @@ type MessagingClient interface {
 	UpdateMessageBody(ctx context.Context, in *Message, opts ...grpc.CallOption) (*Message, error)
 	Action(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ActionSegment(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ActionResource(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ActionSegments(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	BatchGet(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	VariableOne(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -110,6 +111,15 @@ func (c *messagingClient) Action(ctx context.Context, in *Message, opts ...grpc.
 func (c *messagingClient) ActionSegment(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/ActionSegment", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingClient) ActionResource(ctx context.Context, in *Message, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/larking.testpb.Messaging/ActionResource", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -216,6 +226,7 @@ type MessagingServer interface {
 	UpdateMessageBody(context.Context, *Message) (*Message, error)
 	Action(context.Context, *Message) (*emptypb.Empty, error)
 	ActionSegment(context.Context, *Message) (*emptypb.Empty, error)
+	ActionResource(context.Context, *Message) (*emptypb.Empty, error)
 	ActionSegments(context.Context, *Message) (*emptypb.Empty, error)
 	BatchGet(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	VariableOne(context.Context, *Message) (*emptypb.Empty, error)
@@ -248,6 +259,9 @@ func (UnimplementedMessagingServer) Action(context.Context, *Message) (*emptypb.
 }
 func (UnimplementedMessagingServer) ActionSegment(context.Context, *Message) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ActionSegment not implemented")
+}
+func (UnimplementedMessagingServer) ActionResource(context.Context, *Message) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ActionResource not implemented")
 }
 func (UnimplementedMessagingServer) ActionSegments(context.Context, *Message) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ActionSegments not implemented")
@@ -390,6 +404,24 @@ func _Messaging_ActionSegment_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServer).ActionSegment(ctx, req.(*Message))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Messaging_ActionResource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Message)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServer).ActionResource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/larking.testpb.Messaging/ActionResource",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServer).ActionResource(ctx, req.(*Message))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -568,6 +600,10 @@ var Messaging_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ActionSegment",
 			Handler:    _Messaging_ActionSegment_Handler,
+		},
+		{
+			MethodName: "ActionResource",
+			Handler:    _Messaging_ActionResource_Handler,
 		},
 		{
 			MethodName: "ActionSegments",

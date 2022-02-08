@@ -28,17 +28,19 @@ func TestWebsocket(t *testing.T) {
 			t.Fatal(err)
 		}
 	}()
-
-	s, err := NewServer(
-		MuxOptions(
-			UnaryServerInterceptorOption(o.unary()),
-			StreamServerInterceptorOption(o.stream()),
-		),
+	mux, err := NewMux(
+		UnaryServerInterceptorOption(o.unary()),
+		StreamServerInterceptorOption(o.stream()),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	testpb.RegisterChatRoomServer(s, fs)
+	mux.RegisterService(&testpb.ChatRoom_ServiceDesc, fs)
+
+	s, err := NewServer(mux, InsecureServerOption())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	lis, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
@@ -106,7 +108,7 @@ func TestWebsocket(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			o.reset(t, "http-test", tt.server)
 
-			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			ctx, cancel := context.WithTimeout(testContext(t), time.Minute)
 			defer cancel()
 
 			c, _, err := websocket.Dial(ctx, "ws://"+lis.Addr().String()+tt.path, &websocket.DialOptions{

@@ -77,6 +77,12 @@ service Messaging {
     };
   }
 
+  rpc ActionResource(Message) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      get : "/v1/{text=actions/*}:fetch"
+    };
+  }
+
   rpc ActionSegments(Message) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       post : "/v1/{text=**}:watch"
