@@ -1,8 +1,4 @@
-// Copyright 2021 Edward McFarlane. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-package starlarksql
+package starlarkproto
 
 import (
 	"testing"
@@ -12,23 +8,23 @@ import (
 	"github.com/emcfarlane/starlarkassert"
 	"go.starlark.net/starlark"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/emcfarlane/starlarkproto/testpb"
 )
 
-func TestExecFile(t *testing.T) {
+func TestProto(t *testing.T) {
 	globals := starlark.StringDict{
 		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
-		"sql":    NewModule(),
+		"proto":  NewModule(),
 	}
 	runner := func(thread *starlark.Thread, handler func() error) (err error) {
 		close := starlarkthread.WithResourceStore(thread)
 		defer func() {
-			cerr := close()
-			if err == nil {
+			if cerr := close(); err == nil {
 				err = cerr
 			}
 		}()
 		return handler()
 	}
 	starlarkassert.RunTests(t, "testdata/*.star", globals, runner)
+
 }

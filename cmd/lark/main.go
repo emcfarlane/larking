@@ -51,6 +51,7 @@ var (
 	flagControlAddr  = flag.String("control", "https://larking.io", "Control server for credentials.")
 	flagInsecure     = flag.Bool("insecure", false, "Insecure, disable credentials.")
 	flagThread       = flag.String("thread", "", "Thread to run on.")
+	flagCreds        = flag.String("credentials", env("CREDENTIALS", ""), "Runtime variable for credentials.")
 
 	// TODO: relative/absolute pathing needs to be resolved...
 	//flagDir = flag.String("dir", "file://", "Set the module loading directory")
@@ -317,11 +318,20 @@ func loadTransportCredentials(ctx context.Context) (credentials.TransportCredent
 func createRemoteConn(ctx context.Context, addr string, ctrlClient *control.Client) (*grpc.ClientConn, error) {
 	var opts []grpc.DialOption
 	if !*flagInsecure {
-		perRPC, err := ctrlClient.OpenRPCCredentials(ctx)
-		if err != nil {
-			return nil, err
+		if u := *flagCreds; u != "" {
+			perRPC, err := control.OpenRPCCredentials(ctx, *flagCreds)
+			if err != nil {
+				return nil, err
+			}
+			opts = append(opts, grpc.WithPerRPCCredentials(perRPC))
+
+		} else {
+			perRPC, err := ctrlClient.OpenRPCCredentials(ctx)
+			if err != nil {
+				return nil, err
+			}
+			opts = append(opts, grpc.WithPerRPCCredentials(perRPC))
 		}
-		opts = append(opts, grpc.WithPerRPCCredentials(perRPC))
 	}
 
 	creds, err := loadTransportCredentials(ctx)

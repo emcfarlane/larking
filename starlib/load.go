@@ -17,19 +17,17 @@ import (
 	"github.com/emcfarlane/larking/starlarkdocstore"
 	"github.com/emcfarlane/larking/starlarkerrors"
 	"github.com/emcfarlane/larking/starlarknethttp"
+	"github.com/emcfarlane/larking/starlarkproto"
 	"github.com/emcfarlane/larking/starlarkpubsub"
 	"github.com/emcfarlane/larking/starlarkruntimevar"
 	"github.com/emcfarlane/larking/starlarksql"
 	"github.com/emcfarlane/larking/starlarkstruct"
 	"github.com/emcfarlane/larking/starlarkthread"
-	"github.com/emcfarlane/starlarkassert"
-	"github.com/emcfarlane/starlarkproto"
 	starlarkjson "go.starlark.net/lib/json"
 	starlarkmath "go.starlark.net/lib/math"
 	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
 	"gocloud.dev/blob"
-	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 var (
@@ -37,14 +35,7 @@ var (
 	stdLib  map[string]starlark.StringDict
 )
 
-func stdOnceLoad(thread *starlark.Thread) error {
-	assert, err := starlarkassert.LoadAssertModule(thread)
-	if err != nil {
-		return err
-	}
-	stdLib = map[string]starlark.StringDict{
-		"assert.star": assert,
-	}
+func stdOnceLoad(_ *starlark.Thread) error {
 	modules := []*starlarkstruct.Module{
 		starlarkblob.NewModule(),
 		starlarkdocstore.NewModule(),
@@ -53,7 +44,7 @@ func stdOnceLoad(thread *starlark.Thread) error {
 		starlarkpubsub.NewModule(),
 		starlarkruntimevar.NewModule(),
 		starlarksql.NewModule(),
-		starlarkproto.NewModule(protoregistry.GlobalFiles),
+		starlarkproto.NewModule(),
 
 		// TODO: starlarkgrpc...
 
