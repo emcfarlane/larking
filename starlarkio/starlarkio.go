@@ -1,3 +1,8 @@
+// Copyright 2022 Edward McFarlane. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+// Package starlarkio implements readers and writers.
 package starlarkio
 
 import (

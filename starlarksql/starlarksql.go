@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// Package sql provides an interface to conntect to SQL databases.
+//
+// TODO: docs.
 package starlarksql
 
 import (
@@ -87,10 +90,7 @@ func Open(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwa
 		return nil, err
 	}
 
-	v := &DB{
-		name: name,
-		db:   db,
-	}
+	v := NewDB(name, db)
 	if err := starlarkthread.AddResource(thread, v); err != nil {
 		return nil, err
 	}
@@ -104,9 +104,8 @@ type DB struct {
 	frozen bool
 }
 
-func (db *DB) Close() error {
-	return db.db.Close()
-}
+func NewDB(name string, db *sql.DB) *DB { return &DB{name: name, db: db} }
+func (db *DB) Close() error             { return db.db.Close() }
 
 func (v *DB) String() string        { return fmt.Sprintf("<db %q>", v.name) }
 func (v *DB) Type() string          { return "sql.db" }

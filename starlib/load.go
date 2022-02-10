@@ -16,7 +16,7 @@ import (
 	"github.com/emcfarlane/larking/starlarkblob"
 	"github.com/emcfarlane/larking/starlarkdocstore"
 	"github.com/emcfarlane/larking/starlarkerrors"
-	"github.com/emcfarlane/larking/starlarknethttp"
+	"github.com/emcfarlane/larking/starlarkhttp"
 	"github.com/emcfarlane/larking/starlarkproto"
 	"github.com/emcfarlane/larking/starlarkpubsub"
 	"github.com/emcfarlane/larking/starlarkruntimevar"
@@ -40,7 +40,7 @@ func stdOnceLoad(_ *starlark.Thread) error {
 		starlarkblob.NewModule(),
 		starlarkdocstore.NewModule(),
 		starlarkerrors.NewModule(),
-		starlarknethttp.NewModule(),
+		starlarkhttp.NewModule(),
 		starlarkpubsub.NewModule(),
 		starlarkruntimevar.NewModule(),
 		starlarksql.NewModule(),
