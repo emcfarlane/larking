@@ -13,8 +13,7 @@ import (
 )
 
 // Format starlark code.
-func Format(ctx context.Context, filename string, src interface{}) ([]byte, error) {
-
+func Format(_ context.Context, filename string, src interface{}) ([]byte, error) {
 	ast, err := syntax.Parse(filename, src, syntax.RetainComments)
 	if err != nil {
 		return nil, err

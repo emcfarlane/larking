@@ -3,7 +3,7 @@ module github.com/emcfarlane/larking
 go 1.12
 
 require (
-	github.com/bazelbuild/buildtools v0.0.0-20220211113555-f1ead6bc540d
+	github.com/bazelbuild/buildtools v0.0.0-20220215100907-23e2a9e4721a
 	github.com/emcfarlane/starlarkassert v0.0.0-20220214012810-357f0adfd057
 	github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82
 	github.com/go-logr/logr v1.2.0
@@ -29,4 +29,5 @@ require (
 	nhooyr.io/websocket v1.8.7
 )
 
-replace github.com/bazelbuild/buildtools => ../../bazelbuild/buildtools 
+replace github.com/bazelbuild/buildtools => github.com/emcfarlane/buildtools v0.0.0-20220216022904-2d8ccb57d4be
+//replace github.com/bazelbuild/buildtools => ../../bazelbuild/buildtools

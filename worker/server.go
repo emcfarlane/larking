@@ -244,6 +244,18 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 				},
 			}
 
+		case *workerpb.Command_Format:
+			b, err := Format(ctx, module, v.Format)
+			if err != nil {
+				l.Info("thread format error", "err", err)
+			}
+
+			result.Result = &workerpb.Result_Output{
+				Output: &workerpb.Output{
+					Output: string(b),
+					Status: errorStatus(err).Proto(),
+				},
+			}
 		}
 		if err = stream.Send(result); err != nil {
 			return err

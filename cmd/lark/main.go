@@ -57,7 +57,7 @@ var (
 	flagCreds        = flag.String("credentials", env("CREDENTIALS", ""), "Runtime variable for credentials.")
 
 	// TODO: relative/absolute pathing needs to be resolved...
-	flagDir = flag.String("dir", "file://./", "Set the module loading directory")
+	flagDir = flag.String("dir", "file://./?metadata=skip", "Set the module loading directory")
 )
 
 type Options struct {
@@ -570,7 +570,15 @@ func format(ctx context.Context, pattern string) error {
 	}
 	defer bkt.Close()
 
-	iter := bkt.List(nil)
+	// Limit choice by prefix, path.Match the rest.
+	opts := &blob.ListOptions{
+		Prefix: pattern,
+	}
+	if i := strings.IndexAny(pattern, "*?[\\"); i >= 0 {
+		opts.Prefix = pattern[:i]
+	}
+
+	iter := bkt.List(opts)
 	for {
 		obj, err := iter.Next(ctx)
 		if err == io.EOF {
@@ -579,12 +587,10 @@ func format(ctx context.Context, pattern string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println(obj.Key)
 
 		if ok, _ := path.Match(pattern, obj.Key); !ok {
 			continue
 		}
-		fmt.Println("matches")
 
 		src, err := bkt.ReadAll(ctx, obj.Key)
 		if err != nil {
@@ -600,8 +606,7 @@ func format(ctx context.Context, pattern string) error {
 			continue
 		}
 
-		fmt.Println("formatting", obj.Key)
-
+		log.Println("formatting", obj.Key)
 		if err := bkt.WriteAll(ctx, obj.Key, dst, nil); err != nil {
 			return err
 		}
