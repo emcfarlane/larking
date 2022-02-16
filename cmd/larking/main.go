@@ -13,6 +13,7 @@ import (
 	"github.com/emcfarlane/larking/apipb/controlpb"
 	"github.com/emcfarlane/larking/apipb/healthpb"
 	"github.com/emcfarlane/larking/apipb/workerpb"
+	_ "github.com/emcfarlane/larking/cmd/internal/bindings"
 	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/health"
 	"github.com/emcfarlane/larking/starlib"
