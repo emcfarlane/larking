@@ -30,4 +30,5 @@ require (
 )
 
 replace github.com/bazelbuild/buildtools => github.com/emcfarlane/buildtools v0.0.0-20220216022904-2d8ccb57d4be
+
 //replace github.com/bazelbuild/buildtools => ../../bazelbuild/buildtools
