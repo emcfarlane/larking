@@ -506,12 +506,6 @@ func test(ctx context.Context, pattern string) error {
 			}
 		}
 	}
-	//tests := []testing.InternalTest{{
-	//	Name: "Lark",
-	//	F: func(t *testing.T) {
-	//		starlarkassert.RunTests(t, pattern, globals, runner)
-	//	},
-	//}}
 
 	bkt, err := blob.OpenBucket(ctx, *flagDir)
 	if err != nil {
@@ -519,10 +513,16 @@ func test(ctx context.Context, pattern string) error {
 	}
 	defer bkt.Close()
 
-	fmt.Println("pattern", pattern)
+	// Limit choice by prefix, path.Match the rest.
+	opts := &blob.ListOptions{
+		Prefix: pattern,
+	}
+	if i := strings.IndexAny(pattern, "*?[\\"); i >= 0 {
+		opts.Prefix = pattern[:i]
+	}
 
 	var tests []testing.InternalTest
-	iter := bkt.List(nil)
+	iter := bkt.List(opts)
 	for {
 		obj, err := iter.Next(ctx)
 		if err == io.EOF {
@@ -535,7 +535,6 @@ func test(ctx context.Context, pattern string) error {
 		if ok, _ := path.Match(pattern, obj.Key); !ok {
 			continue
 		}
-		fmt.Println("matches")
 
 		src, err := bkt.ReadAll(ctx, obj.Key)
 		if err != nil {
