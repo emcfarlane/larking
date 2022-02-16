@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/emcfarlane/larking/apipb/workerpb"
+	_ "github.com/emcfarlane/larking/cmd/internal/bindings"
 	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"
@@ -35,8 +36,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"gocloud.dev/blob"
-	_ "gocloud.dev/blob/fileblob"
-	_ "gocloud.dev/blob/memblob"
 )
 
 func env(key, def string) string {
