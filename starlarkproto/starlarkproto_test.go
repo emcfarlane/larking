@@ -16,14 +16,13 @@ func TestProto(t *testing.T) {
 		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
 		"proto":  NewModule(),
 	}
-	runner := func(thread *starlark.Thread, handler func() error) (err error) {
+	runner := func(t testing.TB, thread *starlark.Thread) func() {
 		close := starlarkthread.WithResourceStore(thread)
-		defer func() {
-			if cerr := close(); err == nil {
-				err = cerr
+		return func() {
+			if err := close(); err != nil {
+				t.Error(err, "failed to close resources")
 			}
-		}()
-		return handler()
+		}
 	}
 	starlarkassert.RunTests(t, "testdata/*.star", globals, runner)
 

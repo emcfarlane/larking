@@ -7,6 +7,7 @@ package worker
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -32,14 +33,12 @@ type Server struct {
 func NewServer(
 	load func(thread *starlark.Thread, module string) (starlark.StringDict, error),
 	control controlpb.ControlClient,
-	//creds *controlpb.Credentials,
 	name string,
 ) *Server {
 	return &Server{
 		load:    load,
 		control: control,
-		//creds:   creds,
-		name: name,
+		name:    name,
 	}
 }
 
@@ -48,19 +47,6 @@ func (s *Server) authorize(ctx context.Context, op *controlpb.Operation) error {
 		Name:      s.name,
 		Operation: op,
 	}
-
-	//switch v := s.creds.Type.(type) {
-	//case *controlpb.Credentials_Insecure:
-	//	if !v.Insecure {
-	//		return status.Errorf(codes.Unauthenticated, "credentials required")
-	//	}
-	//case *controlpb.Credentials_Bearer:
-	//	ctx = metadata.AppendToOutgoingContext(ctx,
-	//		"authorization", "bearer "+v.Bearer.AccessToken,
-	//	)
-	//default:
-	//	return status.Errorf(codes.Unimplemented, "unknown credential type %v", s.creds.Type())
-	//}
 
 	rsp, err := s.control.Check(ctx, req)
 	if err != nil {
@@ -74,11 +60,16 @@ func (s *Server) authorize(ctx context.Context, op *controlpb.Operation) error {
 }
 
 var (
-	errBearerMissing = status.Error(codes.Unauthenticated, "missing bearer token")
-	errBearerInvalid = status.Error(codes.Unauthenticated, "invalid bearer token")
+	errMissingCredentials = status.Error(codes.Unauthenticated, "missing credentials")
+	errInvalidCredentials = status.Error(codes.Unauthenticated, "invalid credentials")
 )
 
-func extractBearerToken(md metadata.MD) (string, error) {
+func extractCredentials(ctx context.Context) (*controlpb.Credentials, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, status.Error(codes.InvalidArgument, "invalid metadata")
+	}
+
 	for _, hdrKey := range []string{"http-authorization", "authorization"} {
 		keys := md.Get(hdrKey)
 		if len(keys) == 0 {
@@ -88,12 +79,50 @@ func extractBearerToken(md metadata.MD) (string, error) {
 		if len(vals) == 1 && len(vals[0]) == 0 {
 			continue
 		}
-		if strings.ToLower(vals[0]) != "bearer" || len(vals) != 2 {
-			return "", errBearerInvalid
+		if len(vals) != 2 {
+			return nil, errMissingCredentials
 		}
-		return vals[1], nil
+		val := vals[1]
+
+		switch strings.ToLower(vals[0]) {
+		case "bearer":
+			return &controlpb.Credentials{
+				Type: &controlpb.Credentials_Bearer{
+					Bearer: &controlpb.Credentials_BearerToken{
+						AccessToken: val,
+					},
+				},
+			}, nil
+
+		case "basic":
+			c, err := base64.StdEncoding.DecodeString(val)
+			if err != nil {
+				return nil, err
+			}
+			cs := string(c)
+			s := strings.IndexByte(cs, ':')
+			if s < 0 {
+				return nil, errMissingCredentials
+			}
+
+			return &controlpb.Credentials{
+				Type: &controlpb.Credentials_Basic{
+					Basic: &controlpb.Credentials_BasicAuth{
+						Username: cs[:s],
+						Password: cs[s+1:],
+					},
+				},
+			}, nil
+
+		default:
+			return nil, errInvalidCredentials
+		}
 	}
-	return "", errBearerMissing
+	return &controlpb.Credentials{
+		Type: &controlpb.Credentials_Insecure{
+			Insecure: true,
+		},
+	}, nil
 }
 
 func soleExpr(f *syntax.File) syntax.Expr {
@@ -110,29 +139,14 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 	ctx := stream.Context()
 	l := logr.FromContextOrDiscard(ctx)
 
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return status.Error(codes.InvalidArgument, "invalid metadata")
-	}
-
 	cmd, err := stream.Recv()
 	if err != nil {
 		return err
 	}
 	l.Info("running on thread", "thread", cmd.Name)
 
-	creds := &controlpb.Credentials{}
-	if token, err := extractBearerToken(md); err == nil {
-		creds.Type = &controlpb.Credentials_Bearer{
-			Bearer: &controlpb.Credentials_BearerToken{
-				AccessToken: token,
-			},
-		}
-	} else if err == errBearerMissing {
-		creds.Type = &controlpb.Credentials_Insecure{
-			Insecure: true,
-		}
-	} else if err != nil {
+	creds, err := extractCredentials(ctx)
+	if err != nil {
 		return err
 	}
 
@@ -142,7 +156,7 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 	}
 
 	if err := s.authorize(ctx, op); err != nil {
-		l.Error(err, "failed to authorize request")
+		l.Error(err, "failed to authorize request", "name", cmd.Name)
 		return err
 	}
 
@@ -230,6 +244,18 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 				},
 			}
 
+		case *workerpb.Command_Format:
+			b, err := Format(ctx, module, v.Format)
+			if err != nil {
+				l.Info("thread format error", "err", err)
+			}
+
+			result.Result = &workerpb.Result_Output{
+				Output: &workerpb.Output{
+					Output: string(b),
+					Status: errorStatus(err).Proto(),
+				},
+			}
 		}
 		if err = stream.Send(result); err != nil {
 			return err
