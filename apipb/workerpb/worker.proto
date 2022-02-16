@@ -16,6 +16,7 @@ message Command {
   oneof exec {
     string input = 2;
     string complete = 3;
+    string format = 4;
   }
 }
 

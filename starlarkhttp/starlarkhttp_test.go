@@ -26,20 +26,18 @@ func TestExecFile(t *testing.T) {
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
 
-	runner := func(thread *starlark.Thread, handler func() error) (err error) {
-		close := starlarkthread.WithResourceStore(thread)
-		defer func() {
-			cerr := close()
-			if err == nil {
-				err = cerr
-			}
-		}()
-		return handler()
-	}
 	globals := starlark.StringDict{
 		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
 		"addr":   starlark.String(ts.URL),
 		"http":   NewModule(),
+	}
+	runner := func(t testing.TB, thread *starlark.Thread) func() {
+		close := starlarkthread.WithResourceStore(thread)
+		return func() {
+			if err := close(); err != nil {
+				t.Error(err, "failed to close resources")
+			}
+		}
 	}
 	starlarkassert.RunTests(t, "testdata/*.star", globals, runner)
 }

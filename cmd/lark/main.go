@@ -15,6 +15,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -24,6 +25,7 @@ import (
 	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"
+	"github.com/emcfarlane/larking/worker"
 	"github.com/emcfarlane/starlarkassert"
 	"github.com/peterh/liner"
 	"go.starlark.net/starlark"
@@ -32,6 +34,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob"
 	_ "gocloud.dev/blob/memblob"
 )
@@ -54,7 +57,7 @@ var (
 	flagCreds        = flag.String("credentials", env("CREDENTIALS", ""), "Runtime variable for credentials.")
 
 	// TODO: relative/absolute pathing needs to be resolved...
-	//flagDir = flag.String("dir", "file://", "Set the module loading directory")
+	flagDir = flag.String("dir", "file://./", "Set the module loading directory")
 )
 
 type Options struct {
@@ -482,35 +485,130 @@ func start(ctx context.Context, filename, src string) error {
 	return run(ctx, opts)
 }
 
-func test(ctx context.Context, pattern string) int {
+func test(ctx context.Context, pattern string) error {
+	if _, err := path.Match(pattern, ""); err != nil {
+		return err // invalid pattern
+	}
+
 	loader := starlib.NewLoader()
 	defer loader.Close()
 
-	runner := func(thread *starlark.Thread, handler func() error) (err error) {
+	globals := starlib.NewGlobals()
+	runner := func(t testing.TB, thread *starlark.Thread) func() {
 		thread.Load = loader.Load
 
 		starlarkthread.SetContext(thread, ctx)
 
 		close := starlarkthread.WithResourceStore(thread)
-		defer func() {
-			cerr := close()
-			if err == nil {
-				err = cerr
+		return func() {
+			if err := close(); err != nil {
+				t.Error(err)
 			}
-		}()
-		return handler()
+		}
+	}
+	//tests := []testing.InternalTest{{
+	//	Name: "Lark",
+	//	F: func(t *testing.T) {
+	//		starlarkassert.RunTests(t, pattern, globals, runner)
+	//	},
+	//}}
+
+	bkt, err := blob.OpenBucket(ctx, *flagDir)
+	if err != nil {
+		return err
+	}
+	defer bkt.Close()
+
+	fmt.Println("pattern", pattern)
+
+	var tests []testing.InternalTest
+	iter := bkt.List(nil)
+	for {
+		obj, err := iter.Next(ctx)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		if ok, _ := path.Match(pattern, obj.Key); !ok {
+			continue
+		}
+		fmt.Println("matches")
+
+		src, err := bkt.ReadAll(ctx, obj.Key)
+		if err != nil {
+			return err
+		}
+
+		tests = append(tests, testing.InternalTest{
+			Name: obj.Key,
+			F: func(t *testing.T) {
+				starlarkassert.TestFile(
+					t, obj.Key, src, globals, runner)
+			},
+		})
 	}
 
-	globals := starlib.NewGlobals()
-	tests := []testing.InternalTest{{
-		Name: "Lark",
-		F: func(t *testing.T) {
-			starlarkassert.RunTests(t, pattern, globals, runner)
-		},
-	}}
-
 	deps := &testDeps{importPath: "<stdin>"}
-	return testing.MainStart(deps, tests, nil, nil).Run()
+	if testing.MainStart(deps, tests, nil, nil).Run() > 0 {
+		return fmt.Errorf("failed")
+	}
+
+	return nil
+}
+
+func format(ctx context.Context, pattern string) error {
+	if _, err := path.Match(pattern, ""); err != nil {
+		return err // invalid pattern
+	}
+
+	bkt, err := blob.OpenBucket(ctx, *flagDir)
+	if err != nil {
+		return err
+	}
+	defer bkt.Close()
+
+	iter := bkt.List(nil)
+	for {
+		obj, err := iter.Next(ctx)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Println(obj.Key)
+
+		if ok, _ := path.Match(pattern, obj.Key); !ok {
+			continue
+		}
+		fmt.Println("matches")
+
+		src, err := bkt.ReadAll(ctx, obj.Key)
+		if err != nil {
+			return err
+		}
+
+		dst, err := worker.Format(ctx, obj.Key, src)
+		if err != nil {
+			return err
+		}
+
+		if bytes.Equal(src, dst) {
+			continue
+		}
+
+		fmt.Println("formatting", obj.Key)
+
+		if err := bkt.WriteAll(ctx, obj.Key, dst, nil); err != nil {
+			return err
+		}
+	}
+
+	return nil
+
 }
 
 func main() {
@@ -528,16 +626,28 @@ func main() {
 
 	switch {
 	case arg0 == "fmt":
-		// TODO: format
-		log.Fatal("fmt not implemented")
+		pattern := "*" + fileExt
+		if flag.NArg() == 2 {
+			pattern = flag.Arg(1)
+		}
+		if err := format(ctx, pattern); err != nil {
+			if err != io.EOF {
+				starlib.FprintErr(os.Stderr, err)
+			}
+			os.Exit(1)
+		}
 
 	case arg0 == "test":
 		pattern := "*_test" + fileExt
 		if flag.NArg() == 2 {
-			pattern = filepath.Join(flag.Arg(1), "*_test"+fileExt)
+			pattern = flag.Arg(1)
 		}
-		code := test(ctx, pattern)
-		os.Exit(code)
+		if err := test(ctx, pattern); err != nil {
+			if err != io.EOF {
+				starlib.FprintErr(os.Stderr, err)
+			}
+			os.Exit(1)
+		}
 
 	case flag.NArg() == 1 || *flagExecprog != "":
 		var (
