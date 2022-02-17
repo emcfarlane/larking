@@ -37,6 +37,11 @@ var (
 
 func stdOnceLoad(_ *starlark.Thread) error {
 	modules := []*starlarkstruct.Module{
+		// Native modules
+		starlarkjson.Module,
+		starlarkmath.Module,
+		starlarktime.Module,
+
 		starlarkblob.NewModule(),
 		starlarkdocstore.NewModule(),
 		starlarkerrors.NewModule(),
@@ -47,11 +52,7 @@ func stdOnceLoad(_ *starlark.Thread) error {
 		starlarkproto.NewModule(),
 
 		// TODO: starlarkgrpc...
-
-		// starlark native modules
-		starlarkjson.Module,
-		starlarkmath.Module,
-		starlarktime.Module,
+		// TODO: starlarkopenapi...
 	}
 	for _, module := range modules {
 		dict := make(starlark.StringDict, len(module.Members)+1)

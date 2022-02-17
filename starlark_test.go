@@ -99,7 +99,7 @@ func TestStarlark(t *testing.T) {
 	globals := starlark.StringDict{
 		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
 		//"proto":  starlarkproto.NewModule(),
-		"grpc": NewModule(mux),
+		"grpc": mux,
 	}
 
 	files, err := filepath.Glob("testdata/*.star")
