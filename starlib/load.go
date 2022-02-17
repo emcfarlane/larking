@@ -36,6 +36,7 @@ var (
 )
 
 func stdOnceLoad(_ *starlark.Thread) error {
+	stdLib = make(map[string]starlark.StringDict)
 	modules := []*starlarkstruct.Module{
 		// Native modules
 		starlarkjson.Module,

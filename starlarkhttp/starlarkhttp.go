@@ -21,7 +21,7 @@ import (
 // NewModule loads the predeclared built-ins for the net/http module.
 func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
-		Name: "nethttp",
+		Name: "http",
 		Members: starlark.StringDict{
 			"default_client": defaultClient,
 			"get":            starlark.NewBuiltin("nethttp.do", clientGet),
