@@ -4,11 +4,13 @@ go 1.12
 
 require (
 	github.com/bazelbuild/buildtools v0.0.0-20220215100907-23e2a9e4721a
-	github.com/emcfarlane/starlarkassert v0.0.0-20220305224746-c4d67fdc1bb9
+	github.com/emcfarlane/starlarkassert v0.0.0-20220307024619-90d731ae6256
 	github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82
 	github.com/go-logr/logr v1.2.0
 	github.com/go-logr/stdr v1.2.0
+	github.com/go-openapi/spec v0.20.4
 	github.com/google/go-cmp v0.5.6
+	github.com/iancoleman/strcase v0.2.0
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/peterh/liner v1.2.1

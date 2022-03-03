@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"testing"
 
 	"go.starlark.net/starlark"
 )
@@ -77,4 +78,18 @@ func CloseResources(thread *starlark.Thread) (firstErr error) {
 		store[rsc] = false
 	}
 	return
+}
+
+// AssertOption implements starlarkassert.TestOption
+// Add like so:
+//
+// 	starlarkassert.RunTests(t, "*.star", globals, AssertOption)
+//
+func AssertOption(t testing.TB, thread *starlark.Thread) func() {
+	close := WithResourceStore(thread)
+	return func() {
+		if err := close(); err != nil {
+			t.Error(err, "failed to close resources")
+		}
+	}
 }
