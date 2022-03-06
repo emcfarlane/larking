@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/emcfarlane/larking/starext"
 	"github.com/emcfarlane/larking/starlarkerrors"
 	"github.com/emcfarlane/larking/starlarkio"
 	"github.com/emcfarlane/larking/starlarkthread"
@@ -24,11 +25,11 @@ func NewModule() *starlarkstruct.Module {
 		Name: "http",
 		Members: starlark.StringDict{
 			"default_client": defaultClient,
-			"get":            starlark.NewBuiltin("nethttp.do", clientGet),
-			"head":           starlark.NewBuiltin("nethttp.head", clientHead),
-			"post":           starlark.NewBuiltin("nethttp.post", clientPost),
-			"new_client":     starlark.NewBuiltin("nethttp.new_client", NewClient),
-			"new_request":    starlark.NewBuiltin("nethttp.new_request", NewRequest),
+			"get":            starext.MakeBuiltin("http.do", defaultClient.get),
+			"head":           starext.MakeBuiltin("http.head", defaultClient.head),
+			"post":           starext.MakeBuiltin("http.post", defaultClient.post),
+			"new_client":     starext.MakeBuiltin("http.new_client", NewClient),
+			"new_request":    starext.MakeBuiltin("http.new_request", NewRequest),
 
 			// net/http errors
 			"err_not_supported":         starlarkerrors.NewError(http.ErrNotSupported),
@@ -57,25 +58,26 @@ type Client struct {
 }
 
 func (v *Client) String() string        { return "<client>" }
-func (v *Client) Type() string          { return "nethttp.client" }
+func (v *Client) Type() string          { return "http.client" }
 func (v *Client) Freeze()               { v.frozen = true }
 func (v *Client) Truth() starlark.Bool  { return true }
 func (v *Client) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %s", v.Type()) }
 
-var clientMethods = map[string]*starlark.Builtin{
-	"do": starlark.NewBuiltin("nethttp.client.do", clientDo),
+type clientAttr func(*Client) starlark.Value
+
+var clientAttrs = map[string]clientAttr{
+	"do": func(v *Client) starlark.Value { return starext.MakeMethod(v, "do", v.do) },
 }
 
 func (v *Client) Attr(name string) (starlark.Value, error) {
-	b := clientMethods[name]
-	if b == nil {
-		return nil, nil
+	if a := clientAttrs[name]; a != nil {
+		return a(v), nil
 	}
-	return b.BindReceiver(v), nil
+	return nil, nil
 }
 func (v *Client) AttrNames() []string {
-	names := make([]string, 0, len(clientMethods))
-	for name := range clientMethods {
+	names := make([]string, 0, len(clientAttrs))
+	for name := range clientAttrs {
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -84,12 +86,7 @@ func (v *Client) AttrNames() []string {
 
 var defaultClient = &Client{client: http.DefaultClient, frozen: true}
 
-func clientGet(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	v, ok := b.Receiver().(*Client)
-	if !ok {
-		v = defaultClient
-	}
-
+func (v *Client) get(thread *starlark.Thread, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var urlstr string
 	if err := starlark.UnpackArgs("nethttp.get", args, kwargs,
 		"url", &urlstr,
@@ -104,14 +101,9 @@ func clientGet(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple
 	return makeResponse(thread, response)
 }
 
-func clientHead(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	v, ok := b.Receiver().(*Client)
-	if !ok {
-		v = defaultClient
-	}
-
+func (v *Client) head(thread *starlark.Thread, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var urlstr string
-	if err := starlark.UnpackArgs("nethttp.get", args, kwargs,
+	if err := starlark.UnpackArgs(name, args, kwargs,
 		"url", &urlstr,
 	); err != nil {
 		return nil, err
@@ -124,18 +116,13 @@ func clientHead(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tupl
 	return makeResponse(thread, response)
 }
 
-func clientPost(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	v, ok := b.Receiver().(*Client)
-	if !ok {
-		v = defaultClient
-	}
-
+func (v *Client) post(thread *starlark.Thread, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		urlstr      string
 		contentType string
 		body        starlark.Value
 	)
-	if err := starlark.UnpackArgs("nethttp.get", args, kwargs,
+	if err := starlark.UnpackArgs(name, args, kwargs,
 		"url", &urlstr, "content_type", &contentType, "body", &body,
 	); err != nil {
 		return nil, err
@@ -152,10 +139,10 @@ func clientPost(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tupl
 	return makeResponse(thread, response)
 }
 
-func NewClient(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func NewClient(_ *starlark.Thread, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var client http.Client
 	// TODO: implementation
-	if err := starlark.UnpackPositionalArgs("nethttp.new_client", args, kwargs, 0); err != nil {
+	if err := starlark.UnpackPositionalArgs(name, args, kwargs, 0); err != nil {
 		return nil, err
 	}
 
@@ -164,11 +151,9 @@ func NewClient(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwa
 	}, nil
 }
 
-func clientDo(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	v := b.Receiver().(*Client)
-
+func (v *Client) do(thread *starlark.Thread, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var req Request
-	if err := starlark.UnpackArgs("nethttp.client.do", args, kwargs,
+	if err := starlark.UnpackArgs(name, args, kwargs,
 		"req", &req,
 	); err != nil {
 		return nil, err
@@ -208,13 +193,13 @@ func makeReader(v starlark.Value) (io.Reader, error) {
 	}
 }
 
-func NewRequest(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func NewRequest(thread *starlark.Thread, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		method string
 		urlstr string
 		body   starlark.Value
 	)
-	if err := starlark.UnpackArgs("blob.bucket.write_all", args, kwargs,
+	if err := starlark.UnpackArgs(name, args, kwargs,
 		"method", &method, "url", &urlstr, "body?", &body,
 	); err != nil {
 		return nil, err

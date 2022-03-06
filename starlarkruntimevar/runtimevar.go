@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/emcfarlane/larking/starext"
 	"github.com/emcfarlane/larking/starlarkthread"
 	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
@@ -20,14 +21,14 @@ func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
 		Name: "runtimevar",
 		Members: starlark.StringDict{
-			"open": starlark.NewBuiltin("runtimevar.open", Open),
+			"open": starext.MakeBuiltin("runtimevar.open", Open),
 		},
 	}
 }
 
-func Open(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var name string
-	if err := starlark.UnpackPositionalArgs("runtimevar.open", args, kwargs, 1, &name); err != nil {
+	if err := starlark.UnpackPositionalArgs(fnname, args, kwargs, 1, &name); err != nil {
 		return nil, err
 	}
 
@@ -62,31 +63,30 @@ func (v *Variable) Close() error {
 	return v.variable.Close()
 }
 
-var variableMethods = map[string]*starlark.Builtin{
-	"latest": starlark.NewBuiltin("runtimevar.variable.latest", variableLatest),
-	"close":  starlark.NewBuiltin("runtimevar.variable.close", variableClose), // TODO: expose me?
+type variableAttr func(v *Variable) starlark.Value
+
+var variableAttrs = map[string]variableAttr{
+	"latest": func(v *Variable) starlark.Value { return starext.MakeMethod(v, "latest", v.latest) },
+	"close":  func(v *Variable) starlark.Value { return starext.MakeMethod(v, "close", v.close) }, // TODO: expose me?
 }
 
 func (v *Variable) Attr(name string) (starlark.Value, error) {
-	b := variableMethods[name]
-	if b == nil {
-		return nil, nil
+	if a := variableAttrs[name]; a != nil {
+		return a(v), nil
 	}
-	return b.BindReceiver(v), nil
+	return nil, nil
 }
 func (v *Variable) AttrNames() []string {
-	names := make([]string, 0, len(variableMethods))
-	for name := range variableMethods {
+	names := make([]string, 0, len(variableAttrs))
+	for name := range variableAttrs {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	return names
 }
 
-func variableLatest(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	v := b.Receiver().(*Variable)
-
-	if err := starlark.UnpackPositionalArgs("sql.db.exex", args, kwargs, 0); err != nil {
+func (v *Variable) latest(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if err := starlark.UnpackPositionalArgs(fnname, args, kwargs, 0); err != nil {
 		return nil, err
 	}
 
@@ -98,8 +98,7 @@ func variableLatest(thread *starlark.Thread, b *starlark.Builtin, args starlark.
 	return Snapshot(snapshot), nil
 }
 
-func variableClose(_ *starlark.Thread, b *starlark.Builtin, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
-	v := b.Receiver().(*Variable)
+func (v *Variable) close(_ *starlark.Thread, fnname string, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
 	if err := v.variable.Close(); err != nil {
 		return nil, err
 	}

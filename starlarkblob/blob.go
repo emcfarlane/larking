@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/emcfarlane/larking/starext"
 	"github.com/emcfarlane/larking/starlarkthread"
 
 	"go.starlark.net/starlark"
@@ -21,14 +22,14 @@ func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
 		Name: "blob",
 		Members: starlark.StringDict{
-			"open": starlark.NewBuiltin("blob.open", Open),
+			"open": starext.MakeBuiltin("blob.open", Open),
 		},
 	}
 }
 
-func Open(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var name string
-	if err := starlark.UnpackPositionalArgs("blob.open", args, kwargs, 1, &name); err != nil {
+	if err := starlark.UnpackPositionalArgs(fnname, args, kwargs, 1, &name); err != nil {
 		return nil, err
 	}
 
@@ -57,34 +58,33 @@ func (b *Bucket) Freeze()               {} // concurrent safe
 func (b *Bucket) Truth() starlark.Bool  { return b.bkt != nil }
 func (b *Bucket) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %s", b.Type()) }
 
-var bucketMethods = map[string]*starlark.Builtin{
-	"write_all": starlark.NewBuiltin("blob.bucket.write_all", bucketWriteAll),
-	"read_all":  starlark.NewBuiltin("blob.bucket.read_all", bucketReadAll),
-	"close":     starlark.NewBuiltin("blob.bucket.close", bucketClose),
+type bucketAttr func(b *Bucket) starlark.Value
+
+var bucketAttrs = map[string]bucketAttr{
+	"write_all": func(b *Bucket) starlark.Value { return starext.MakeMethod(b, "write_all", b.writeAll) },
+	"read_all":  func(b *Bucket) starlark.Value { return starext.MakeMethod(b, "read_all", b.readAll) },
+	"close":     func(b *Bucket) starlark.Value { return starext.MakeMethod(b, "close", b.close) },
 }
 
 func (v *Bucket) Attr(name string) (starlark.Value, error) {
-	b := bucketMethods[name]
-	if b == nil {
-		return nil, nil
+	if a := bucketAttrs[name]; a != nil {
+		return a(v), nil
 	}
-	return b.BindReceiver(v), nil
+	return nil, nil
 }
 func (v *Bucket) AttrNames() []string {
-	names := make([]string, 0, len(bucketMethods))
-	for name := range bucketMethods {
+	names := make([]string, 0, len(bucketAttrs))
+	for name := range bucketAttrs {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	return names
 }
 
-func bucketWriteAll(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (v *Bucket) writeAll(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(args) == 0 {
 		return nil, fmt.Errorf("group.go: missing function arg")
 	}
-	v := b.Receiver().(*Bucket)
-
 	var (
 		key   string
 		bytes string
@@ -96,7 +96,7 @@ func bucketWriteAll(thread *starlark.Thread, b *starlark.Builtin, args starlark.
 		beforeWrite starlark.Callable
 	)
 
-	if err := starlark.UnpackArgs("blob.bucket.write_all", args, kwargs,
+	if err := starlark.UnpackArgs(fnname, args, kwargs,
 		"key", &key, "bytes", &bytes,
 		"buffer_size?", &opts.BufferSize, // int
 		"cache_control?", &opts.CacheControl, //  string
@@ -136,18 +136,16 @@ func bucketWriteAll(thread *starlark.Thread, b *starlark.Builtin, args starlark.
 	return starlark.None, nil
 }
 
-func bucketReadAll(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (v *Bucket) readAll(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(args) == 0 {
 		return nil, fmt.Errorf("group.go: missing function arg")
 	}
-
-	v := b.Receiver().(*Bucket)
 
 	var (
 		key string
 		//opts blob.ReaderOptions
 	)
-	if err := starlark.UnpackPositionalArgs("blob.bucket.read_all", args, kwargs, 1, &key); err != nil {
+	if err := starlark.UnpackPositionalArgs(fnname, args, kwargs, 1, &key); err != nil {
 		return nil, err
 	}
 
@@ -159,8 +157,7 @@ func bucketReadAll(thread *starlark.Thread, b *starlark.Builtin, args starlark.T
 	return starlark.Bytes(p), nil
 }
 
-func bucketClose(_ *starlark.Thread, b *starlark.Builtin, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
-	v := b.Receiver().(*Bucket)
+func (v *Bucket) close(_ *starlark.Thread, fnname string, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
 	if err := v.bkt.Close(); err != nil {
 		return nil, err
 	}

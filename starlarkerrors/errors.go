@@ -77,6 +77,7 @@ import (
 	"regexp"
 	"sort"
 
+	"github.com/emcfarlane/larking/starext"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 )
@@ -85,8 +86,8 @@ func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
 		Name: "errors",
 		Members: starlark.StringDict{
-			"new":   starlark.NewBuiltin("errors.new", MakeError),
-			"catch": starlark.NewBuiltin("errors.result", MakeCatch),
+			"new":   starext.MakeBuiltin("errors.new", MakeError),
+			"catch": starext.MakeBuiltin("errors.result", MakeCatch),
 		},
 	}
 }
@@ -99,7 +100,7 @@ func NewError(err error) Error {
 	return Error{err: err}
 }
 
-func MakeError(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func MakeError(thread *starlark.Thread, _ string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	failFn, ok := starlark.Universe["fail"].(*starlark.Builtin)
 	if !ok {
 		return nil, fmt.Errorf("internal builtin fail not found")
@@ -119,32 +120,31 @@ func (e Error) Freeze()               {} // immutable
 func (e Error) Truth() starlark.Bool  { return starlark.Bool(e.err != nil) }
 func (e Error) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %s", e.Type()) }
 
-var errorMethods = map[string]*starlark.Builtin{
-	"matches": starlark.NewBuiltin("errors.error.matches", errorMatches),
-	"kind":    starlark.NewBuiltin("errors.error.kind", errorKind),
+type errorAttr func(e Error) starlark.Value
+
+var errorAttrs = map[string]errorAttr{
+	"matches": func(e Error) starlark.Value { return starext.MakeMethod(e, "matches", e.matches) },
+	"kind":    func(e Error) starlark.Value { return starext.MakeMethod(e, "kind", e.kind) },
 }
 
 func (e Error) Attr(name string) (starlark.Value, error) {
-	b := errorMethods[name]
-	if b == nil {
-		return nil, nil
+	if a := errorAttrs[name]; a != nil {
+		return a(e), nil
 	}
-	return b.BindReceiver(e), nil
+	return nil, nil
 }
 func (e Error) AttrNames() []string {
-	names := make([]string, 0, len(errorMethods))
-	for name := range errorMethods {
+	names := make([]string, 0, len(errorAttrs))
+	for name := range errorAttrs {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	return names
 }
 
-func errorMatches(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	e := b.Receiver().(Error)
-
+func (e Error) matches(_ *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var pattern string
-	if err := starlark.UnpackArgs("error.matches", args, kwargs, "pattern", &pattern); err != nil {
+	if err := starlark.UnpackArgs(fnname, args, kwargs, "pattern", &pattern); err != nil {
 		return nil, err
 	}
 	ok, err := regexp.MatchString(pattern, e.err.Error())
@@ -155,11 +155,9 @@ func errorMatches(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, 
 }
 
 // errorKind as "is" is a reserved keyword.
-func errorKind(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	e := b.Receiver().(Error)
-
+func (e Error) kind(_ *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var err Error
-	if err := starlark.UnpackArgs("error.is", args, kwargs, "err", &err); err != nil {
+	if err := starlark.UnpackArgs(fnname, args, kwargs, "err", &err); err != nil {
 		return nil, err
 	}
 	ok := errors.Is(e.err, err.err)
@@ -179,7 +177,7 @@ func (v Result) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: 
 
 // MakeCatch evaluates f() and returns its evaluation error message
 // if it failed or the value if it succeeded.
-func MakeCatch(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func MakeCatch(thread *starlark.Thread, _ string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(args) == 0 {
 		return Result{value: starlark.None}, nil
 	}

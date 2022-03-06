@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"sort"
 
+	"github.com/emcfarlane/larking/starext"
 	"go.starlark.net/starlark"
 )
 
@@ -25,21 +26,22 @@ func (v *Reader) Freeze()               { v.frozen = true }
 func (v *Reader) Truth() starlark.Bool  { return starlark.Bool(v.Reader != nil) }
 func (v *Reader) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %s", v.Type()) }
 
+type readerAttr func(e *Reader) starlark.Value
+
 // TODO: optional methods io.Closer, etc.
-var readerMethods = map[string]*starlark.Builtin{
-	"read_all": starlark.NewBuiltin("io.reader.read_all", readerReadAll),
+var readerAttrs = map[string]readerAttr{
+	"read_all": func(r *Reader) starlark.Value { return starext.MakeMethod(r, "read_all", r.readAll) },
 }
 
 func (v *Reader) Attr(name string) (starlark.Value, error) {
-	b := readerMethods[name]
-	if b == nil {
-		return nil, nil
+	if a := readerAttrs[name]; a != nil {
+		return a(v), nil
 	}
-	return b.BindReceiver(v), nil
+	return nil, nil
 }
 func (v *Reader) AttrNames() []string {
-	names := make([]string, 0, len(readerMethods))
-	for name := range readerMethods {
+	names := make([]string, 0, len(readerAttrs))
+	for name := range readerAttrs {
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -47,8 +49,7 @@ func (v *Reader) AttrNames() []string {
 }
 
 // TODO: check args/kwargs length
-func readerReadAll(_ *starlark.Thread, b *starlark.Builtin, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
-	v := b.Receiver().(*Reader)
+func (v *Reader) readAll(_ *starlark.Thread, _ string, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
 	x, err := ioutil.ReadAll(v.Reader)
 	if err != nil {
 		return nil, err

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/emcfarlane/larking/starext"
 	"github.com/emcfarlane/larking/starlarkerrors"
 	"github.com/emcfarlane/larking/starlarkthread"
 	starlarktime "go.starlark.net/lib/time"
@@ -29,7 +30,7 @@ func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
 		Name: "sql",
 		Members: starlark.StringDict{
-			"open": starlark.NewBuiltin("sql.open", Open),
+			"open": starext.MakeBuiltin("sql.open", Open),
 
 			// sql errors
 			"err_conn_done": starlarkerrors.NewError(sql.ErrConnDone),
@@ -55,9 +56,9 @@ func genOpaque(u *url.URL) (string, error) {
 	return u.Opaque + genQueryOptions(u.Query()), nil
 }
 
-func Open(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var name string
-	if err := starlark.UnpackPositionalArgs("sql.open", args, kwargs, 1, &name); err != nil {
+	if err := starlark.UnpackPositionalArgs(fnname, args, kwargs, 1, &name); err != nil {
 		return nil, err
 	}
 
@@ -113,24 +114,25 @@ func (v *DB) Freeze()               { v.frozen = true } // immutable?
 func (v *DB) Truth() starlark.Bool  { return v.db != nil }
 func (v *DB) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %s", v.Type()) }
 
-var dbMethods = map[string]*starlark.Builtin{
-	"exec":      starlark.NewBuiltin("sql.db.exec", dbExec),
-	"query":     starlark.NewBuiltin("sql.db.query", dbQuery),
-	"query_row": starlark.NewBuiltin("sql.db.query_row", dbQueryRow),
-	"ping":      starlark.NewBuiltin("sql.db.ping", dbPing),
-	"close":     starlark.NewBuiltin("sql.db.close", dbClose),
+type dbAttr func(v *DB) starlark.Value
+
+var dbAttrs = map[string]dbAttr{
+	"exec":      func(v *DB) starlark.Value { return starext.MakeMethod(v, "exec", v.exec) },
+	"query":     func(v *DB) starlark.Value { return starext.MakeMethod(v, "query", v.query) },
+	"query_row": func(v *DB) starlark.Value { return starext.MakeMethod(v, "query_row", v.queryRow) },
+	"ping":      func(v *DB) starlark.Value { return starext.MakeMethod(v, "ping", v.ping) },
+	"close":     func(v *DB) starlark.Value { return starext.MakeMethod(v, "close", v.close) },
 }
 
 func (v *DB) Attr(name string) (starlark.Value, error) {
-	b := dbMethods[name]
-	if b == nil {
-		return nil, nil
+	if a := dbAttrs[name]; a != nil {
+		return a(v), nil
 	}
-	return b.BindReceiver(v), nil
+	return nil, nil
 }
 func (v *DB) AttrNames() []string {
-	names := make([]string, 0, len(dbMethods))
-	for name := range dbMethods {
+	names := make([]string, 0, len(dbAttrs))
+	for name := range dbAttrs {
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -205,15 +207,13 @@ func makeArgs(args starlark.Tuple) ([]interface{}, error) {
 //	return nil, nil // TODO: Create struct TX.
 //}
 
-func dbExec(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	v := b.Receiver().(*DB)
-
+func (v *DB) exec(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	queryArgs := args
 	if len(args) > 1 {
 		queryArgs = args[:1]
 	}
 	var query string
-	if err := starlark.UnpackPositionalArgs("sql.db.exex", queryArgs, kwargs, 1, &query); err != nil {
+	if err := starlark.UnpackPositionalArgs(fnname, queryArgs, kwargs, 1, &query); err != nil {
 		return nil, err
 	}
 
@@ -231,15 +231,13 @@ func dbExec(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, k
 
 }
 
-func dbQuery(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	v := b.Receiver().(*DB)
-
+func (v *DB) query(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	queryArgs := args
 	if len(args) > 1 {
 		queryArgs = args[:1]
 	}
 	var query string
-	if err := starlark.UnpackPositionalArgs("sql.db.exec", queryArgs, kwargs, 1, &query); err != nil {
+	if err := starlark.UnpackPositionalArgs(fnname, queryArgs, kwargs, 1, &query); err != nil {
 		return nil, err
 	}
 
@@ -276,15 +274,13 @@ func dbQuery(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, 
 	return r, nil
 }
 
-func dbQueryRow(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	v := b.Receiver().(*DB)
-
+func (v *DB) queryRow(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	queryArgs := args
 	if len(args) > 1 {
 		queryArgs = args[:1]
 	}
 	var query string
-	if err := starlark.UnpackPositionalArgs("sql.db.exec", queryArgs, kwargs, 1, &query); err != nil {
+	if err := starlark.UnpackPositionalArgs(fnname, queryArgs, kwargs, 1, &query); err != nil {
 		return nil, err
 	}
 
@@ -331,10 +327,8 @@ func dbQueryRow(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tupl
 	return x, nil
 }
 
-func dbPing(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	v := b.Receiver().(*DB)
-
-	if err := starlark.UnpackPositionalArgs("sql.db.ping", args, kwargs, 0); err != nil {
+func (v *DB) ping(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if err := starlark.UnpackPositionalArgs(fnname, args, kwargs, 0); err != nil {
 		return nil, err
 	}
 
@@ -345,8 +339,7 @@ func dbPing(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, k
 	return starlark.None, nil
 }
 
-func dbClose(_ *starlark.Thread, b *starlark.Builtin, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
-	v := b.Receiver().(*DB)
+func (v *DB) close(_ *starlark.Thread, fnname string, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
 	if err := v.db.Close(); err != nil {
 		return nil, err
 	}
