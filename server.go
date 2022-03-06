@@ -7,6 +7,7 @@ package larking
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -132,6 +133,8 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 	}, nil
 }
 
+// Serve accepts incoming connections on the listener.
+// Serve will return always return a non-nil error, http.ErrServerClosed.
 func (s *Server) Serve(l net.Listener) error {
 	s.closer = make(chan bool, 1)
 
@@ -145,6 +148,8 @@ func (s *Server) Serve(l net.Listener) error {
 	}
 
 	m := cmux.New(l)
+	defer m.Close()
+
 	// grpcL := m.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
 	// gRPC client blocks until it receives a SETTINGS frame from the server.
 	grpcL := m.MatchWithWriters(
@@ -168,19 +173,24 @@ func (s *Server) Serve(l net.Listener) error {
 	}()
 	defer s.hs.Close()
 
-	go func() {
-		if err := m.Serve(); !strings.Contains(err.Error(), "use of closed") {
-			errs <- err
-		}
-
-	}()
+	go func() { errs <- m.Serve() }()
 
 	select {
 	case <-s.closer:
 		return http.ErrServerClosed
 
 	case err := <-errs:
-		return err
+		switch {
+		case errors.Is(err, cmux.ErrServerClosed):
+			// accept
+		case errors.Is(err, net.ErrClosed):
+			// accpet (TODO: looking why?)
+		case errors.Is(err, grpc.ErrServerStopped):
+			// translate
+		default:
+			return err
+		}
+		return http.ErrServerClosed
 	}
 }
 
@@ -192,11 +202,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.closer == nil {
 		return nil
 	}
-	close(s.closer)
-	s.gs.GracefulStop()
 	if err := s.hs.Shutdown(ctx); err != nil {
 		return err
 	}
+	s.gs.GracefulStop()
+	close(s.closer)
 	return nil
 }
 
