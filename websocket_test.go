@@ -46,6 +46,7 @@ func TestWebsocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
+	defer lis.Close()
 
 	g.Go(func() (err error) {
 		if err := s.Serve(lis); err != nil && err != http.ErrServerClosed {
