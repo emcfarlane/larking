@@ -6,6 +6,7 @@ package starlarkopenapi
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/emcfarlane/larking/starext"
@@ -24,6 +26,7 @@ import (
 	"github.com/go-openapi/spec"
 	"github.com/iancoleman/strcase"
 	starlarkjson "go.starlark.net/lib/json"
+	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
 	"gocloud.dev/runtimevar"
 )
@@ -124,6 +127,10 @@ func (c *Client) load(ctx context.Context) (*spec.Swagger, error) {
 	}
 	c.val = b
 	c.doc = &doc
+
+	if err := spec.ExpandSpec(&doc, &spec.ExpandOptions{}); err != nil {
+		return nil, err
+	}
 
 	// build attrs
 	if doc.Paths == nil {
@@ -446,10 +453,144 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 		val, err := starlarkJSONDecode.CallInternal(
 			thread, starlark.Tuple{bodyStr}, nil,
 		)
-		// TODO: create struct?
-		return val, err
+		if err != nil {
+			return nil, err
+		}
+
+		return toStruct(rspTyp.Schema, val)
+		//return val, err
 
 	default:
 		return nil, fmt.Errorf("unknown produces type: %s", typ)
 	}
+}
+
+func errKeyValue(schema *spec.Schema, want string, v starlark.Value) error {
+	return fmt.Errorf("invalid type for %s, want %s got %s", schema.ID, want, v.Type())
+}
+
+func typeStr(schema *spec.Schema) string {
+	return strings.Join([]string(schema.Type), ",")
+}
+
+// TODO: build typed Dict and typed Lists.
+func toStruct(schema *spec.Schema, v starlark.Value) (starlark.Value, error) {
+
+	switch v := v.(type) {
+	case *starlark.Dict:
+		if typ := typeStr(schema); typ != "object" {
+			return nil, errKeyValue(schema, "dict", v)
+		}
+		constructor := starlark.String(schema.ID)
+		kwargs := v.Items()
+
+		// TODO: validate spec.
+		for _, kwarg := range kwargs {
+			k, ok := starlark.AsString(kwarg[0])
+			if !ok {
+				return nil, fmt.Errorf("invalid key %s", k)
+			}
+			v := kwarg[1]
+
+			keySchema, ok := schema.Properties[k]
+			if !ok {
+				return nil, fmt.Errorf("unpexpected key %s", k)
+			}
+
+			x, err := toStruct(&keySchema, v)
+			if err != nil {
+				return nil, err
+			}
+			kwarg[1] = x
+		}
+
+		s := starlarkstruct.FromKeywords(constructor, kwargs)
+		return s, nil
+
+	case *starlark.List:
+		if typeStr(schema) != "array" {
+			return nil, errKeyValue(schema, "list", v)
+		}
+		if items := schema.Items; items == nil || items.Schema == nil {
+			return nil, fmt.Errorf("unepected items schema: %v", items)
+		}
+		keySchema := schema.Items.Schema
+
+		// TODO: validate spec.
+		for i := 0; i < v.Len(); i++ {
+			x, err := toStruct(keySchema, v.Index(i))
+			if err != nil {
+				return nil, err
+			}
+			v.SetIndex(i, x)
+		}
+		return v, nil
+
+	case starlark.String:
+		switch typeStr(schema) {
+		case "string", "password":
+			return v, nil
+		case "byte", "binary":
+			data, err := base64.StdEncoding.DecodeString(string(v))
+			if err != nil {
+				return nil, err
+			}
+			return starlark.Bytes(string(data)), nil
+		case "date":
+			t, err := time.Parse("2006-Jan-02", string(v))
+			if err != nil {
+				return nil, err
+			}
+			return starlarktime.Time(t), nil
+		case "date-time":
+			t, err := time.Parse(time.RFC3339, string(v))
+			if err != nil {
+				return nil, err
+			}
+			return starlarktime.Time(t), nil
+		default:
+			return v, nil // TODO: warn?
+		}
+
+	case starlark.Int:
+		if typeStr(schema) != "integer" {
+			return nil, errKeyValue(schema, "int", v)
+		}
+		return v, nil
+
+	case starlark.Float:
+		if typeStr(schema) != "number" {
+			return nil, errKeyValue(schema, "float", v)
+		}
+		return v, nil
+
+	case starlark.Bool:
+		if typeStr(schema) != "boolean" {
+			return nil, errKeyValue(schema, "bool", v)
+		}
+		return v, nil
+
+	default:
+		// TODO: validate spec?
+		return v, nil
+	}
+}
+
+func NewMessage(schema *spec.Schema, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	hasArgs := len(args) > 0
+	hasKwargs := len(kwargs) > 0
+
+	if hasArgs && len(args) > 1 {
+		return nil, fmt.Errorf("unexpected number of args")
+	}
+
+	if hasArgs && hasKwargs {
+		return nil, fmt.Errorf("unxpected args and kwargs")
+	}
+
+	if hasArgs {
+		return toStruct(schema, args[0])
+	}
+
+	return nil, fmt.Errorf("TODO: kwargs")
 }
