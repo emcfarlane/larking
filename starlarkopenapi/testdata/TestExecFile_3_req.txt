@@ -1,0 +1,6 @@
+PUT /v2/pet HTTP/1.1
+Host: petstore.swagger.io
+Accepts: application/json
+Content-Type: application/json
+
+{"category":{"id":0,"name":"string"},"id":9223372000001085204,"name":"Sir doggie","photoUrls":["string"],"status":"available","tags":[{"id":0,"name":"string"}]}

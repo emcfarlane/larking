@@ -4,13 +4,19 @@
 
 package starlarkopenapi
 
+// OpenAPI spec:
+// https://github.com/OAI/OpenAPI-Specification/blob/main/versions/2.0.md#dataTypeType
+
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"path"
@@ -21,6 +27,7 @@ import (
 	"unicode"
 
 	"github.com/emcfarlane/larking/starext"
+	"github.com/emcfarlane/larking/starlarkhttp"
 	"github.com/emcfarlane/larking/starlarkstruct"
 	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/go-openapi/spec"
@@ -53,10 +60,11 @@ type Client struct {
 
 func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		addr string
-		name string
+		addr   string
+		name   string
+		client *starlarkhttp.Client
 	)
-	if err := starlark.UnpackPositionalArgs(fnname, args, kwargs, 1, &addr, &name); err != nil {
+	if err := starlark.UnpackArgs(fnname, args, kwargs, "name", &name, "addr?", &addr, "client?", &client); err != nil {
 		return nil, err
 	}
 
@@ -71,6 +79,11 @@ func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []
 		name:     name,
 		variable: variable,
 	}
+	if client != nil {
+		c.client = client.Client
+	} else {
+		c.client = http.DefaultClient
+	}
 	if _, err := c.load(ctx); err != nil {
 		variable.Close() //nolint
 		return nil, err
@@ -80,13 +93,6 @@ func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []
 		return nil, err
 	}
 	return c, nil
-}
-
-func (c *Client) getClient() *http.Client {
-	if c.client != nil {
-		return c.client
-	}
-	return http.DefaultClient
 }
 
 func toSnakeCase(s string) string {
@@ -106,6 +112,9 @@ func toSnakeCase(s string) string {
 }
 
 func (c *Client) load(ctx context.Context) (*spec.Swagger, error) {
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel()
+
 	snap, err := c.variable.Latest(ctx)
 	if err != nil {
 		return nil, err
@@ -155,7 +164,7 @@ func (c *Client) load(ctx context.Context) (*spec.Swagger, error) {
 				svcNames = append(svcNames, key)
 			}
 
-			mdName := key
+			mdName := strings.ToLower(method) + "_" + key
 			if id := op.ID; id != "" {
 				mdName = strcase.ToSnake(id)
 			}
@@ -168,10 +177,6 @@ func (c *Client) load(ctx context.Context) (*spec.Swagger, error) {
 				//params: item.Parameters,
 				method: method,
 			}
-			//fmt.Println("name", mdName)
-			//fmt.Println("name", path)
-			//fmt.Println("op", op)
-			//fmt.Println()
 
 			for _, svcName := range svcNames {
 				svc, ok := services[svcName]
@@ -313,20 +318,30 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 		return nil, fmt.Errorf("unexpected args")
 	}
 
-	params := m.op.Parameters
-
-	vals := make([]interface{}, 0, len(params))
-	pairs := make([]interface{}, 0, len(params)<<1)
+	var (
+		params        = m.op.Parameters
+		vals          = make([]interface{}, 0, len(params))
+		pairsRequired []interface{}
+		pairsOptional []interface{}
+	)
 	for i, param := range params {
 		kw := param.Name
-		if !param.Required {
-			kw += "?"
-		}
-		switch typ := param.SimpleSchema.Type; typ {
+		switch typ := param.Type; typ {
 		case "array":
 			vals = append(vals, (*starlark.List)(nil))
 		case "string":
 			vals = append(vals, "")
+		case "integer":
+			vals = append(vals, (int)(0))
+		case "number":
+			vals = append(vals, (float64)(0))
+		case "boolean":
+			vals = append(vals, (bool)(false))
+		case "file":
+			// Tuple of (filename, source) where source
+			// accepts String, Bytes, Reader.
+			// content-type must be form data.
+			vals = append(vals, starlark.Value(nil)) // starlark.Tuple(nil))
 		default:
 			if param.Schema == nil {
 				return nil, fmt.Errorf("unknown type: %s", typ)
@@ -334,21 +349,45 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 			// ???
 			vals = append(vals, (*starlark.Value)(nil))
 		}
-		pairs = append(pairs, kw, &vals[i])
+		if param.Required {
+			pairsRequired = append(pairsRequired, kw, &vals[i])
+		} else {
+			pairsOptional = append(pairsOptional, kw+"?", &vals[i])
+		}
 	}
 
-	fmt.Println("pairs", pairs)
+	pairs := append(pairsRequired, pairsOptional...)
 	if err := starlark.UnpackArgs(m.name, args, kwargs, pairs...); err != nil {
 		return nil, err
 	}
 
+	chooseType := func(typs []string) string {
+		var typ string
+		if n := len(typs); n > 0 {
+			typ = typs[0]
+		} else if n > 1 {
+			for _, altTyp := range typs[1:] {
+				if altTyp == "application/json" {
+					typ = "application/json"
+				}
+			}
+		}
+		return typ
+	}
+
 	var (
 		urlPath      = m.path
-		urlVals      = url.Values{}
+		urlVals      = make(url.Values)
+		headers      = make(http.Header)
 		body         io.Reader
-		consumesType = "application/json" // TODO
-		producesType = "application/json" // TODO
+		formWriter   *multipart.Writer
+		consumesType = chooseType(m.op.Consumes)
+		producesType = chooseType(m.op.Produces)
 	)
+
+	headers.Set("Content-Type", consumesType)
+	headers.Set("Accepts", producesType)
+
 	for i, param := range params {
 		arg := vals[i]
 		if arg == nil {
@@ -358,7 +397,6 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 		switch v := param.In; v {
 		case "body":
 			// create JSON?
-			fmt.Println("body", vals[i])
 			switch typ := consumesType; typ {
 			case "application/json":
 				v, ok := arg.(starlark.Value)
@@ -380,15 +418,26 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 			}
 
 		case "path":
-			fmt.Println("path", vals[i])
+			key := "{" + param.Name + "}"
+			val := vals[i]
+			if i := strings.Index(urlPath, key); i == -1 {
+				return nil, fmt.Errorf("missing path variable: %s", key)
+			} else {
+				urlPath = fmt.Sprintf(
+					"%s%v%s", urlPath[:i], val, urlPath[i+len(key):],
+				)
+			}
 
 		case "query":
-			fmt.Println("query", vals[i])
 			switch v := arg.(type) {
 			case string:
 				urlVals.Set(param.Name, v)
 			case int:
 				urlVals.Set(param.Name, strconv.Itoa(v))
+			case bool:
+				if v {
+					urlVals.Set(param.Name, "true")
+				}
 			case *starlark.List:
 				for i := 0; i < v.Len(); i++ {
 					switch v := v.Index(i).(type) {
@@ -397,47 +446,122 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 					case starlark.Int:
 						x, _ := v.Int64()
 						urlVals.Set(param.Name, strconv.Itoa(int(x)))
+					case starlark.Bool:
+						if bool(v) {
+							urlVals.Set(param.Name, "true")
+						}
 					default:
 						return nil, fmt.Errorf("invalid param list type: %T %v", v, v)
 					}
 				}
 			default:
-				return nil, fmt.Errorf("invalid param type: %T %v", v, v)
+				return nil, fmt.Errorf("unknown param type: %T %v", v, v)
 			}
+
+		case "header":
+			switch v := arg.(type) {
+			case string:
+				headers.Add(param.Name, v)
+			case int:
+				headers.Add(param.Name, strconv.Itoa(v))
+			case bool:
+				if v {
+					headers.Add(param.Name, "true")
+				}
+			default:
+				return nil, fmt.Errorf("unknown header type: %T %v", v, v)
+			}
+
+		case "formData":
+			switch consumesType {
+			case "multipart/form-data":
+				if body == nil {
+					buf := new(bytes.Buffer)
+					formWriter = multipart.NewWriter(buf)
+					// TODO: check this is okay.
+					x := crc32.ChecksumIEEE([]byte(m.path))
+					formWriter.SetBoundary(
+						fmt.Sprintf("%x%x%x", x, x, x),
+					)
+					body = buf
+				}
+
+				switch param.Type {
+				case "file":
+					val, ok := arg.(starlark.Tuple)
+					if !ok || len(val) != 2 {
+						// TODO: better typed errors.
+						return nil, fmt.Errorf("expected tuple(filename, source) got %v", arg)
+					}
+
+					filename, ok := starlark.AsString(val[0])
+					if !ok {
+						return nil, fmt.Errorf("filename must be a string, got %v", val[0])
+					}
+
+					fw, err := formWriter.CreateFormFile(param.Name, filename)
+					if err != nil {
+						return nil, err
+					}
+
+					var r io.Reader
+					switch v := val[1].(type) {
+					case starlark.String:
+						r = strings.NewReader(string(v))
+					case starlark.Bytes:
+						r = strings.NewReader(string(v))
+					case io.Reader:
+						r = v
+					default:
+						return nil, fmt.Errorf("unknown form type: %T %v", v, v)
+					}
+					if _, err := io.Copy(fw, r); err != nil {
+						return nil, err
+					}
+				default:
+					// TODO: type handling
+					s := fmt.Sprintf("%v", arg)
+					if err := formWriter.WriteField(param.Name, s); err != nil {
+						return nil, err
+					}
+				}
+
+			case "application/x-www-form-urlencoded":
+				return nil, fmt.Errorf("unimplemented consume type: %s", consumesType)
+
+			default:
+				return nil, fmt.Errorf("unexpected consumes type %v for \"formData\"", consumesType)
+			}
+
 		default:
 			return nil, fmt.Errorf("unhandled parameter in: %s", v)
 		}
 	}
+	if formWriter != nil {
+		if err := formWriter.Close(); err != nil {
+			return nil, err
+		}
+		headers.Set("Content-Type", formWriter.FormDataContentType())
+	}
+
 	u := m.c.makeURL(urlPath, urlVals)
 
 	urlStr := u.String()
-	fmt.Println("urlStr", urlStr)
 
 	req, err := http.NewRequestWithContext(ctx, m.method, urlStr, body)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", consumesType)
-	req.Header.Set("Accepts", producesType)
+	req.Header = headers
 
-	c := m.c.getClient()
-
-	rsp, err := c.Do(req)
+	rsp, err := m.c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer rsp.Body.Close()
 
-	rspTyp, ok := m.op.Responses.StatusCodeResponses[rsp.StatusCode]
-	if !ok {
-		return nil, fmt.Errorf("%s", rsp.Status)
-	}
-	fmt.Println("rspTyp", rspTyp)
-
-	if rsp.StatusCode/100 != 2 {
-		// TODO: error encoding.
-		return nil, fmt.Errorf("%s", rsp.Status)
-	}
+	rspTyp, rspOk := m.op.Responses.StatusCodeResponses[rsp.StatusCode]
+	rspDef := m.op.Responses.Default
 
 	// Produce struct or array
 	switch typ := producesType; typ {
@@ -457,11 +581,21 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 			return nil, err
 		}
 
-		return toStruct(rspTyp.Schema, val)
-		//return val, err
+		if rsp.StatusCode/100 != 2 {
+			return nil, fmt.Errorf("%s: %q", rsp.Status, val)
+		}
+		// Try to return a typed response.
+		if rspOk {
+			return toStruct(rspTyp.Schema, val)
+		}
+		if rspDef != nil {
+			return toStruct(rspDef.Schema, val)
+		}
+		// TODO: convert anyway?
+		return val, nil
 
 	default:
-		return nil, fmt.Errorf("unknown produces type: %s", typ)
+		return nil, fmt.Errorf("%s: unknown produces type: %s", rsp.Status, typ)
 	}
 }
 
@@ -481,7 +615,9 @@ func toStruct(schema *spec.Schema, v starlark.Value) (starlark.Value, error) {
 		if typ := typeStr(schema); typ != "object" {
 			return nil, errKeyValue(schema, "dict", v)
 		}
-		constructor := starlark.String(schema.ID)
+		// TODO: typed structs?
+		//constructor := starlark.String(schema.ID)
+		constructor := starlarkstruct.Default
 		kwargs := v.Items()
 
 		// TODO: validate spec.

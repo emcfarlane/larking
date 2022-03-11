@@ -53,8 +53,12 @@ func NewModule() *starlarkstruct.Module {
 }
 
 type Client struct {
-	client *http.Client
+	Client *http.Client
 	frozen bool
+}
+
+func MakeClient(client *http.Client) *Client {
+	return &Client{Client: client}
 }
 
 func (v *Client) String() string        { return "<client>" }
@@ -84,7 +88,7 @@ func (v *Client) AttrNames() []string {
 	return names
 }
 
-var defaultClient = &Client{client: http.DefaultClient, frozen: true}
+var defaultClient = &Client{Client: http.DefaultClient, frozen: true}
 
 func (v *Client) get(thread *starlark.Thread, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var urlstr string
@@ -94,7 +98,7 @@ func (v *Client) get(thread *starlark.Thread, name string, args starlark.Tuple, 
 		return nil, err
 	}
 
-	response, err := v.client.Get(urlstr)
+	response, err := v.Client.Get(urlstr)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +113,7 @@ func (v *Client) head(thread *starlark.Thread, name string, args starlark.Tuple,
 		return nil, err
 	}
 
-	response, err := v.client.Head(urlstr)
+	response, err := v.Client.Head(urlstr)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +136,7 @@ func (v *Client) post(thread *starlark.Thread, name string, args starlark.Tuple,
 		return nil, err
 	}
 
-	response, err := v.client.Post(urlstr, contentType, r)
+	response, err := v.Client.Post(urlstr, contentType, r)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +151,7 @@ func NewClient(_ *starlark.Thread, name string, args starlark.Tuple, kwargs []st
 	}
 
 	return &Client{
-		client: &client,
+		Client: &client,
 	}, nil
 }
 
@@ -159,7 +163,7 @@ func (v *Client) do(thread *starlark.Thread, name string, args starlark.Tuple, k
 		return nil, err
 	}
 
-	response, err := v.client.Do(req.request)
+	response, err := v.Client.Do(req.request)
 	if err != nil {
 		return nil, err
 	}

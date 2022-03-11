@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	github.com/bazelbuild/buildtools v0.0.0-20220215100907-23e2a9e4721a
-	github.com/emcfarlane/starlarkassert v0.0.0-20220307024619-90d731ae6256
+	github.com/emcfarlane/starlarkassert v0.0.0-20220311145211-601cef4051f3
 	github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82
 	github.com/go-logr/logr v1.2.0
 	github.com/go-logr/stdr v1.2.0
@@ -21,7 +21,7 @@ require (
 	golang.org/x/mod v0.5.1 // indirect
 	golang.org/x/net v0.0.0-20211123203042-d83791d6bcd9
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220227234510-4e6760a101f9 // indirect
+	golang.org/x/sys v0.0.0-20220310020820-b874c991c1a5 // indirect
 	golang.org/x/tools v0.1.7 // indirect
 	google.golang.org/genproto v0.0.0-20211118181313-81c1377c94b1
 	google.golang.org/grpc v1.42.0
