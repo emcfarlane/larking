@@ -3,7 +3,7 @@
 load("assert.star", "assert")
 
 err_msg = "hello"
-err_val = errors.new("custom error [%s]" % (err_msg))
+err_val = errors.error("custom error [%s]" % (err_msg))
 print(err_val)
 
 def failing_func():

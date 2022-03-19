@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 // Package blob provides access to blob objects within a storage location.
-//
 package starlarkblob
 
 import (

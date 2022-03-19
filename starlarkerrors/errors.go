@@ -3,72 +3,6 @@
 // license that can be found in the LICENSE file.
 
 // Package errors implements functions to manipulate errors.
-//
-// ## type error
-//
-// A type "error"
-//
-// ### def matches
-//
-// ```python
-// e.matches(pattern)
-// ```
-//
-// Returns `True` if the regex pattern matches the error string.
-//
-// ### def kind
-//
-// ```python
-// e.kind(err)
-// ```
-//
-// Returns `True` if the error is of the same kind as err.
-//
-// ## def new
-//
-// ```python
-// def new(str)
-// ```
-// Creates a new error from a string.
-//
-//
-// ## type result
-//
-// ```
-// result = struct(
-//     val: any
-//     err: error
-// )
-// ```
-//
-// ## def catch
-//
-// ```python
-// def catch(fn, *args, **kwargs)
-// ```
-//
-// Catch evaluates the provided function and returns a result.
-// Catch allows starlark code to capture errors returned from a function call.
-// Fn must be a callable that accepts the remaining args and kwargs passed to catch.
-//
-// ```
-// def assertEven(x):
-//     if x / 2 > 1:
-//         fail("odd")
-//
-// res = catch(assertEven, 3)
-// if res.err != None:
-//    print("odd")
-// else:
-//    print("even")
-// ```
-//
-// Trying to use a result value that has errored will raise the error.
-//
-// ```
-// res = catch(assertEven, 3)
-// print("value", res.val)  # fails
-// ```
 package starlarkerrors
 
 import (
@@ -86,8 +20,8 @@ func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
 		Name: "errors",
 		Members: starlark.StringDict{
-			"new":   starext.MakeBuiltin("errors.new", MakeError),
-			"catch": starext.MakeBuiltin("errors.result", MakeCatch),
+			"error": starext.MakeBuiltin("errors.error", MakeError),
+			"catch": starext.MakeBuiltin("errors.catch", MakeCatch),
 		},
 	}
 }

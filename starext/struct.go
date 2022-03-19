@@ -7,7 +7,7 @@
 // Package starlarkstruct defines the Starlark types 'struct' and
 // 'module', both optional language extensions.
 //
-package starlarkstruct // import "go.starlark.net/starlarkstruct"
+package starext // import "go.starlark.net/starlarkstruct"
 
 // It is tempting to introduce a variant of Struct that is a wrapper
 // around a Go struct value, for stronger typing guarantees and more
@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/emcfarlane/larking/starext"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 )
@@ -53,7 +52,7 @@ func FromKeywords(constructor starlark.Value, kwargs []starlark.Tuple) *Struct {
 		panic("nil constructor")
 	}
 
-	osd := starext.NewOrderedStringDict(len(kwargs))
+	osd := NewOrderedStringDict(len(kwargs))
 	for _, kwarg := range kwargs {
 		k := string(kwarg[0].(starlark.String))
 		v := kwarg[1]
@@ -72,7 +71,7 @@ func FromStringDict(constructor starlark.Value, d starlark.StringDict) *Struct {
 	if constructor == nil {
 		panic("nil constructor")
 	}
-	osd := starext.NewOrderedStringDict(len(d))
+	osd := NewOrderedStringDict(len(d))
 	for key, val := range d {
 		osd.Insert(key, val)
 	}
@@ -100,7 +99,7 @@ func FromStringDict(constructor starlark.Value, d starlark.StringDict) *Struct {
 // Use Attr to access its fields and AttrNames to enumerate them.
 type Struct struct {
 	constructor starlark.Value
-	osd         starext.OrderedStringDict
+	osd         OrderedStringDict
 	frozen      bool
 }
 

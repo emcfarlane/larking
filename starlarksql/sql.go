@@ -3,8 +3,6 @@
 // license that can be found in the LICENSE file.
 
 // Package sql provides an interface to conntect to SQL databases.
-//
-// TODO: docs.
 package starlarksql
 
 import (
