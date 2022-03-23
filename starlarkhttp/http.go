@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// Package http provides HTTP client implementations.
 package starlarkhttp
 
 import (
@@ -25,7 +26,7 @@ func NewModule() *starlarkstruct.Module {
 		Name: "http",
 		Members: starlark.StringDict{
 			"default_client": defaultClient,
-			"get":            starext.MakeBuiltin("http.do", defaultClient.get),
+			"get":            starext.MakeBuiltin("http.get", defaultClient.get),
 			"head":           starext.MakeBuiltin("http.head", defaultClient.head),
 			"post":           starext.MakeBuiltin("http.post", defaultClient.post),
 			"new_client":     starext.MakeBuiltin("http.new_client", NewClient),
