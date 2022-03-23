@@ -191,6 +191,25 @@ func (d *OrderedStringDict) Get(k string) (v starlark.Value, found bool) {
 	return starlark.None, false // not found
 }
 
+func (d *OrderedStringDict) Set(k string, v starlark.Value) (found bool) {
+	if d.table == nil {
+		return false // empty
+	}
+
+	h := hashString(k)
+
+	// Inspect each entry in the bucket slice.
+	p := d.table[h&(uint32(len(d.table)-1))]
+	for i, l := 0, len(p); i < l; i++ {
+		e := &d.entries[p[i]]
+		if h == e.hash && k == e.key {
+			e.value = v
+			return true // found and set
+		}
+	}
+	return false // not found
+}
+
 func (d *OrderedStringDict) Delete(k string) (v starlark.Value, found bool) {
 	if d.table == nil {
 		return starlark.None, false // empty

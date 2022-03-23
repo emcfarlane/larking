@@ -17,6 +17,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -549,10 +550,24 @@ func test(ctx context.Context, pattern string) error {
 		})
 	}
 
-	deps := &testDeps{importPath: "<stdin>"}
-	if testing.MainStart(deps, tests, nil, nil).Run() > 0 {
-		return fmt.Errorf("failed")
-	}
+	var (
+		matchPat string
+		matchRe  *regexp.Regexp
+	)
+	testing.Main(func(pat, str string) (result bool, err error) {
+		if matchRe == nil || matchPat != pat {
+			matchPat = pat
+			matchRe, err = regexp.Compile(matchPat)
+			if err != nil {
+				return
+			}
+		}
+		return matchRe.MatchString(str), nil
+	}, tests, nil, nil)
+	// TODO: fix testDeps API
+	//if testing.MainStart(deps, tests, nil, nil, nil).Run() > 0 {
+	//	return fmt.Errorf("failed")
+	//}
 
 	return nil
 }

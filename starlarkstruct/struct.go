@@ -6,8 +6,7 @@
 
 // Package starlarkstruct defines the Starlark types 'struct' and
 // 'module', both optional language extensions.
-//
-package starext // import "go.starlark.net/starlarkstruct"
+package starlarkstruct
 
 // It is tempting to introduce a variant of Struct that is a wrapper
 // around a Go struct value, for stronger typing guarantees and more
@@ -25,6 +24,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/emcfarlane/larking/starext"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 )
@@ -52,7 +52,7 @@ func FromKeywords(constructor starlark.Value, kwargs []starlark.Tuple) *Struct {
 		panic("nil constructor")
 	}
 
-	osd := NewOrderedStringDict(len(kwargs))
+	osd := starext.NewOrderedStringDict(len(kwargs))
 	for _, kwarg := range kwargs {
 		k := string(kwarg[0].(starlark.String))
 		v := kwarg[1]
@@ -71,9 +71,27 @@ func FromStringDict(constructor starlark.Value, d starlark.StringDict) *Struct {
 	if constructor == nil {
 		panic("nil constructor")
 	}
-	osd := NewOrderedStringDict(len(d))
+	osd := starext.NewOrderedStringDict(len(d))
 	for key, val := range d {
 		osd.Insert(key, val)
+	}
+	osd.Sort() // sort by key
+	return &Struct{
+		constructor: constructor,
+		osd:         *osd,
+	}
+}
+
+// FromKeyValues returns a new struct instance with an array of key/value pairs.
+// Keys must be of type string, values of type starlark.Value.
+func FromKeyValues(constructor starlark.Value, kvs ...any) *Struct {
+	if constructor == nil {
+		panic("nil constructor")
+	}
+	osd := starext.NewOrderedStringDict(len(kvs))
+	for i := 0; i < len(kvs); i += 2 {
+		k, v := kvs[i].(string), kvs[i+1].(starlark.Value)
+		osd.Insert(k, v)
 	}
 	osd.Sort() // sort by key
 	return &Struct{
@@ -99,7 +117,7 @@ func FromStringDict(constructor starlark.Value, d starlark.StringDict) *Struct {
 // Use Attr to access its fields and AttrNames to enumerate them.
 type Struct struct {
 	constructor starlark.Value
-	osd         OrderedStringDict
+	osd         starext.OrderedStringDict
 	frozen      bool
 }
 
@@ -268,11 +286,8 @@ func (s *Struct) SetField(name string, value starlark.Value) error {
 	if s.frozen {
 		return fmt.Errorf("cannot insert into frozen struct")
 	}
-	if current, ok := s.osd.Get(name); !ok {
+	if ok := s.osd.Set(name, value); !ok {
 		return fmt.Errorf("invalid field name for struct")
-	} else if ct, vt := current.Type(), value.Type(); ct != vt {
-		return fmt.Errorf("invalid field type %s, want %s", vt, ct)
 	}
-	s.osd.Insert(name, value)
 	return nil
 }
