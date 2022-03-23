@@ -1,6 +1,6 @@
 ## open
 
-`open(url)` opens a blob bucket at the path returning a `bucket`
+`open(url)` opens a blob bucket at the path returning a `bucket`.
 
 | Parameter | Description |
 | ------------- | ------------- |
