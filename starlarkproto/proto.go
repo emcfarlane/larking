@@ -122,7 +122,7 @@ func (p *Proto) Unmarshal(thread *starlark.Thread, fnname string, args starlark.
 	); err != nil {
 		return nil, err
 	}
-	if err := msg.checkMutable("unmarshal"); err != nil {
+	if err := msg.checkMutable(fnname); err != nil {
 		return nil, err
 	}
 	if err := proto.Unmarshal([]byte(str), msg); err != nil {
@@ -165,7 +165,7 @@ func (p *Proto) UnmarshalJSON(thread *starlark.Thread, fnname string, args starl
 	); err != nil {
 		return nil, err
 	}
-	if err := msg.checkMutable("unmarshal"); err != nil {
+	if err := msg.checkMutable(fnname); err != nil {
 		return nil, err
 	}
 	if err := proto.Unmarshal([]byte(str), msg); err != nil {
@@ -206,7 +206,7 @@ func (p *Proto) UnmarshalText(thread *starlark.Thread, fnname string, args starl
 	); err != nil {
 		return nil, err
 	}
-	if err := msg.checkMutable("unmarshal"); err != nil {
+	if err := msg.checkMutable(fnname); err != nil {
 		return nil, err
 	}
 	if err := proto.Unmarshal([]byte(str), msg); err != nil {
@@ -440,20 +440,6 @@ func starToProtoMessage(v starlark.Value, val *protoreflect.Value) error {
 		msg := val.Message()
 		*val = protoreflect.ValueOfMessage(msg.Type().Zero()) // RO
 		return nil
-	case starlark.HasAttrs:
-		msg := val.Message()
-		m := Message{msg: msg} // wrap for set
-
-		for _, name := range v.AttrNames() {
-			val, err := v.Attr(name)
-			if err != nil {
-				return err
-			}
-			if err := m.SetField(name, val); err != nil {
-				return err
-			}
-		}
-		return nil
 	case starlark.IterableMapping:
 		msg := val.Message()
 		m := Message{msg: msg} // wrap for set
@@ -464,6 +450,20 @@ func starToProtoMessage(v starlark.Value, val *protoreflect.Value) error {
 				return fmt.Errorf("proto: invalid key type %s", kv[0].Type())
 			}
 			if err := m.SetField(string(key), kv[1]); err != nil {
+				return err
+			}
+		}
+		return nil
+	case starlark.HasAttrs:
+		msg := val.Message()
+		m := Message{msg: msg} // wrap for set
+
+		for _, name := range v.AttrNames() {
+			val, err := v.Attr(name)
+			if err != nil {
+				return err
+			}
+			if err := m.SetField(name, val); err != nil {
 				return err
 			}
 		}

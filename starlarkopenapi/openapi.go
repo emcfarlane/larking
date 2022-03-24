@@ -51,7 +51,15 @@ type Client struct {
 	// service encoding...
 	name     string
 	variable *runtimevar.Variable
-	client   *http.Client
+	//client   *http.Client
+	do func(
+		thread *starlark.Thread,
+		fnname string,
+		req *starlarkhttp.Request,
+	) (
+		rsp *starlarkhttp.Response,
+		err error,
+	)
 
 	val  []byte // snapshot.Value
 	doc  *spec.Swagger
@@ -80,9 +88,9 @@ func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []
 		variable: variable,
 	}
 	if client != nil {
-		c.client = client.Client
+		c.do = client.Do
 	} else {
-		c.client = http.DefaultClient
+		c.do = starlarkhttp.Do
 	}
 	if _, err := c.load(ctx); err != nil {
 		variable.Close() //nolint
@@ -554,7 +562,9 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 	}
 	req.Header = headers
 
-	rsp, err := m.c.client.Do(req)
+	rsp, err := m.c.do(thread, m.name, &starlarkhttp.Request{
+		Request: req,
+	})
 	if err != nil {
 		return nil, err
 	}

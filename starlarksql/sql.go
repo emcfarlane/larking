@@ -187,7 +187,8 @@ func makeArgs(args starlark.Tuple) ([]interface{}, error) {
 			xs[i] = x
 		case starlark.Float:
 			xs[i] = float64(arg)
-		// TODO: time
+		case starlarktime.Time:
+			xs[i] = time.Time(arg)
 		case driver.Valuer:
 			x, err := arg.Value()
 			if err != nil {

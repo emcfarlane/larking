@@ -113,7 +113,7 @@ func TestExecFile(t *testing.T) {
 	globals := starlark.StringDict{
 		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
 		"addr":   starlark.String(ts.URL),
-		"client": &starlarkhttp.Client{Client: client},
+		"client": starlarkhttp.MakeClient(client),
 		//"http":   NewModule(),
 		"openapi": NewModule(),
 		//"openapi_path": starlark.String(
