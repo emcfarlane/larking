@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/bazelbuild/buildtools v0.0.0-20220215100907-23e2a9e4721a
-	github.com/emcfarlane/starlarkassert v0.0.0-20220311145211-601cef4051f3
+	github.com/emcfarlane/starlarkassert v0.0.0-20220325113746-1c73814d799c
 	github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82
 	github.com/go-logr/logr v1.2.0
 	github.com/go-logr/stdr v1.2.0
@@ -71,7 +71,7 @@ require (
 	go.uber.org/zap v1.19.0 // indirect
 	golang.org/x/mod v0.5.1 // indirect
 	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f // indirect
-	golang.org/x/sys v0.0.0-20220310020820-b874c991c1a5 // indirect
+	golang.org/x/sys v0.0.0-20220319134239-a9b59b0215f8 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac // indirect
 	golang.org/x/tools v0.1.7 // indirect

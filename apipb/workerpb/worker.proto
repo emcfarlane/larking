@@ -36,11 +36,26 @@ message Result {
   }
 }
 
+message RunThreadRequest { string name = 1; }
+message TestThreadRequest { string name = 1; }
+
 service Worker {
   rpc RunOnThread(stream Command) returns (stream Result) {
     option (google.api.http) = {
       custom : {kind : "websocket" path : "/v1/{name=threads/*}:run"}
       body : "*"
+    };
+  }
+  rpc RunThread(RunThreadRequest) returns (Output) {
+    option (google.api.http) = {
+      post : "/v1/{name=threads/*}:run"
+      body : ""
+    };
+  }
+  rpc TestThread(TestThreadRequest) returns (Output) {
+    option (google.api.http) = {
+      post : "/v1/{name=threads/*}:test"
+      body : ""
     };
   }
 }

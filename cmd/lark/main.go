@@ -32,11 +32,10 @@ import (
 	"github.com/peterh/liner"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
+	"gocloud.dev/blob"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-
-	"gocloud.dev/blob"
 )
 
 func env(key, def string) string {
@@ -57,7 +56,7 @@ var (
 	flagCreds        = flag.String("credentials", env("CREDENTIALS", ""), "Runtime variable for credentials.")
 
 	// TODO: relative/absolute pathing needs to be resolved...
-	flagDir = flag.String("dir", "file://./?metadata=skip", "Set the module loading directory")
+	flagDir = flag.String("dir", env("LARK_DIR", "file://./?metadata=skip"), "Set the module loading directory")
 )
 
 type Options struct {
@@ -554,20 +553,21 @@ func test(ctx context.Context, pattern string) error {
 		matchPat string
 		matchRe  *regexp.Regexp
 	)
-	testing.Main(func(pat, str string) (result bool, err error) {
-		if matchRe == nil || matchPat != pat {
-			matchPat = pat
-			matchRe, err = regexp.Compile(matchPat)
-			if err != nil {
-				return
+	deps := starlarkassert.MatchStringOnly(
+		func(pat, str string) (result bool, err error) {
+			if matchRe == nil || matchPat != pat {
+				matchPat = pat
+				matchRe, err = regexp.Compile(matchPat)
+				if err != nil {
+					return
+				}
 			}
-		}
-		return matchRe.MatchString(str), nil
-	}, tests, nil, nil)
-	// TODO: fix testDeps API
-	//if testing.MainStart(deps, tests, nil, nil, nil).Run() > 0 {
-	//	return fmt.Errorf("failed")
-	//}
+			return matchRe.MatchString(str), nil
+		},
+	)
+	if testing.MainStart(deps, tests, nil, nil, nil).Run() > 0 {
+		return fmt.Errorf("failed")
+	}
 
 	return nil
 }
