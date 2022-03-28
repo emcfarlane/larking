@@ -488,9 +488,11 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 					formWriter = multipart.NewWriter(buf)
 					// TODO: check this is okay.
 					x := crc32.ChecksumIEEE([]byte(m.path))
-					formWriter.SetBoundary(
+					if err := formWriter.SetBoundary(
 						fmt.Sprintf("%x%x%x", x, x, x),
-					)
+					); err != nil {
+						return nil, err
+					}
 					body = buf
 				}
 
@@ -668,7 +670,9 @@ func toStruct(schema *spec.Schema, v starlark.Value) (starlark.Value, error) {
 			if err != nil {
 				return nil, err
 			}
-			v.SetIndex(i, x)
+			if err := v.SetIndex(i, x); err != nil {
+				return nil, err
+			}
 		}
 		return v, nil
 

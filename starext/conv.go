@@ -8,11 +8,11 @@ import (
 )
 
 type Key interface {
-    string | int | float64
+	string | int | float64
 }
 
 type Value interface {
-    string | int | float64 | bool
+	string | int | float64 | bool
 }
 
 func toValue(v any) starlark.Value {
@@ -37,11 +37,11 @@ func ToDict[K Key, V Value](v map[K]V) *starlark.Dict {
 	for key := range v {
 		keys = append(keys, key)
 	}
-	sort.Slice(keys, func(i, j int) bool {return keys[i] < keys[j]})
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 
 	d := starlark.NewDict(len(v))
 	for _, key := range keys {
-		d.SetKey(toValue(key), toValue(v[key]))
+		d.SetKey(toValue(key), toValue(v[key])) //nolint
 	}
 	return d
 }
