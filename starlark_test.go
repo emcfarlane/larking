@@ -3,11 +3,10 @@ package larking
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
-	"path/filepath"
 	"testing"
 
+	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/testpb"
 	"github.com/emcfarlane/starlarkassert"
 	"github.com/google/go-cmp/cmp"
@@ -101,40 +100,5 @@ func TestStarlark(t *testing.T) {
 		//"proto":  starlarkproto.NewModule(),
 		"grpc": mux,
 	}
-
-	files, err := filepath.Glob("testdata/*.star")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, filename := range files {
-		src, err := ioutil.ReadFile(filename)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, err = starlark.ExecFile(thread, filename, src, globals)
-		switch err := err.(type) {
-		case *starlark.EvalError:
-			var found bool
-			for i := range err.CallStack {
-				posn := err.CallStack.At(i).Pos
-				if posn.Filename() == filename {
-					linenum := int(posn.Line)
-					msg := err.Error()
-
-					t.Errorf("\n%s:%d: unexpected error: %v", filename, linenum, msg)
-					found = true
-					break
-				}
-			}
-			if !found {
-				t.Error(err.Backtrace())
-			}
-		case nil:
-			// success
-		default:
-			t.Errorf("\n%s", err)
-		}
-	}
+	starlarkassert.RunTests(t, "testdata/*.star", globals, starlarkthread.AssertOption)
 }

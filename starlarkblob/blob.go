@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 // Package blob provides access to blob objects within a storage location.
-//
 package starlarkblob
 
 import (
@@ -11,10 +10,11 @@ import (
 	"sort"
 
 	"github.com/emcfarlane/larking/starext"
+	"github.com/emcfarlane/larking/starlarkstruct"
 	"github.com/emcfarlane/larking/starlarkthread"
 
+	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkstruct"
 	"gocloud.dev/blob"
 )
 
@@ -61,9 +61,11 @@ func (b *Bucket) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type:
 type bucketAttr func(b *Bucket) starlark.Value
 
 var bucketAttrs = map[string]bucketAttr{
-	"write_all": func(b *Bucket) starlark.Value { return starext.MakeMethod(b, "write_all", b.writeAll) },
-	"read_all":  func(b *Bucket) starlark.Value { return starext.MakeMethod(b, "read_all", b.readAll) },
-	"close":     func(b *Bucket) starlark.Value { return starext.MakeMethod(b, "close", b.close) },
+	"attributes": func(b *Bucket) starlark.Value { return starext.MakeMethod(b, "attributes", b.attributes) },
+	"write_all":  func(b *Bucket) starlark.Value { return starext.MakeMethod(b, "write_all", b.writeAll) },
+	"read_all":   func(b *Bucket) starlark.Value { return starext.MakeMethod(b, "read_all", b.readAll) },
+	"delete":     func(b *Bucket) starlark.Value { return starext.MakeMethod(b, "delete", b.delete) },
+	"close":      func(b *Bucket) starlark.Value { return starext.MakeMethod(b, "close", b.close) },
 }
 
 func (v *Bucket) Attr(name string) (starlark.Value, error) {
@@ -81,10 +83,36 @@ func (v *Bucket) AttrNames() []string {
 	return names
 }
 
-func (v *Bucket) writeAll(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	if len(args) == 0 {
-		return nil, fmt.Errorf("group.go: missing function arg")
+func (v *Bucket) attributes(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var (
+		key string
+	)
+	if err := starlark.UnpackPositionalArgs(fnname, args, kwargs, 1, &key); err != nil {
+		return nil, err
 	}
+
+	ctx := starlarkthread.Context(thread)
+	p, err := v.bkt.Attributes(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	return starlarkstruct.FromKeyValues(
+		starlarkstruct.Default,
+		"cache_control", starlark.String(p.CacheControl),
+		"content_disposition", starlark.String(p.ContentDisposition),
+		"content_encoding", starlark.String(p.ContentEncoding),
+		"content_language", starlark.String(p.ContentLanguage),
+		"content_type", starlark.String(p.ContentType),
+		"metadata", starext.ToDict(p.Metadata),
+		"mod_time", starlarktime.Time(p.ModTime),
+		"sie", starlark.MakeInt64(p.Size),
+		"md5", starlark.String(p.MD5),
+		"etag", starlark.String(p.ETag),
+	), nil
+
+}
+
+func (v *Bucket) writeAll(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		key   string
 		bytes string
@@ -97,7 +125,8 @@ func (v *Bucket) writeAll(thread *starlark.Thread, fnname string, args starlark.
 	)
 
 	if err := starlark.UnpackArgs(fnname, args, kwargs,
-		"key", &key, "bytes", &bytes,
+		"key", &key,
+		"bytes", &bytes,
 		"buffer_size?", &opts.BufferSize, // int
 		"cache_control?", &opts.CacheControl, //  string
 		"content_disposition?", &opts.ContentDisposition, //  string
@@ -137,10 +166,6 @@ func (v *Bucket) writeAll(thread *starlark.Thread, fnname string, args starlark.
 }
 
 func (v *Bucket) readAll(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	if len(args) == 0 {
-		return nil, fmt.Errorf("group.go: missing function arg")
-	}
-
 	var (
 		key string
 		//opts blob.ReaderOptions
@@ -155,6 +180,21 @@ func (v *Bucket) readAll(thread *starlark.Thread, fnname string, args starlark.T
 		return nil, err
 	}
 	return starlark.Bytes(p), nil
+}
+
+func (v *Bucket) delete(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var (
+		key string
+	)
+	if err := starlark.UnpackPositionalArgs(fnname, args, kwargs, 1, &key); err != nil {
+		return nil, err
+	}
+
+	ctx := starlarkthread.Context(thread)
+	if err := v.bkt.Delete(ctx, key); err != nil {
+		return nil, err
+	}
+	return starlark.None, nil
 }
 
 func (v *Bucket) close(_ *starlark.Thread, fnname string, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {

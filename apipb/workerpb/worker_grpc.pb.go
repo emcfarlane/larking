@@ -23,6 +23,8 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WorkerClient interface {
 	RunOnThread(ctx context.Context, opts ...grpc.CallOption) (Worker_RunOnThreadClient, error)
+	RunThread(ctx context.Context, in *RunThreadRequest, opts ...grpc.CallOption) (*Output, error)
+	TestThread(ctx context.Context, in *TestThreadRequest, opts ...grpc.CallOption) (*Output, error)
 }
 
 type workerClient struct {
@@ -64,11 +66,31 @@ func (x *workerRunOnThreadClient) Recv() (*Result, error) {
 	return m, nil
 }
 
+func (c *workerClient) RunThread(ctx context.Context, in *RunThreadRequest, opts ...grpc.CallOption) (*Output, error) {
+	out := new(Output)
+	err := c.cc.Invoke(ctx, "/larking.api.worker.Worker/RunThread", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workerClient) TestThread(ctx context.Context, in *TestThreadRequest, opts ...grpc.CallOption) (*Output, error) {
+	out := new(Output)
+	err := c.cc.Invoke(ctx, "/larking.api.worker.Worker/TestThread", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WorkerServer is the server API for Worker service.
 // All implementations must embed UnimplementedWorkerServer
 // for forward compatibility
 type WorkerServer interface {
 	RunOnThread(Worker_RunOnThreadServer) error
+	RunThread(context.Context, *RunThreadRequest) (*Output, error)
+	TestThread(context.Context, *TestThreadRequest) (*Output, error)
 	mustEmbedUnimplementedWorkerServer()
 }
 
@@ -78,6 +100,12 @@ type UnimplementedWorkerServer struct {
 
 func (UnimplementedWorkerServer) RunOnThread(Worker_RunOnThreadServer) error {
 	return status.Errorf(codes.Unimplemented, "method RunOnThread not implemented")
+}
+func (UnimplementedWorkerServer) RunThread(context.Context, *RunThreadRequest) (*Output, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RunThread not implemented")
+}
+func (UnimplementedWorkerServer) TestThread(context.Context, *TestThreadRequest) (*Output, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TestThread not implemented")
 }
 func (UnimplementedWorkerServer) mustEmbedUnimplementedWorkerServer() {}
 
@@ -118,13 +146,58 @@ func (x *workerRunOnThreadServer) Recv() (*Command, error) {
 	return m, nil
 }
 
+func _Worker_RunThread_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RunThreadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkerServer).RunThread(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/larking.api.worker.Worker/RunThread",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkerServer).RunThread(ctx, req.(*RunThreadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Worker_TestThread_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TestThreadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkerServer).TestThread(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/larking.api.worker.Worker/TestThread",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkerServer).TestThread(ctx, req.(*TestThreadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Worker_ServiceDesc is the grpc.ServiceDesc for Worker service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Worker_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "larking.api.worker.Worker",
 	HandlerType: (*WorkerServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "RunThread",
+			Handler:    _Worker_RunThread_Handler,
+		},
+		{
+			MethodName: "TestThread",
+			Handler:    _Worker_TestThread_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "RunOnThread",

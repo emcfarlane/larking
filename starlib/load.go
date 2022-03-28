@@ -17,6 +17,7 @@ import (
 	"github.com/emcfarlane/larking/starlarkdocstore"
 	"github.com/emcfarlane/larking/starlarkerrors"
 	"github.com/emcfarlane/larking/starlarkhttp"
+	"github.com/emcfarlane/larking/starlarkopenapi"
 	"github.com/emcfarlane/larking/starlarkproto"
 	"github.com/emcfarlane/larking/starlarkpubsub"
 	"github.com/emcfarlane/larking/starlarkruntimevar"
@@ -47,13 +48,13 @@ func stdOnceLoad(_ *starlark.Thread) error {
 		starlarkdocstore.NewModule(),
 		starlarkerrors.NewModule(),
 		starlarkhttp.NewModule(),
+		starlarkopenapi.NewModule(),
+		starlarkproto.NewModule(),
 		starlarkpubsub.NewModule(),
 		starlarkruntimevar.NewModule(),
 		starlarksql.NewModule(),
-		starlarkproto.NewModule(),
 
 		// TODO: starlarkgrpc...
-		// TODO: starlarkopenapi...
 	}
 	for _, module := range modules {
 		dict := make(starlark.StringDict, len(module.Members)+1)

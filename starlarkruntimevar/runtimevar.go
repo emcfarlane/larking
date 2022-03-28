@@ -44,6 +44,7 @@ func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []
 		variable: variable,
 	}
 	if err := starlarkthread.AddResource(thread, v); err != nil {
+		variable.Close() //nolint
 		return nil, err
 	}
 	return v, nil
@@ -54,10 +55,17 @@ type Variable struct {
 	variable *runtimevar.Variable
 }
 
-func (v *Variable) String() string        { return fmt.Sprintf("<variable %q>", v.name) }
-func (v *Variable) Type() string          { return "runtimevar.variable" }
-func (v *Variable) Freeze()               {} // immutable?
-func (v *Variable) Truth() starlark.Bool  { return v.variable != nil }
+func (v *Variable) String() string { return fmt.Sprintf("<variable %q>", v.name) }
+func (v *Variable) Type() string   { return "runtimevar.variable" }
+func (v *Variable) Freeze()        {} // immutable?
+
+func (v *Variable) Truth() starlark.Bool {
+	// TODO: checkhealth?
+	//if err := v.variable.CheckHealth(); err != nil {
+	//	return starlark.Bool(false)
+	//}
+	return starlark.Bool(true)
+}
 func (v *Variable) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %s", v.Type()) }
 func (v *Variable) Close() error {
 	return v.variable.Close()

@@ -8,7 +8,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
+	"regexp"
 	"strings"
+	"testing"
 
 	"github.com/go-logr/logr"
 	"go.starlark.net/starlark"
@@ -21,11 +24,14 @@ import (
 	"github.com/emcfarlane/larking/apipb/workerpb"
 	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"
+	"github.com/emcfarlane/starlarkassert"
 )
+
+type loadFunc func(*starlark.Thread, string) (starlark.StringDict, error)
 
 type Server struct {
 	workerpb.UnimplementedWorkerServer
-	load    func(thread *starlark.Thread, module string) (starlark.StringDict, error)
+	load    loadFunc
 	control controlpb.ControlClient
 	name    string
 }
@@ -40,6 +46,16 @@ func NewServer(
 		control: control,
 		name:    name,
 	}
+}
+
+func (s *Server) Load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
+	if s.load == nil {
+		return nil, status.Error(
+			codes.Unavailable,
+			"module loading not avaliable",
+		)
+	}
+	return s.load(thread, module)
 }
 
 func (s *Server) authorize(ctx context.Context, op *controlpb.Operation) error {
@@ -160,9 +176,11 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 		return err
 	}
 
+	name := strings.TrimPrefix(cmd.Name, "thread/")
+
 	var buf bytes.Buffer
 	thread := &starlark.Thread{
-		Name: "<worker>",
+		Name: name,
 		Print: func(_ *starlark.Thread, msg string) {
 			buf.WriteString(msg) //nolint
 		},
@@ -175,24 +193,24 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 		if cerr := cleanup(); err == nil {
 			err = cerr
 		}
-		l.Info("thread closed", "err", err)
 	}()
 
-	module := strings.TrimPrefix(cmd.Name, "thread/")
-
 	globals := starlib.NewGlobals()
-	if module != "" {
+	if name != "" {
 		if s.load == nil {
-			return status.Error(codes.Unavailable, "module loading not avaliable")
+			return status.Error(
+				codes.Unavailable,
+				"module loading not avaliable",
+			)
 		}
-		predeclared, err := s.load(thread, module)
+		predeclared, err := s.load(thread, name)
 		if err != nil {
 			return err
 		}
 		for key, val := range predeclared {
 			globals[key] = val // copy thread values to globals
 		}
-		thread.Name = "<worker:" + module + ">"
+		thread.Name = name
 	}
 
 	run := func(input string) error {
@@ -245,7 +263,7 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 			}
 
 		case *workerpb.Command_Format:
-			b, err := Format(ctx, module, v.Format)
+			b, err := Format(ctx, name, v.Format)
 			if err != nil {
 				l.Info("thread format error", "err", err)
 			}
@@ -266,4 +284,174 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 			return err
 		}
 	}
+}
+
+func (s *Server) RunThread(ctx context.Context, req *workerpb.RunThreadRequest) (*workerpb.Output, error) {
+
+	l := logr.FromContextOrDiscard(ctx)
+	l.Info("running thread", "thread", req.Name)
+
+	creds, err := extractCredentials(ctx)
+	if err != nil {
+		return nil, err
+	}
+	op := &controlpb.Operation{
+		Name:        req.Name,
+		Credentials: creds,
+	}
+	if err := s.authorize(ctx, op); err != nil {
+		l.Error(err, "failed to authorize request", "name", req.Name)
+		return nil, err
+	}
+
+	name := strings.TrimPrefix(req.Name, "thread/")
+
+	var buf bytes.Buffer
+	thread := &starlark.Thread{
+		Name: name,
+		Print: func(_ *starlark.Thread, msg string) {
+			buf.WriteString(msg) //nolint
+		},
+		Load: s.load,
+	}
+
+	starlarkthread.SetContext(thread, ctx)
+	cleanup := starlarkthread.WithResourceStore(thread)
+	defer func() {
+		if cerr := cleanup(); err == nil {
+			err = cerr
+		}
+	}()
+
+	if name == "" {
+		return nil, status.Error(
+			codes.InvalidArgument,
+			"missing module name",
+		)
+	}
+	if _, err := s.Load(thread, name); err != nil {
+		return nil, err
+	}
+
+	return &workerpb.Output{
+		Output: buf.String(),
+		Status: errorStatus(err).Proto(),
+	}, nil
+
+}
+func (s *Server) TestThread(ctx context.Context, req *workerpb.TestThreadRequest) (*workerpb.Output, error) {
+	l := logr.FromContextOrDiscard(ctx)
+	l.Info("testing thread", "thread", req.Name)
+
+	creds, err := extractCredentials(ctx)
+	if err != nil {
+		return nil, err
+	}
+	op := &controlpb.Operation{
+		Name:        req.Name,
+		Credentials: creds,
+	}
+	if err := s.authorize(ctx, op); err != nil {
+		l.Error(err, "failed to authorize request", "name", req.Name)
+		return nil, err
+	}
+
+	name := strings.TrimPrefix(req.Name, "thread/")
+
+	var buf bytes.Buffer
+	thread := &starlark.Thread{
+		Name: name,
+		Print: func(_ *starlark.Thread, msg string) {
+			buf.WriteString(msg) //nolint
+		},
+		Load: s.load,
+	}
+	values, err := s.Load(thread, name)
+	if err != nil {
+		return nil, err
+	}
+
+	errorf := func(err error) {
+		switch err := err.(type) {
+		case *starlark.EvalError:
+			var found bool
+			for i := range err.CallStack {
+				posn := err.CallStack.At(i).Pos
+				if posn.Filename() == name {
+					linenum := int(posn.Line)
+					msg := err.Error()
+
+					fmt.Fprintf(&buf, "\n%s:%d: unexpected error: %v", name, linenum, msg)
+					found = true
+					break
+				}
+			}
+			if !found {
+				fmt.Fprint(&buf, err.Backtrace()) //nolint
+			}
+		case nil:
+			// success
+		default:
+			fmt.Fprintf(&buf, "\n%s", err) //nolint
+		}
+	}
+
+	tests := []testing.InternalTest{{
+		Name: name,
+		F: func(t *testing.T) {
+			for key, val := range values {
+				if !strings.HasPrefix(key, "test_") {
+					continue // ignore
+				}
+				if _, ok := val.(starlark.Callable); !ok {
+					continue // ignore non callable
+				}
+
+				key, val := key, val
+				t.Run(key, func(t *testing.T) {
+					tt := starlarkassert.NewTest(t)
+					if _, err := starlark.Call(
+						thread, val, starlark.Tuple{tt}, nil,
+					); err != nil {
+						errorf(err)
+					}
+				})
+			}
+
+		},
+	}}
+
+	var (
+		matchPat string
+		matchRe  *regexp.Regexp
+	)
+	deps := starlarkassert.MatchStringOnly(
+		func(pat, str string) (result bool, err error) {
+			if matchRe == nil || matchPat != pat {
+				matchPat = pat
+				matchRe, err = regexp.Compile(matchPat)
+				if err != nil {
+					return
+				}
+			}
+			return matchRe.MatchString(str), nil
+		},
+	)
+	var result *status.Status
+	if testing.MainStart(deps, tests, nil, nil, nil).Run() > 0 {
+		result = status.New(
+			codes.Unknown, // TODO: error code.
+			"failed",
+		)
+	} else {
+		result = status.New(
+			codes.OK,
+			"passed",
+		)
+	}
+
+	return &workerpb.Output{
+		Output: buf.String(),
+		Status: result.Proto(),
+	}, nil
 }

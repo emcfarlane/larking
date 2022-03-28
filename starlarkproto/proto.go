@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"go.starlark.net/starlark"
-	oldstruct "go.starlark.net/starlarkstruct"
 	"go.starlark.net/syntax"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/encoding/prototext"
@@ -123,7 +122,7 @@ func (p *Proto) Unmarshal(thread *starlark.Thread, fnname string, args starlark.
 	); err != nil {
 		return nil, err
 	}
-	if err := msg.checkMutable("unmarshal"); err != nil {
+	if err := msg.checkMutable(fnname); err != nil {
 		return nil, err
 	}
 	if err := proto.Unmarshal([]byte(str), msg); err != nil {
@@ -166,7 +165,7 @@ func (p *Proto) UnmarshalJSON(thread *starlark.Thread, fnname string, args starl
 	); err != nil {
 		return nil, err
 	}
-	if err := msg.checkMutable("unmarshal"); err != nil {
+	if err := msg.checkMutable(fnname); err != nil {
 		return nil, err
 	}
 	if err := proto.Unmarshal([]byte(str), msg); err != nil {
@@ -207,7 +206,7 @@ func (p *Proto) UnmarshalText(thread *starlark.Thread, fnname string, args starl
 	); err != nil {
 		return nil, err
 	}
-	if err := msg.checkMutable("unmarshal"); err != nil {
+	if err := msg.checkMutable(fnname); err != nil {
 		return nil, err
 	}
 	if err := proto.Unmarshal([]byte(str), msg); err != nil {
@@ -430,37 +429,16 @@ func protoToStar(v protoreflect.Value, fd protoreflect.FieldDescriptor) starlark
 
 func starToProtoMessage(v starlark.Value, val *protoreflect.Value) error {
 	switch v := v.(type) {
+	case *Message:
+		msg := val.Message()
+		if err := equalFullName(msg.Descriptor().FullName(), v.msg.Descriptor().FullName()); err != nil {
+			return err
+		}
+		*val = protoreflect.ValueOfMessage(v.msg)
+		return nil
 	case starlark.NoneType:
 		msg := val.Message()
 		*val = protoreflect.ValueOfMessage(msg.Type().Zero()) // RO
-		return nil
-	case *starlarkstruct.Struct:
-		msg := val.Message()
-		m := Message{msg: msg} // wrap for set
-
-		for _, name := range v.AttrNames() {
-			val, err := v.Attr(name)
-			if err != nil {
-				return err
-			}
-			if err := m.SetField(name, val); err != nil {
-				return err
-			}
-		}
-		return nil
-	case *oldstruct.Struct:
-		msg := val.Message()
-		m := Message{msg: msg} // wrap for set
-
-		for _, name := range v.AttrNames() {
-			val, err := v.Attr(name)
-			if err != nil {
-				return err
-			}
-			if err := m.SetField(name, val); err != nil {
-				return err
-			}
-		}
 		return nil
 	case starlark.IterableMapping:
 		msg := val.Message()
@@ -476,12 +454,19 @@ func starToProtoMessage(v starlark.Value, val *protoreflect.Value) error {
 			}
 		}
 		return nil
-	case *Message:
+	case starlark.HasAttrs:
 		msg := val.Message()
-		if err := equalFullName(msg.Descriptor().FullName(), v.msg.Descriptor().FullName()); err != nil {
-			return err
+		m := Message{msg: msg} // wrap for set
+
+		for _, name := range v.AttrNames() {
+			val, err := v.Attr(name)
+			if err != nil {
+				return err
+			}
+			if err := m.SetField(name, val); err != nil {
+				return err
+			}
 		}
-		*val = protoreflect.ValueOfMessage(v.msg)
 		return nil
 	default:
 		return fmt.Errorf("proto: unknown type conversion %s<%T> to proto.message", v, v)

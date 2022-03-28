@@ -26,13 +26,5 @@ func TestExecFile(t *testing.T) {
 		"io_eof":      NewError(io.EOF),
 		"io_eof_func": starlark.NewBuiltin("io_eof_func", ioEOF),
 	}
-	runner := func(t testing.TB, thread *starlark.Thread) func() {
-		close := starlarkthread.WithResourceStore(thread)
-		return func() {
-			if err := close(); err != nil {
-				t.Error(err, "failed to close resources")
-			}
-		}
-	}
-	starlarkassert.RunTests(t, "testdata/*.star", globals, runner)
+	starlarkassert.RunTests(t, "testdata/*.star", globals, starlarkthread.AssertOption)
 }

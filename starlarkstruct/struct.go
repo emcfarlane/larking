@@ -1,22 +1,36 @@
+// https://github.com/google/starlark-go/pull/403
+//
 // Copyright 2017 The Bazel Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package starlarkstruct defines a mutable version of the Starlark type
-// 'struct', a language extension.
-//
+// Package starlarkstruct defines the Starlark types 'struct' and
+// 'module', both optional language extensions.
 package starlarkstruct
+
+// It is tempting to introduce a variant of Struct that is a wrapper
+// around a Go struct value, for stronger typing guarantees and more
+// efficient and convenient field lookup. However:
+// 1) all fields of Starlark structs are optional, so we cannot represent
+//    them using more specific types such as String, Int, *Depset, and
+//    *File, as such types give no way to represent missing fields.
+// 2) the efficiency gain of direct struct field access is rather
+//    marginal: finding the index of a field by map access is O(1)
+//    and is quite fast compared to the other overheads.
+// Such an implementation is likely to be more compact than
+// the current map-based representation, though.
 
 import (
 	"fmt"
 	"strings"
 
+	"github.com/emcfarlane/larking/starext"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 )
 
 // Make is the implementation of a built-in function that instantiates
-// a mutable struct from the specified keyword arguments.
+// an immutable struct from the specified keyword arguments.
 //
 // An application can add 'struct' to the Starlark environment like so:
 //
@@ -37,15 +51,17 @@ func FromKeywords(constructor starlark.Value, kwargs []starlark.Tuple) *Struct {
 	if constructor == nil {
 		panic("nil constructor")
 	}
-	d := make(starlark.StringDict, len(kwargs))
+
+	osd := starext.NewOrderedStringDict(len(kwargs))
 	for _, kwarg := range kwargs {
 		k := string(kwarg[0].(starlark.String))
 		v := kwarg[1]
-		d[k] = v
+		osd.Insert(k, v)
 	}
+	osd.Sort() // sort by key
 	return &Struct{
 		constructor: constructor,
-		members:     d,
+		osd:         *osd,
 	}
 }
 
@@ -55,22 +71,58 @@ func FromStringDict(constructor starlark.Value, d starlark.StringDict) *Struct {
 	if constructor == nil {
 		panic("nil constructor")
 	}
+	osd := starext.NewOrderedStringDict(len(d))
+	for key, val := range d {
+		osd.Insert(key, val)
+	}
+	osd.Sort() // sort by key
 	return &Struct{
 		constructor: constructor,
-		members:     d,
+		osd:         *osd,
 	}
 }
 
-// Struct is a mutable Starlark type that maps field names to values.
-// Based on the immutable starlark struct "go.starlark.net/starlarkstruct".
-// A frozen Struct is identical to the immutable definition.
+// FromKeyValues returns a new struct instance with an array of key/value pairs.
+// Keys must be of type string, values of type starlark.Value.
+func FromKeyValues(constructor starlark.Value, kvs ...any) *Struct {
+	if constructor == nil {
+		panic("nil constructor")
+	}
+	osd := starext.NewOrderedStringDict(len(kvs))
+	for i := 0; i < len(kvs); i += 2 {
+		k, v := kvs[i].(string), kvs[i+1].(starlark.Value)
+		osd.Insert(k, v)
+	}
+	osd.Sort() // sort by key
+	return &Struct{
+		constructor: constructor,
+		osd:         *osd,
+	}
+}
+
+// Struct is an immutable Starlark type that maps field names to values.
+// It is not iterable and does not support len.
+//
+// A struct has a constructor, a distinct value that identifies a class
+// of structs, and which appears in the struct's string representation.
+//
+// Operations such as x+y fail if the constructors of the two operands
+// are not equal.
+//
+// The default constructor, Default, is the string "struct", but
+// clients may wish to 'brand' structs for their own purposes.
+// The constructor value appears in the printed form of the value,
+// and is accessible using the Constructor method.
+//
+// Use Attr to access its fields and AttrNames to enumerate them.
 type Struct struct {
 	constructor starlark.Value
+	osd         starext.OrderedStringDict
 	frozen      bool
-	members     starlark.StringDict
 }
 
 // Default is the default constructor for structs.
+// It is merely the string "struct".
 const Default = starlark.String("struct")
 
 var (
@@ -81,8 +133,9 @@ var (
 
 // ToStringDict adds a name/value entry to d for each field of the struct.
 func (s *Struct) ToStringDict(d starlark.StringDict) {
-	for key, val := range s.members {
-		d[key] = val
+	for i := 0; i < s.osd.Len(); i++ {
+		k, v := s.osd.KeyIndex(i)
+		d[k] = v
 	}
 }
 
@@ -96,8 +149,8 @@ func (s *Struct) String() string {
 		buf.WriteString(s.constructor.String())
 	}
 	buf.WriteByte('(')
-	for i, k := range s.AttrNames() {
-		v := s.members[k]
+	for i := 0; i < s.osd.Len(); i++ {
+		k, v := s.osd.KeyIndex(i)
 		if i > 0 {
 			buf.WriteString(", ")
 		}
@@ -115,10 +168,10 @@ func (s *Struct) Constructor() starlark.Value { return s.constructor }
 func (s *Struct) Type() string         { return "struct" }
 func (s *Struct) Truth() starlark.Bool { return true } // even when empty
 func (s *Struct) Hash() (uint32, error) {
-	// Same algorithm as starlarkstruct.Struct.
+	// Same algorithm as Tuple.hash, but with different primes.
 	var x, m uint32 = 8731, 9839
-	for _, k := range s.AttrNames() {
-		v := s.members[k]
+	for i := 0; i < s.osd.Len(); i++ {
+		k, v := s.osd.KeyIndex(i)
 		namehash, _ := starlark.String(k).Hash()
 		x = x ^ 3*namehash
 		y, err := v.Hash()
@@ -134,10 +187,10 @@ func (s *Struct) Freeze() {
 	if s.frozen {
 		return
 	}
-	for _, v := range s.members {
-		v.Freeze()
-	}
 	s.frozen = true
+	for i := 0; i < s.osd.Len(); i++ {
+		s.osd.Index(i).Freeze()
+	}
 }
 
 func (x *Struct) Binary(op syntax.Token, y starlark.Value, side starlark.Side) (starlark.Value, error) {
@@ -154,13 +207,16 @@ func (x *Struct) Binary(op syntax.Token, y starlark.Value, side starlark.Side) (
 				x.constructor, y.constructor)
 		}
 
-		z := make(starlark.StringDict, len(x.members)+len(y.members))
-		for k, v := range x.members {
+		z := make(starlark.StringDict, x.len()+y.len())
+		for i := 0; i < x.osd.Len(); i++ {
+			k, v := x.osd.KeyIndex(i)
 			z[k] = v
 		}
-		for k, v := range y.members {
+		for i := 0; i < y.osd.Len(); i++ {
+			k, v := y.osd.KeyIndex(i)
 			z[k] = v
 		}
+
 		return FromStringDict(x.constructor, z), nil
 	}
 	return nil, nil // unhandled
@@ -168,33 +224,37 @@ func (x *Struct) Binary(op syntax.Token, y starlark.Value, side starlark.Side) (
 
 // Attr returns the value of the specified field.
 func (s *Struct) Attr(name string) (starlark.Value, error) {
-	if v, ok := s.members[name]; ok {
+	if v, ok := s.osd.Get(name); ok {
 		return v, nil
 	}
 	var ctor string
 	if s.constructor != Default {
 		ctor = s.constructor.String() + " "
 	}
-	return nil, starlark.NoSuchAttrError(fmt.Sprintf("%sstruct has no .%s attribute", ctor, name))
+	return nil, starlark.NoSuchAttrError(
+		fmt.Sprintf("%sstruct has no .%s attribute", ctor, name))
 }
 
-// AttrNames returns a new sorted list of the struct members.
-func (s *Struct) AttrNames() []string { return s.members.Keys() }
+func (s *Struct) len() int { return s.osd.Len() }
 
-// SetField sets a fields value.
-func (s *Struct) SetField(name string, value starlark.Value) error {
-	if s.frozen {
-		return fmt.Errorf("cannot insert into frozen struct")
+// AttrNames returns a new sorted list of the struct fields.
+func (s *Struct) AttrNames() []string { return s.osd.Keys() }
+
+func (x *Struct) CompareSameType(op syntax.Token, y_ starlark.Value, depth int) (bool, error) {
+	y := y_.(*Struct)
+	switch op {
+	case syntax.EQL:
+		return structsEqual(x, y, depth)
+	case syntax.NEQ:
+		eq, err := structsEqual(x, y, depth)
+		return !eq, err
+	default:
+		return false, fmt.Errorf("%s %s %s not implemented", x.Type(), op, y.Type())
 	}
-	if _, ok := s.members[name]; !ok {
-		return fmt.Errorf("invalid field name for struct")
-	}
-	s.members[name] = value
-	return nil
 }
 
 func structsEqual(x, y *Struct, depth int) (bool, error) {
-	if len(x.members) != len(y.members) {
+	if x.len() != y.len() {
 		return false, nil
 	}
 
@@ -205,29 +265,29 @@ func structsEqual(x, y *Struct, depth int) (bool, error) {
 		return false, nil
 	}
 
-	for k, xv := range x.members {
-		yv, ok := y.members[k]
-		if !ok {
-			return false, nil
-		}
+	for i := 0; i < x.len(); i++ {
+		xkey, xval := x.osd.KeyIndex(i)
+		ykey, yval := y.osd.KeyIndex(i)
 
-		if eq, err := starlark.EqualDepth(xv, yv, depth-1); err != nil {
+		if xkey != ykey {
+			return false, nil
+		} else if eq, err := starlark.EqualDepth(xval, yval, depth-1); err != nil {
 			return false, err
 		} else if !eq {
 			return false, nil
 		}
 	}
 	return true, nil
+
 }
 
-func (x *Struct) CompareSameType(op syntax.Token, y_ starlark.Value, depth int) (bool, error) {
-	switch y := y_.(*Struct); op {
-	case syntax.EQL:
-		return structsEqual(x, y, depth)
-	case syntax.NEQ:
-		eq, err := structsEqual(x, y, depth)
-		return !eq, err
-	default:
-		return false, fmt.Errorf("%s %s %s not implemented", x.Type(), op, y.Type())
+// SetField sets a fields value.
+func (s *Struct) SetField(name string, value starlark.Value) error {
+	if s.frozen {
+		return fmt.Errorf("cannot insert into frozen struct")
 	}
+	if ok := s.osd.Set(name, value); !ok {
+		return fmt.Errorf("invalid field name for struct")
+	}
+	return nil
 }
