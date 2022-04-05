@@ -1,0 +1,18 @@
+
+Â
+apipb/library.protolarking.examples.go.library.apigoogle/api/annotations.proto"i
+Book
+name (	Rname
+title (	Rtitle
+author (	Rauthor
+cover_image (	R
+coverImage"$
+GetBookRequest
+name (	Rname"f
+CreateBookRequest
+parent (	Rparent9
+book (2%.larking.examples.go.library.api.BookRbook2©
+Library‡
+GetBook/.larking.examples.go.library.api.GetBookRequest%.larking.examples.go.library.api.Book"$‚Óä“/v1/{name=shelves/*/books/*}“
+
+CreateBook2.larking.examples.go.library.api.CreateBookRequest%.larking.examples.go.library.api.Book"*‚Óä“$"/v1/{parent=shelves/*}/books:bookB?Z=github.com/emcfarlane/larking/examples/go/library/apipb;apipbbproto3
