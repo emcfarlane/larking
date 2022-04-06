@@ -1,46 +1,45 @@
 # Tests of Starlark 'sql' extension.
 
-load("assert.star", "assert")
+def test_sql(t):
+    # db resource is shared, safe for concurrent access.
+    db = sql.open("sqlite:file::memory:?cache=shared")
+    t.true(db)  # check database active.
 
-# db resource is shared, safe for concurrent access.
-db = sql.open("sqlite:file::memory:?cache=shared")
-assert.true(db)
+    db.ping()
 
-db.ping()
+    # create
+    def create():
+        db.exec("CREATE TABLE projects(mascot VARCHAR(10), release SMALLINT, category TEXT NOT NULL)")
 
-# create
-def create():
-    db.exec("CREATE TABLE projects(mascot VARCHAR(10), release SMALLINT, category TEXT NOT NULL)")
+    # insert
+    def insert():
+        projects = [
+            ("tux", 1991),
+            ("duke", 1996),
+            ("gopher", 2009),
+            ("moby dock", 2013),
+        ]
 
-# insert
-def insert():
-    projects = [
-        ("tux", 1991),
-        ("duke", 1996),
-        ("gopher", 2009),
-        ("moby dock", 2013),
-    ]
+        stmt = "INSERT INTO projects(mascot, release, category) VALUES( ?, ?, ? )"
+        for project in projects:
+            db.exec(stmt, project[0], project[1], "open source")
 
-    stmt = "INSERT INTO projects(mascot, release, category) VALUES( ?, ?, ? )"
-    for project in projects:
-        db.exec(stmt, project[0], project[1], "open source")
+    # query
+    def query(after):
+        rows = db.query("SELECT rowid, * FROM projects WHERE release > ? ORDER BY release ASC", after)
+        return [row for row in rows]  # copy values out of rows loop
 
-# query
-def query(after):
-    rows = db.query("SELECT rowid, * FROM projects WHERE release > ? ORDER BY release ASC", after)
-    return [row for row in rows]  # copy values out of rows loop
+    create()
+    insert()
 
-create()
-insert()
+    query_rows = query(2008)
+    t.eq(len(query_rows), 2)
+    print("projects:", query_rows)
 
-query_rows = query(2008)
-assert.eq(len(query_rows), 2)
-print("projects:", query_rows)
+    sel_row = query_rows[0]
+    one_row = db.query_row("SELECT * FROM projects WHERE mascot = ?", sel_row.mascot)
+    print("row:", one_row)
 
-sel_row = query_rows[0]
-one_row = db.query_row("SELECT * FROM projects WHERE mascot = ?", sel_row.mascot)
-print("row:", one_row)
-
-assert.eq(one_row.mascot, sel_row.mascot)
-assert.eq(one_row.release, sel_row.release)
-assert.eq(one_row.category, sel_row.category)
+    t.eq(one_row.mascot, sel_row.mascot)
+    t.eq(one_row.release, sel_row.release)
+    t.eq(one_row.category, sel_row.category)

@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/bazelbuild/buildtools v0.0.0-20220215100907-23e2a9e4721a
-	github.com/emcfarlane/starlarkassert v0.0.0-20220328143351-c4e2b481aac2
+	github.com/emcfarlane/starlarkassert v0.0.0-20220406142958-771296b4bdb6
 	github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82
 	github.com/go-logr/logr v1.2.0
 	github.com/go-logr/stdr v1.2.0
@@ -14,7 +14,7 @@ require (
 	github.com/peterh/liner v1.2.1
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/soheilhy/cmux v0.1.5
-	go.starlark.net v0.0.0-20220302181546-5411bad688d1
+	go.starlark.net v0.0.0-20220328144851-d1966c6b9fcd
 	gocloud.dev v0.24.0
 	golang.org/x/net v0.0.0-20211123203042-d83791d6bcd9
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
@@ -71,7 +71,7 @@ require (
 	go.uber.org/zap v1.19.0 // indirect
 	golang.org/x/mod v0.5.1 // indirect
 	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f // indirect
-	golang.org/x/sys v0.0.0-20220328115105-d36c6a25d886 // indirect
+	golang.org/x/sys v0.0.0-20220405210540-1e041c57c461 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac // indirect
 	golang.org/x/tools v0.1.7 // indirect

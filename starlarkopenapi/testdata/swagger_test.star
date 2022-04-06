@@ -1,4 +1,3 @@
-load("assert.star", "assert")
 #load("blob.star", "blob")
 
 api = openapi.open(spec_var, client = client)

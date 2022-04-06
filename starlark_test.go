@@ -19,13 +19,6 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
-func load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
-	if module == "assert.star" {
-		return starlarkassert.LoadAssertModule(thread)
-	}
-	return nil, fmt.Errorf("unknown module %s", module)
-}
-
 func TestStarlark(t *testing.T) {
 	opts := cmp.Options{protocmp.Transform()}
 
@@ -64,26 +57,28 @@ func TestStarlark(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
-	defer lis.Close()
+	t.Cleanup(func() { lis.Close() })
 
 	var g errgroup.Group
-	defer func() {
+	//defer func() {
+	t.Cleanup(func() {
 		if err := g.Wait(); err != nil {
 			t.Fatal(err)
 		}
-	}()
+	})
 
 	g.Go(func() error {
 		return gs.Serve(lis)
 	})
-	defer gs.Stop()
+	t.Cleanup(gs.Stop)
 
 	// Create client.
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	if err != nil {
 		t.Fatalf("cannot connect to server: %v", err)
 	}
-	defer conn.Close()
+	t.Cleanup(func() { conn.Close() })
+	//defer conn.Close()
 
 	mux, err := NewMux()
 	if err != nil {
@@ -93,12 +88,12 @@ func TestStarlark(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	thread := &starlark.Thread{Load: load}
-	starlarkassert.SetReporter(thread, t)
 	globals := starlark.StringDict{
 		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
 		//"proto":  starlarkproto.NewModule(),
-		"grpc": mux,
+		"mux": mux,
 	}
+	t.Log("running")
 	starlarkassert.RunTests(t, "testdata/*.star", globals, starlarkthread.AssertOption)
+	defer t.Log("CLOSING")
 }

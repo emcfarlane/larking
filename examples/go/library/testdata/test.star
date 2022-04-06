@@ -1,5 +1,3 @@
-load("assert.star", "assert")
-
 svc = mux.service("larking.examples.go.library.api")
 print(svc)
 print(dir(svc))

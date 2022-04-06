@@ -1,5 +1,3 @@
-load("assert.star", "assert")
-
 def assert_even(x):
     if x % 2 == 0:
         fail("odd")
