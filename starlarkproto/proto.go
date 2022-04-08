@@ -30,6 +30,13 @@ func SetProtodescResolver(thread *starlark.Thread, resolver protodesc.Resolver) 
 	thread.SetLocal(protokey, resolver)
 }
 
+func GetProtodescResolver(thread *starlark.Thread) protodesc.Resolver {
+	if resolver, ok := thread.Local(protokey).(protodesc.Resolver); ok {
+		return resolver
+	}
+	return protoregistry.GlobalFiles
+}
+
 func NewModule() *starlarkstruct.Module {
 	p := NewProto()
 	return &starlarkstruct.Module{
@@ -52,13 +59,6 @@ type Proto struct {
 	types protoregistry.Types // TODO: wrap resolver to register extensions.
 }
 
-func (p *Proto) resolver(thread *starlark.Thread) protodesc.Resolver {
-	if resolver, ok := thread.Local(protokey).(protodesc.Resolver); ok {
-		return resolver
-	}
-	return protoregistry.GlobalFiles
-}
-
 func NewProto() *Proto {
 	return &Proto{}
 }
@@ -69,7 +69,7 @@ func (p *Proto) File(thread *starlark.Thread, fnname string, args starlark.Tuple
 		return nil, err
 	}
 
-	fileDesc, err := p.resolver(thread).FindFileByPath(name)
+	fileDesc, err := GetProtodescResolver(thread).FindFileByPath(name)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (p *Proto) New(thread *starlark.Thread, fnname string, args starlark.Tuple,
 	}
 	fullname := protoreflect.FullName(name)
 
-	desc, err := p.resolver(thread).FindDescriptorByName(fullname)
+	desc, err := GetProtodescResolver(thread).FindDescriptorByName(fullname)
 	if err != nil {
 		return nil, err
 	}
@@ -646,21 +646,21 @@ func (m *Message) toValue(fd protoreflect.FieldDescriptor) starlark.Value {
 }
 
 func (m *Message) isMutableType(fd protoreflect.FieldDescriptor) bool {
-	if fd.IsMap() || fd.IsList() {
-		if m.refs == nil {
-			m.refs = make(map[protoreflect.Name]starlark.Value)
-		}
-		if _, ok := m.refs[fd.Name()]; !ok {
-			m.refs[fd.Name()] = protoToStar(m.msg.Mutable(fd), fd)
-		}
-		return true
-	}
-	return fd.Kind() == protoreflect.MessageKind && m.msg.Has(fd)
+	isMessage := fd.Kind() == protoreflect.MessageKind // && m.msg.Has(fd)
+	return isMessage || fd.IsMap() || fd.IsList()
 }
 
 func (m *Message) mutable(fd protoreflect.FieldDescriptor) starlark.Value {
 	if m.isMutableType(fd) {
-		return m.refs[fd.Name()] // SetField creates reference
+		if m.refs == nil {
+			m.refs = make(map[protoreflect.Name]starlark.Value)
+		}
+		val, ok := m.refs[fd.Name()]
+		if !ok {
+			val = protoToStar(m.msg.Mutable(fd), fd)
+			m.refs[fd.Name()] = val
+		}
+		return val
 	}
 	return m.toValue(fd)
 }
@@ -790,7 +790,6 @@ func (m *Message) fieldDesc(name string) (protoreflect.FieldDescriptor, error) {
 	if od := desc.Oneofs().ByName(protoreflect.Name(name)); od != nil {
 		return m.msg.WhichOneof(od), nil
 	}
-
 	return nil, starlark.NoSuchAttrError(
 		fmt.Sprintf("%s has no .%s attribute", desc.Name(), name),
 	)

@@ -353,8 +353,11 @@ func (p *path) addRule(
 		invalid(tok)
 	}
 
-	if _, ok := cursor.methods[verb]; ok || cursor.methodAll != nil {
-		return fmt.Errorf("duplicate rule %v", rule)
+	if y, ok := cursor.methods[verb]; ok || cursor.methodAll != nil {
+		if y.desc.FullName() != desc.FullName() {
+			return fmt.Errorf("duplicate rule %v", rule)
+		}
+		return nil // Method already registered.
 	}
 
 	m := &method{

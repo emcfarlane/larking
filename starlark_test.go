@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/emcfarlane/larking/starlarkthread"
+	"github.com/emcfarlane/larking/starlib"
 	"github.com/emcfarlane/larking/testpb"
 	"github.com/emcfarlane/starlarkassert"
 	"github.com/google/go-cmp/cmp"
@@ -94,6 +95,10 @@ func TestStarlark(t *testing.T) {
 		"mux": mux,
 	}
 	t.Log("running")
-	starlarkassert.RunTests(t, "testdata/*.star", globals, starlarkthread.AssertOption)
+	starlarkassert.RunTests(
+		t, "testdata/*.star", globals,
+		starlarkthread.AssertOption,
+		starlarkassert.WithLoad(starlib.StdLoad),
+	)
 	defer t.Log("CLOSING")
 }

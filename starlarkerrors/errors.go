@@ -39,11 +39,11 @@ func MakeError(thread *starlark.Thread, _ string, args starlark.Tuple, kwargs []
 	if !ok {
 		return nil, fmt.Errorf("internal builtin fail not found")
 	}
-	_, err := failFn.CallInternal(thread, args, kwargs)
-	if err == nil {
-		return nil, fmt.Errorf("fail failed to error")
+	if _, err := starlark.Call(thread, failFn, args, kwargs); err != nil {
+		// Error on purpose, capture error printing.
+		return Error{err: err}, nil
 	}
-	return Error{err: err}, nil
+	return nil, fmt.Errorf("fail failed to error")
 }
 
 func (e Error) Err() error            { return e.err }
