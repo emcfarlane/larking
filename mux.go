@@ -378,11 +378,10 @@ func (s *state) addConnHandler(
 	return nil
 }
 
-func (s *state) createConnHandler(
+func createConnHandler(
 	cc *grpc.ClientConn,
 	sd protoreflect.ServiceDescriptor,
 	md protoreflect.MethodDescriptor,
-	rule *annotations.HttpRule,
 ) *handler {
 
 	argsDesc := md.Input()
@@ -538,7 +537,7 @@ func (s *state) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor)
 				continue
 			}
 
-			hd := s.createConnHandler(cc, sd, md, rule)
+			hd := createConnHandler(cc, sd, md)
 
 			if err := s.appendHandler(rule, md, hd); err != nil {
 				return nil, err

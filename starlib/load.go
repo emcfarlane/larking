@@ -31,13 +31,8 @@ import (
 	"gocloud.dev/blob"
 )
 
-var (
-	stdOnce sync.Once
-	stdLib  map[string]starlark.StringDict
-)
-
-func stdOnceLoad(_ *starlark.Thread) error {
-	stdLib = make(map[string]starlark.StringDict)
+var stdLib = func() map[string]starlark.StringDict {
+	stdLib := make(map[string]starlark.StringDict)
 	modules := []*starlarkstruct.Module{
 		// Native modules
 		starlarkjson.Module,
@@ -64,16 +59,10 @@ func stdOnceLoad(_ *starlark.Thread) error {
 		dict[module.Name] = module
 		stdLib[module.Name+".star"] = dict
 	}
-	return nil
-}
+	return stdLib
+}()
 
-func StdLoad(thread *starlark.Thread, module string) (starlark.StringDict, error) {
-	var lderr error
-	if stdOnce.Do(func() {
-		lderr = stdOnceLoad(thread)
-	}); lderr != nil {
-		return nil, lderr
-	}
+func StdLoad(_ *starlark.Thread, module string) (starlark.StringDict, error) {
 	if e, ok := stdLib[module]; ok {
 		return e, nil
 	}
@@ -178,6 +167,10 @@ func (l *Loader) loadBucket(ctx context.Context, bktURL string) (*blob.Bucket, e
 	if err != nil {
 		return nil, err
 	}
+
+	if l.bkts == nil {
+		l.bkts = make(map[string]*blob.Bucket)
+	}
 	l.bkts[bktURL] = bkt
 	return bkt, nil
 }
@@ -197,6 +190,14 @@ func (l *Loader) Close() error {
 	return firstErr
 }
 
+func (l *Loader) LoadSource(ctx context.Context, bktURL string, key string) ([]byte, error) {
+	bkt, err := l.loadBucket(ctx, bktURL)
+	if err != nil {
+		return nil, err
+	}
+	return bkt.ReadAll(ctx, key)
+}
+
 func (l *Loader) load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
 	ctx := starlarkthread.Context(thread)
 
@@ -213,12 +214,7 @@ func (l *Loader) load(thread *starlark.Thread, module string) (starlark.StringDi
 		return nil, err
 	}
 
-	bkt, err := l.loadBucket(ctx, bktURL)
-	if err != nil {
-		return nil, err
-	}
-
-	src, err := bkt.ReadAll(ctx, key)
+	src, err := l.LoadSource(ctx, bktURL, key)
 	if err != nil {
 		return nil, err
 	}

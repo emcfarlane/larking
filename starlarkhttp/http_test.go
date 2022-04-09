@@ -24,7 +24,7 @@ func TestExecFile(t *testing.T) {
 
 	// Create a test http server.
 	ts := httptest.NewServer(mux)
-	defer ts.Close()
+	t.Cleanup(ts.Close)
 
 	globals := starlark.StringDict{
 		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),

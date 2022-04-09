@@ -412,7 +412,6 @@ func exec(ctx context.Context, opts *Options) (err error) {
 	if err != nil {
 		return err
 	}
-
 	mainFn, ok := module["main"]
 	if !ok {
 		return nil

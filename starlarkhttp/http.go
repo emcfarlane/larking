@@ -210,7 +210,7 @@ func NewClient(_ *starlark.Thread, name string, args starlark.Tuple, kwargs []st
 			args starlark.Tuple,
 			kwargs []starlark.Tuple,
 		) (starlark.Value, error) {
-			return fn.CallInternal(thread, args, kwargs)
+			return starlark.Call(thread, fn, args, kwargs)
 		},
 	}, nil
 }

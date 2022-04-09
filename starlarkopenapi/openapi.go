@@ -411,8 +411,8 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 				if !ok {
 					return nil, fmt.Errorf("unknown body arg: %T %v", arg, arg)
 				}
-				rsp, err := starlarkJSONEncode.CallInternal(
-					thread, starlark.Tuple{v}, nil,
+				rsp, err := starlark.Call(
+					thread, starlarkJSONEncode, starlark.Tuple{v}, nil,
 				)
 				if err != nil {
 					return nil, err
@@ -586,8 +586,8 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 		bodyStr := starlark.String(rspBody)
 
 		// Load schema
-		val, err := starlarkJSONDecode.CallInternal(
-			thread, starlark.Tuple{bodyStr}, nil,
+		val, err := starlark.Call(
+			thread, starlarkJSONDecode, starlark.Tuple{bodyStr}, nil,
 		)
 		if err != nil {
 			return nil, err

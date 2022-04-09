@@ -16,10 +16,12 @@ import (
 	_ "github.com/emcfarlane/larking/cmd/internal/bindings"
 	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/health"
+	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"
 	"github.com/emcfarlane/larking/worker"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
+	"go.starlark.net/starlark"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -39,8 +41,7 @@ var (
 	flagInsecure    = flag.Bool("insecure", false, "Insecure, disabled credentials.")
 	flagCreds       = flag.String("credentials", env("WORKER_CREDENTIALS", ""), "Runtime variable for credentials.")
 
-	// TODO: main
-	//flagMain        = flag.String("main", "", "Main thread for worker.")
+	flagDir = flag.String("dir", env("LARKING_DIR", "file://./?metadata=skip"), "Set the module loading directory")
 )
 
 type logStream struct {
@@ -52,7 +53,7 @@ func (s logStream) Context() context.Context {
 	return logr.NewContext(s.ServerStream.Context(), s.log)
 }
 
-func run(ctx context.Context) error {
+func run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -156,16 +157,48 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	//// TODO:
-	//for _, svc := range services {
-	//	cc, err := grpc.DialContext(ctx, svc, grpc.WithInsecure())
-	//	if err != nil {
-	//		return err
-	//	}
-	//	if err := mux.RegisterConn(ctx, cc); err != nil {
-	//		return err
-	//	}
-	//}
+	// Run script
+	switch flag.NArg() {
+	case 0:
+		// nothing
+	case 1:
+		name := flag.Arg(0)
+
+		src, err := loader.LoadSource(ctx, *flagDir, name)
+		if err != nil {
+			return err
+		}
+
+		globals := starlib.NewGlobals()
+		globals["mux"] = mux // add mux!
+		thread := &starlark.Thread{
+			Name: name, // TODO: name encoding...
+			Load: loader.Load,
+			Print: func(_ *starlark.Thread, msg string) {
+				log.Info(msg, "thread", name)
+			},
+		}
+		starlarkthread.SetContext(thread, ctx)
+		close := starlarkthread.WithResourceStore(thread)
+		defer func() {
+			if cerr := close(); err == nil {
+				err = cerr
+			}
+		}()
+
+		module, err := starlark.ExecFile(thread, name, src, globals)
+		if err != nil {
+			return err
+		}
+		if mainFn, ok := module["main"]; ok {
+			if _, err := starlark.Call(thread, mainFn, nil, nil); err != nil {
+				return err
+			}
+		}
+
+	default:
+		return fmt.Errorf("unexpected number of args")
+	}
 
 	go func() {
 		log.Info("listening", "address", l.Addr().String())

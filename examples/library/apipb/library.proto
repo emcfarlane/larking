@@ -1,0 +1,45 @@
+// https://cloud.google.com/apis/design/resource_names
+syntax = "proto3";
+
+package larking.examples.library;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/emcfarlane/larking/examples/library/apipb;apipb";
+
+service Library {
+  rpc GetBook(GetBookRequest) returns (Book) {
+    option (google.api.http) = {
+      get : "/v1/{name=shelves/*/books/*}"
+    };
+  };
+  rpc CreateBook(CreateBookRequest) returns (Book) {
+    option (google.api.http) = {
+      post : "/v1/{parent=shelves/*}/books"
+      body : "book"
+    };
+  };
+}
+
+message Book {
+  // Resource name of the book. It must have the format of "shelves/*/books/*".
+  // For example: "shelves/shelf1/books/book2".
+  string name = 1;
+
+  string title = 2;
+  string author = 3;
+  string cover_image = 4;
+}
+
+message GetBookRequest {
+  // Resource name of a book. For example: "shelves/shelf1/books/book2".
+  string name = 1;
+}
+
+message CreateBookRequest {
+  // Resource name of the parent resource where to create the book.
+  // For example: "shelves/shelf1".
+  string parent = 1;
+  // The Book resource to be created. Client must not set the `Book.name` field.
+  Book book = 2;
+}
