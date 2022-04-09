@@ -85,11 +85,13 @@ def test_protos(t):
     # Messages can be assigned Messages
     nested = test.Message(body = "nested")
     m.nested = nested
+    print("here")
 
     # Maps shallow copy Dicts on set
     m.maps = {
         "hello": struct(body = "world!", type = "GREETING"),
     }
+    print("here")
     print(m)
 
     # Oneofs
@@ -112,14 +114,13 @@ def test_protos(t):
     # print(proto.marshal_json(m))
     # print(proto.marshal_text(m))
 
-
-def test_load(t):
-    proto.load(library_bin)
-
-    apipb = proto.file("larking.examples.apipb")
-    book = apipb.Book(
-        name = req.name,
-        title = "A book appears!",
-        author = "starlark",
-    )
-    print("created book: %s" % book)
+##def test_load(t):
+##    proto.load(library_bin)
+##
+##    apipb = proto.file("larking.examples.apipb")
+##    book = apipb.Book(
+##        name = req.name,
+##        title = "A book appears!",
+##        author = "starlark",
+##    )
+##    print("created book: %s" % book)

@@ -7,12 +7,9 @@ import (
 	"github.com/emcfarlane/larking/examples/library/apipb"
 	"github.com/emcfarlane/larking/starlib"
 	"go.starlark.net/starlark"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
-	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-func TestDynamicSet(t *testing.T) {
+/*func TestDynamicSet(t *testing.T) {
 	d, err := protoregistry.GlobalFiles.FindDescriptorByName("larking.examples.library.Book")
 	if err != nil {
 		t.Fatal(err)
@@ -32,6 +29,26 @@ func TestDynamicSet(t *testing.T) {
 
 	t.Log("x", x)
 }
+
+func TestDynamicMessageType(t *testing.T) {
+	mt, err := protoregistry.GlobalTypes.FindMessageByName("larking.examples.library.Book")
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := mt.New()
+
+	req := &apipb.CreateBookRequest{
+		Parent: "/shelves/one",
+	}
+	x := req.ProtoReflect()
+	rd := x.Descriptor()
+	fd := rd.Fields().ByName("book")
+
+	v := protoreflect.ValueOf(msg)
+	x.Set(fd, v)
+
+	t.Log("x", x)
+}*/
 
 func TestScripts(t *testing.T) {
 	s := &Server{}
