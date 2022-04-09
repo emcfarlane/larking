@@ -16,7 +16,19 @@ Reflective gRPC transcoding handler. Get started: [larking.io/docs](https://lark
 ## Install
 
 ```
-go install github.com/emcfarlane/larking
+go get github.com/emcfarlane/larking@latest
+```
+
+### Install the REPL
+
+```
+go install github.com/emcfarlane/larking/cmd/lark@latest
+```
+
+### Install the worker
+
+```
+go install github.com/emcfarlane/larking/cmd/larking@latest
 ```
 
 ## Developing
@@ -29,15 +41,12 @@ Go install each protoc generation bin.
 Regenerate protoc buffers:
 
 ```
-larking$ protoc -I=. --go_out=:. --go-grpc_out=:. grpc/reflection/v1alpha/*.proto
-
 protoc --go_out=paths=source_relative:. --go-grpc_out=paths=source_relative:. testpb/test.proto
-
-bazel run //:gazelle -- update-repos -from_file=go.mod
 ```
 
 ### Protoc
 
+Must have googleapis protos avaliable.
 Just link API to `/usr/local/include/google` so protoc can find it.
 ```
 ln -s ~/src/github.com/googleapis/googleapis/google/api/ /usr/local/include/google/

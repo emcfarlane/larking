@@ -9,47 +9,6 @@ import (
 	"go.starlark.net/starlark"
 )
 
-/*func TestDynamicSet(t *testing.T) {
-	d, err := protoregistry.GlobalFiles.FindDescriptorByName("larking.examples.library.Book")
-	if err != nil {
-		t.Fatal(err)
-	}
-	md := d.(protoreflect.MessageDescriptor)
-	msg := dynamicpb.NewMessage(md)
-
-	req := &apipb.CreateBookRequest{
-		Parent: "/shelves/one",
-	}
-	x := req.ProtoReflect()
-	rd := x.Descriptor()
-	fd := rd.Fields().ByName("book")
-
-	v := protoreflect.ValueOf(msg)
-	x.Set(fd, v)
-
-	t.Log("x", x)
-}
-
-func TestDynamicMessageType(t *testing.T) {
-	mt, err := protoregistry.GlobalTypes.FindMessageByName("larking.examples.library.Book")
-	if err != nil {
-		t.Fatal(err)
-	}
-	msg := mt.New()
-
-	req := &apipb.CreateBookRequest{
-		Parent: "/shelves/one",
-	}
-	x := req.ProtoReflect()
-	rd := x.Descriptor()
-	fd := rd.Fields().ByName("book")
-
-	v := protoreflect.ValueOf(msg)
-	x.Set(fd, v)
-
-	t.Log("x", x)
-}*/
-
 func TestScripts(t *testing.T) {
 	s := &Server{}
 
