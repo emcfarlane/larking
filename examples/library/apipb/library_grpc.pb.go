@@ -32,7 +32,7 @@ func NewLibraryClient(cc grpc.ClientConnInterface) LibraryClient {
 
 func (c *libraryClient) GetBook(ctx context.Context, in *GetBookRequest, opts ...grpc.CallOption) (*Book, error) {
 	out := new(Book)
-	err := c.cc.Invoke(ctx, "/larking.examples.go.library.api.Library/GetBook", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/larking.examples.library.Library/GetBook", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func (c *libraryClient) GetBook(ctx context.Context, in *GetBookRequest, opts ..
 
 func (c *libraryClient) CreateBook(ctx context.Context, in *CreateBookRequest, opts ...grpc.CallOption) (*Book, error) {
 	out := new(Book)
-	err := c.cc.Invoke(ctx, "/larking.examples.go.library.api.Library/CreateBook", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/larking.examples.library.Library/CreateBook", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func _Library_GetBook_Handler(srv interface{}, ctx context.Context, dec func(int
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/larking.examples.go.library.api.Library/GetBook",
+		FullMethod: "/larking.examples.library.Library/GetBook",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(LibraryServer).GetBook(ctx, req.(*GetBookRequest))
@@ -108,7 +108,7 @@ func _Library_CreateBook_Handler(srv interface{}, ctx context.Context, dec func(
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/larking.examples.go.library.api.Library/CreateBook",
+		FullMethod: "/larking.examples.library.Library/CreateBook",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(LibraryServer).CreateBook(ctx, req.(*CreateBookRequest))
@@ -120,7 +120,7 @@ func _Library_CreateBook_Handler(srv interface{}, ctx context.Context, dec func(
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Library_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "larking.examples.go.library.api.Library",
+	ServiceName: "larking.examples.library.Library",
 	HandlerType: (*LibraryServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

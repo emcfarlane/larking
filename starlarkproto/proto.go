@@ -42,7 +42,8 @@ func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
 		Name: "proto",
 		Members: starlark.StringDict{
-			"file":           starext.MakeBuiltin("proto.file", p.File),
+			"file": starext.MakeBuiltin("proto.file", p.File),
+			//"load":           starext.MakeBuiltin("proto.load", p.Load),
 			"new":            starext.MakeBuiltin("proto.new", p.New),
 			"marshal":        starext.MakeBuiltin("proto.marshal", p.Marshal),
 			"unmarshal":      starext.MakeBuiltin("proto.unmarshal", p.Unmarshal),
@@ -75,6 +76,27 @@ func (p *Proto) File(thread *starlark.Thread, fnname string, args starlark.Tuple
 	}
 	return &Descriptor{desc: fileDesc}, nil
 }
+
+//func (p *Proto) Load(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+//	var data string
+//	if err := starlark.UnpackPositionalArgs(fnname, args, kwargs, 1, &data); err != nil {
+//		return nil, err
+//	}
+//
+//	resolver := GetProtodescResolver(thread)
+//
+//	var file descriptorpb.FieldDescriptorProto
+//	if err := proto.Unmarshal([]byte(data), &file); err != nil {
+//		return nil, err
+//	}
+//
+//	fileDesc, err :=
+//	//fileDesc, err := .FindFileByPath(name)
+//	//if err != nil {
+//	//	return nil, err
+//	//}
+//	//return &Descriptor{desc: fileDesc}, nil
+//}
 
 func (p *Proto) New(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var name string
@@ -809,7 +831,8 @@ func (m *Message) SetField(name string, val starlark.Value) error {
 		return nil
 	}
 
-	v := m.msg.NewField(fd)
+	//v := m.msg.NewField(fd)
+	var v protoreflect.Value
 	if err := starToProtos(val, fd, &v); err != nil {
 		return err
 	}

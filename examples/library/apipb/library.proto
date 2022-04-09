@@ -1,11 +1,11 @@
 // https://cloud.google.com/apis/design/resource_names
 syntax = "proto3";
 
-package larking.examples.go.library.api;
+package larking.examples.library;
 
 import "google/api/annotations.proto";
 
-option go_package = "github.com/emcfarlane/larking/examples/go/library/apipb;apipb";
+option go_package = "github.com/emcfarlane/larking/examples/library/apipb;apipb";
 
 service Library {
   rpc GetBook(GetBookRequest) returns (Book) {

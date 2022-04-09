@@ -7,7 +7,7 @@ import (
 	"net"
 
 	"github.com/emcfarlane/larking"
-	"github.com/emcfarlane/larking/examples/go/library/apipb"
+	"github.com/emcfarlane/larking/examples/library/apipb"
 )
 
 // Server implement LibraryServer.

@@ -111,3 +111,15 @@ def test_protos(t):
 
     # print(proto.marshal_json(m))
     # print(proto.marshal_text(m))
+
+
+def test_load(t):
+    proto.load(library_bin)
+
+    apipb = proto.file("larking.examples.apipb")
+    book = apipb.Book(
+        name = req.name,
+        title = "A book appears!",
+        author = "starlark",
+    )
+    print("created book: %s" % book)
