@@ -12,6 +12,7 @@ import (
 
 func init() {
 	resolve.AllowSet = true
+	resolve.AllowGlobalReassign = true
 	resolve.AllowRecursion = true
 
 	// TODO: requirement for REPL.

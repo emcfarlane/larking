@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"log"
@@ -8,12 +9,15 @@ import (
 
 	"github.com/emcfarlane/larking"
 	"github.com/emcfarlane/larking/examples/library/apipb"
+	_ "modernc.org/sqlite"
 )
 
 // Server implement LibraryServer.
 // TODO: add all implemented methods to this struct.
 type Server struct {
 	apipb.UnimplementedLibraryServer
+
+	db *sql.DB
 }
 
 var (
@@ -22,7 +26,17 @@ var (
 
 func run() error {
 	flag.Parse()
-	s := &Server{}
+
+	db, err := sql.Open("sqlite", "sqlite:file::memory:?cache=shared")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if err := createTables(db); err != nil {
+		return err
+	}
+
+	s := &Server{db: db}
 
 	mux, err := larking.NewMux()
 	if err != nil {

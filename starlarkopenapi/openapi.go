@@ -51,26 +51,20 @@ type Client struct {
 	// service encoding...
 	name     string
 	variable *runtimevar.Variable
-	//client   *http.Client
-	do func(
-		thread *starlark.Thread,
-		fnname string,
-		req *starlarkhttp.Request,
-	) (
-		rsp *starlarkhttp.Response,
-		err error,
-	)
+	client   *starlarkhttp.Client
 
 	val  []byte // snapshot.Value
 	doc  *spec.Swagger
 	svcs map[string]*Service //starlark.Value
 }
 
+var defaultClient = starlarkhttp.NewClient(http.DefaultClient)
+
 func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		addr   string
 		name   string
-		client *starlarkhttp.Client
+		client = defaultClient
 	)
 	if err := starlark.UnpackArgs(fnname, args, kwargs, "name", &name, "addr?", &addr, "client?", &client); err != nil {
 		return nil, err
@@ -86,11 +80,7 @@ func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []
 	c := &Client{
 		name:     name,
 		variable: variable,
-	}
-	if client != nil {
-		c.do = client.Do
-	} else {
-		c.do = starlarkhttp.Do
+		client:   client,
 	}
 	if _, err := c.load(ctx); err != nil {
 		variable.Close() //nolint
@@ -117,6 +107,14 @@ func toSnakeCase(s string) string {
 	s = strcase.ToSnake(s)
 	s = strings.Trim(s, "_")
 	return s
+}
+
+func (c *Client) do(
+	thread *starlark.Thread,
+	fnname string,
+	req *starlarkhttp.Request,
+) (*starlarkhttp.Response, error) {
+	return c.client.Do(thread, fnname, req)
 }
 
 func (c *Client) load(ctx context.Context) (*spec.Swagger, error) {

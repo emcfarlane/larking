@@ -30,8 +30,8 @@ func NewModule() *starlarkstruct.Module {
 			"get":            starext.MakeBuiltin("http.get", defaultClient.get),
 			"head":           starext.MakeBuiltin("http.head", defaultClient.head),
 			"post":           starext.MakeBuiltin("http.post", defaultClient.post),
-			"new_client":     starext.MakeBuiltin("http.new_client", NewClient),
-			"new_request":    starext.MakeBuiltin("http.new_request", NewRequest),
+			"client":         starext.MakeBuiltin("http.new_client", MakeClient),
+			"request":        starext.MakeBuiltin("http.new_request", MakeRequest),
 
 			// net/http errors
 			"err_not_supported":         starlarkerrors.NewError(http.ErrNotSupported),
@@ -59,7 +59,7 @@ type Client struct {
 	frozen bool
 }
 
-func MakeClient(client *http.Client) *Client {
+func NewClient(client *http.Client) *Client {
 	do := func(
 		thread *starlark.Thread,
 		fnname string,
@@ -119,7 +119,7 @@ func (v *Client) AttrNames() []string {
 	return names
 }
 
-var defaultClient = MakeClient(http.DefaultClient)
+var defaultClient = NewClient(http.DefaultClient)
 
 func (v *Client) Do(thread *starlark.Thread, fnname string, req *Request) (*Response, error) {
 	x, err := v.do(thread, fnname, starlark.Tuple{req}, nil)
@@ -197,7 +197,7 @@ func (v *Client) post(thread *starlark.Thread, fnname string, args starlark.Tupl
 	return v.Do(thread, fnname, r)
 }
 
-func NewClient(_ *starlark.Thread, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func MakeClient(_ *starlark.Thread, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var fn starlark.Callable
 	if err := starlark.UnpackPositionalArgs(name, args, kwargs, 1, &fn); err != nil {
 		return nil, err
@@ -235,7 +235,7 @@ func makeReader(v starlark.Value) (io.Reader, error) {
 	}
 }
 
-func NewRequest(thread *starlark.Thread, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func MakeRequest(thread *starlark.Thread, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		method string
 		urlstr string
@@ -306,7 +306,7 @@ var requestAttrs = map[string]requestAttr{
 				v.URL = u
 				return nil
 			default:
-				return fmt.Errorf("invalid type")
+				return fmt.Errorf("expected string")
 			}
 		},
 	},
@@ -317,7 +317,7 @@ var requestAttrs = map[string]requestAttr{
 		set: func(v *Request, val starlark.Value) error {
 			s, ok := starlark.AsString(val)
 			if !ok {
-				return fmt.Errorf("invalid type")
+				return fmt.Errorf("expected string")
 			}
 			v.Proto = s
 			return nil
@@ -362,7 +362,7 @@ var requestAttrs = map[string]requestAttr{
 				v.Header = t.header
 				return nil
 			default:
-				return fmt.Errorf("invalid type")
+				return fmt.Errorf("expected http.header")
 			}
 		},
 	},
@@ -376,7 +376,7 @@ var requestAttrs = map[string]requestAttr{
 				v.Body = t
 				return nil
 			default:
-				return fmt.Errorf("invalid type")
+				return fmt.Errorf("expected io.read_closer")
 			}
 		},
 	},

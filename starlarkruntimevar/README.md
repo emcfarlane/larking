@@ -2,9 +2,9 @@
 
 `open(url)` opens a runtime variable at the path returning a `variable`.
 
-| Parameter | Description |
-| ------------- | ------------- |
-| url | string <br /> URL of runetimevar. |
+| Parameter | Type | Description |
+| --------- | ---- | ----------- |
+| url | string | URL of runetimevar. |
 
 ### variable·latest
 

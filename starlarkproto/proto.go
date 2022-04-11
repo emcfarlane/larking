@@ -389,7 +389,6 @@ func (d *Descriptor) AttrNames() []string {
 type Message struct {
 	msg    protoreflect.Message
 	frozen *bool
-	//refs   map[protoreflect.Name]starlark.Value // mutable live references
 }
 
 // ProtoReflect implements proto.Message
