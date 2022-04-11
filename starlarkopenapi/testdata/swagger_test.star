@@ -1,4 +1,5 @@
-#load("blob.star", "blob")
+load("blob.star", "blob")
+load("openapi.star", "openapi")
 
 api = openapi.open(spec_var, client = client)
 

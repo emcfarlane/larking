@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package starlarkopenapi
+package starlarkopenapi_test
 
 import (
 	"bufio"
@@ -18,12 +18,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/emcfarlane/larking/starlarkblob"
 	"github.com/emcfarlane/larking/starlarkhttp"
-	"github.com/emcfarlane/larking/starlarkthread"
-	"github.com/emcfarlane/starlarkassert"
+	"github.com/emcfarlane/larking/starlib"
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkstruct"
 	_ "gocloud.dev/blob/fileblob"
 	_ "gocloud.dev/runtimevar/filevar"
 )
@@ -93,9 +90,6 @@ func wrapClient(t *testing.T, name string, client *http.Client) {
 
 func TestExecFile(t *testing.T) {
 	mux := http.NewServeMux()
-	//mux.HandleFunc("/hello", func(w http.ResponseWriter, _ *http.Request) {
-	//	fmt.Fprintln(w, "world")
-	//})
 
 	// Create a test http server.
 	ts := httptest.NewServer(mux)
@@ -110,19 +104,12 @@ func TestExecFile(t *testing.T) {
 	client := ts.Client()
 	wrapClient(t, filepath.Join("testdata", t.Name()), client)
 
-	globals := starlark.StringDict{
-		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
+	starlib.RunTests(t, "testdata/*_test.star", starlark.StringDict{
 		"addr":   starlark.String(ts.URL),
-		"client": starlarkhttp.MakeClient(client),
-		//"http":   NewModule(),
-		"openapi": NewModule(),
-		//"openapi_path": starlark.String(
-		//	"file://" + filepath.Join(wd, "testdata/swagger.json"),
-		//),
+		"client": starlarkhttp.NewClient(client),
 		"spec_var": starlark.String(
 			"file://" + filepath.Join(wd, "testdata/swagger.json"),
 		),
-		"blob": starlarkblob.NewModule(),
-	}
-	starlarkassert.RunTests(t, "testdata/*.star", globals, starlarkthread.AssertOption)
+	})
+
 }
