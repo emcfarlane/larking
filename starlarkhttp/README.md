@@ -6,48 +6,55 @@
 
 `c.do(req)` sends the HTTP request and returns an HTTP response, as per the client.
 
-| Parameter | Description |
-| ------------- | ------------- |
-| req | http.request <br /> Request to send. |
+| Parameter | Type | Description |
+| --------- | ---- | ----------- |
+| req | http.request | Request to send. |
 
 ## get
 
 `get(url)` sends a GET requests and returns an HTTP response with the default client.
 
-| Parameter | Description |
-| ------------- | ------------- |
-| url | string <br /> URL of request. |
+| Parameter | Type | Description |
+| --------- | ---- | ----------- |
+| url | string | URL of request. |
 
 ## head
 
 `head(url)` sends a HEAD request to the URL and returns an HTTP response.
 
-| Parameter | Description |
-| ------------- | ------------- |
-| url | string <br /> URL of request. |
+| Parameter | Type | Description |
+| --------- | ---- | ----------- |
+| url | string | URL of request. |
 
 ## post
 
 `post(url, body)` sends a POST request to the URL with the provided body and returns an HTTP response.
 
-| Parameter | Description |
-| ------------- | ------------- |
-| url | string <br /> URL of request. |
-| body | string, bytes, io.reader <br /> Body of request. |
+| Parameter | Type | Description |
+| --------- | ---- | ----------- |
+| url | string | URL of request. |
+| body | string, bytes, io.reader | Body of request. |
 
-## new_client
+## client
 
-`new_client()` TODO
+`client(do)` creates a new client.
+Clients are responsible for taking a request and returning a response.
+Custom clients could be used to change behaviour for every request. 
+They should usually wrap a `go` client like `http.default_client` to continue the request.
 
-## new_request
+| Parameter | Type | Description |
+| --------- | ---- | ----------- |
+| do | function | Function that accepts a `request` and returns a `response`. |
 
-`new_request(method, url, body)`
+## request
 
-| Parameter | Description |
-| ------------- | ------------- |
-| method | string <br /> HTTP method of request. |
-| url | string <br /> URL of request. |
-| body | string, bytes, io.reader <br /> Body of request. |
+`request(method, url, body)` creates a new request.
+
+| Parameter | Type | Description |
+| --------- | ---- | ----------- |
+| method | string | HTTP method of request. |
+| url | string | URL of request. |
+| body | string, bytes, io.reader | Body of request. |
 
 ## errors
 

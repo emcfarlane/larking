@@ -1,18 +1,33 @@
+Module defines these types:
+- descriptor
+- message
+- enum
+- list
+- map
+
 ## file
 
 `file(name)` returns the descriptor of the proto file.
 
-| Parameter | Description |
-| ------------- | ------------- |
-| name | string <br /> Name of the proto file. |
+| Parameter | Type | Description |
+| --------- | ---- | ----------- |
+| name | string | Name of the proto file. |
 
-## new_message
+## new
 
-`new_message(name)` returns a new zero initialised protobuffer of the typed named.
+`new(name)` returns a protobuf descriptor for the given type.
+
+| Parameter | Type | Description |
+| --------- | ---- | ----------- |
+| name | string | Descriptor fullname of proto type. |
 
 ## marshal
 
 `marshal(msg)` message as a binary encoded string.
+
+| Parameter | Type | Description |
+| --------- | ---- | ----------- |
+| msg | message | Descriptor fullname of proto type. |
 
 ## unmarshal
 
@@ -33,3 +48,7 @@
 ## unmarshal_text
 
 `unmarshal_text(b, msg)` text into the msg.
+
+### message·field
+
+`m.<field>` returns the value of the field named by the proto name.
