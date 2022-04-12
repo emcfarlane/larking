@@ -31,9 +31,32 @@ go install github.com/emcfarlane/larking/cmd/lark@latest
 go install github.com/emcfarlane/larking/cmd/larking@latest
 ```
 
-## Developing
+## Quickstart
 
-### Debugging
+Compile protobuffers to Go:
+```
+protoc --go_out=paths=source_relative:. --go-grpc_out=paths=source_relative:. apipb/*.proto
+```
+
+Create a `larking.Mux`:
+```
+mux, _ := larking.NewMux()
+```
+
+Register services:
+```
+mux.RegisterService(&apipb.MyService_ServiceDesc, s) // S is your implementation
+```
+
+Create a server and serve gRPC and REST:
+```
+svr, _ := larking.NewServer(mux, larking.InsecureServerOption())
+l, _ := net.Listen("tcp", fmt.Sprintf(":%s", *flagPort))
+log.Printf("listening on %s", l.Addr().String())
+svr.Serve(l)
+```
+
+## Debugging
 
 Checkout [protobuf](https://github.com/golang/protobuf) at the latest v2 relase.
 Go install each protoc generation bin.
