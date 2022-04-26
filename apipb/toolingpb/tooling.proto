@@ -1,0 +1,80 @@
+// Copyright 2022 Edward McFarlane. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+syntax = "proto3";
+
+package larking.api.tooling;
+
+import "google/api/annotations.proto";
+import "google/rpc/status.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/emcfarlane/larking/apipb/toolingpb;toolingpb";
+
+service Tooling {
+  rpc GetResource(GetResourceRequest) returns (Resource) {
+    option (google.api.http) = {
+      get : "/v1/tooling/{name=**}"
+    };
+  }
+
+  rpc UpdateResource(UpdateResourceRequest) returns (Resource) {
+    option (google.api.http) = {
+      post : "/v1/tooling/{name=**}"
+      body : "*"
+    };
+  }
+}
+
+message Resource {
+  // The resource name.
+  string name = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp updated_at = 3;
+
+  oneof data {
+    string text = 1;
+    int64 int = 2;
+    float float = 3;
+    bytes bytes = 4;
+
+    Section section = 5;
+    Table table = 6;
+    Image image = 7;
+  }
+}
+
+message Section {
+  string title = 1;
+  string sub_title = 2;
+  Resource resource = 3;
+}
+
+// PageInfo provides pagination support.
+// See graphql relay for details.
+message PageInfo {
+  bool has_next_page = 1;
+  bool has_prev_page = 2;
+  bytes start_cursor = 2;
+  bytes end_cursor = 2;
+}
+
+message TableHead { repeated Resource head = 1; }
+message TableRow { repeated Resource data = 1; }
+
+message Table {
+
+  TableHead head = 1;
+  repeated TableRow rows = 2;
+
+  // pagination
+  PageInfo page_info = 3;
+}
+
+message Column { repeated Resource column = 1; }
+
+message Image {
+  string source = 1;
+  string alt = 2;
+}
