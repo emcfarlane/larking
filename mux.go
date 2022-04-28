@@ -597,14 +597,13 @@ func (s *streamHTTP) SendHeader(md metadata.MD) error {
 	if s.sentHeader {
 		return nil // already sent?
 	}
-	setOutgoingHeader(s.w.Header(), s.header, s.trailer)
+	setOutgoingHeader(s.w.Header(), s.header, md) // TODO: s.trailer
 	s.w.WriteHeader(http.StatusOK)
 	s.sentHeader = true
 	return nil
 }
 
 func (s *streamHTTP) SetTrailer(md metadata.MD) {
-	s.sentHeader = true
 	s.trailer = metadata.Join(s.trailer, md)
 }
 
@@ -626,16 +625,13 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 
 	setOutgoingHeader(s.w.Header(), s.header, s.trailer)
 
-	var resp io.Writer
+	var resp io.Writer = s.w
 	switch acceptEncoding {
 	case "gzip":
 		s.w.Header().Set("Content-Encoding", "gzip")
 		gRsp := gzip.NewWriter(s.w)
 		defer gRsp.Close()
 		resp = gRsp
-
-	default:
-		resp = s.w
 	}
 
 	cur := reply.ProtoReflect()
@@ -790,7 +786,6 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	//if err != nil {
 	//	return err
 	//}
-
 	s := m.loadState()
 	isWebsocket := isWebsocketRequest(r)
 
@@ -850,7 +845,14 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(r.URL.Path, "/") {
 		r.URL.Path = "/" + r.URL.Path
 	}
-	if err := m.serveHTTP(w, r); err != nil {
-		encError(w, err)
+	if strings.HasPrefix(r.Header.Get("Content-Type"), grpcWeb) {
+		if err := m.serveWeb(w, r); err != nil {
+			encError(w, err) // TODO: webify.
+		}
+		return
+	} else {
+		if err := m.serveHTTP(w, r); err != nil {
+			encError(w, err)
+		}
 	}
 }

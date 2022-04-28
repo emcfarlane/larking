@@ -309,7 +309,7 @@ func (s *StarlarkService) Attr(name string) (starlark.Value, error) {
 	m := "/" + s.name + "/" + name
 	hd, err := s.mux.loadState().pickMethodHandler(m)
 	if err != nil {
-		return nil, nil // swallow error.
+		return nil, nil // swallow error, reports missing attr.
 	}
 
 	if hd.descriptor.IsStreamingClient() || hd.descriptor.IsStreamingServer() {
