@@ -2,6 +2,7 @@ package larking
 
 // Support for gRPC-web
 // https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-WEB.md
+// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
 
 import (
 	"bytes"
@@ -12,6 +13,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -105,11 +107,13 @@ func (s *streamWeb) SendMsg(v interface{}) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(resp, bytes.NewReader(b)); err != nil {
+	head := []byte{0, 0, 0, 0, 0}
+	binary.BigEndian.PutUint32(head[1:5], uint32(len(b)))
+	if _, err := resp.Write(head); err != nil {
 		return err
 	}
-	if fRsp, ok := s.w.(http.Flusher); ok {
-		fRsp.Flush()
+	if _, err := io.Copy(resp, bytes.NewReader(b)); err != nil {
+		return err
 	}
 	return nil
 
@@ -129,6 +133,16 @@ func (s *streamWeb) RecvMsg(m interface{}) error {
 	if err != nil {
 		return err
 	}
+	if len(b) < 5 {
+		return fmt.Errorf("zero read")
+	}
+	b = b[1:] // TODO: flags?
+	x := binary.BigEndian.Uint32(b)
+	b = b[4:]
+
+	if int(x) > len(b) {
+		return fmt.Errorf("short read")
+	}
 
 	switch s.enc {
 	case "proto":
@@ -145,11 +159,16 @@ func (s *streamWeb) RecvMsg(m interface{}) error {
 	return nil
 }
 
-func (s *streamWeb) encodeTrailer(w io.Writer) error {
-	hd := make(http.Header, len(s.trailer))
+// headers must be lowercase encoded:
+// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-WEB.md#protocol-differences-vs-grpc-over-http2
+func (s *streamWeb) encodeTrailer(w io.Writer, err error) error {
+	hd := make(http.Header, len(s.trailer)+1)
 	for key, val := range s.trailer {
 		hd[key] = val
 	}
+	grpcStatus := status.Code(err)
+	hd["grpc-status"] = []string{strconv.Itoa(int(grpcStatus))}
+
 	var buf bytes.Buffer
 	if err := hd.Write(&buf); err != nil {
 		return err
@@ -194,10 +213,9 @@ func (m *Mux) serveWeb(w http.ResponseWriter, r *http.Request) (err error) {
 		enc: enc,
 	}
 	defer func() {
-		if err == nil {
-			err = stream.encodeTrailer(w)
+		if serr := stream.encodeTrailer(w, err); serr != nil {
+			fmt.Println("stream failure", serr)
 		}
 	}()
-
 	return hd.handler(&m.opts, stream)
 }
