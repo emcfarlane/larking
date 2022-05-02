@@ -6,25 +6,19 @@ package larking
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
-	"strconv"
+	"net/http/httputil"
 	"strings"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 )
 
 const (
+	grpcBase    = "application/grpc"
 	grpcWeb     = "application/grpc-web"
 	grpcWebText = "application/grpc-web-text"
 )
@@ -43,134 +37,87 @@ func isWebRequest(r *http.Request) (typ string, enc string, ok bool) {
 	return typ, enc, ok
 }
 
-type streamWeb struct {
-	ctx context.Context
+type webWriter struct {
 	w   http.ResponseWriter
-	r   *http.Request
+	typ string // grpcWEB || grpcWebText
+	enc string // proto || json || ...
 
-	typ   string // grpcWEB || grpcWebText
-	enc   string // proto || json || ...
-	recvN int
-	sendN int
+	wroteHeader bool
+	seenHeaders map[string]bool
 
-	sentHeader bool
-	header     metadata.MD
-	trailer    metadata.MD
+	wroteResp bool
+	resp      io.Writer
 }
 
-func (s *streamWeb) SetHeader(md metadata.MD) error {
-	if !s.sentHeader {
-		s.header = metadata.Join(s.header, md)
-	}
-	return nil
-
-}
-func (s *streamWeb) SendHeader(md metadata.MD) error {
-	if s.sentHeader {
-		return nil // already sent?
-	}
-	setOutgoingHeader(s.w.Header(), s.header, md)
-	s.w.WriteHeader(http.StatusOK)
-	s.sentHeader = true
-	return nil
-}
-
-func (s *streamWeb) SetTrailer(md metadata.MD) {
-	s.trailer = metadata.Join(s.trailer, md)
-}
-
-func (s *streamWeb) Context() context.Context {
-	sts := &serverTransportStream{s, s.r.URL.Path}
-	return grpc.NewContextWithServerTransportStream(s.ctx, sts)
-}
-
-func (s *streamWeb) SendMsg(v interface{}) error {
-	s.sendN += 1
-	reply := v.(proto.Message)
-
-	var resp io.Writer = s.w
-	if s.typ == grpcWebText {
+func newWebWriter(w http.ResponseWriter, typ, enc string) *webWriter {
+	var resp io.Writer = w
+	if typ == grpcWebText {
 		resp = base64.NewEncoder(base64.StdEncoding, resp)
+
 	}
 
-	var encFn func(proto.Message) ([]byte, error)
-	switch s.enc {
-	case "proto":
-		encFn = proto.Marshal
-	case "json":
-		encFn = protojson.Marshal
-	default:
-		return fmt.Errorf("unsupported encoding: %s", s.enc)
+	return &webWriter{
+		w:   w,
+		typ: typ,
+		enc: enc,
+		//header: make(http.Header),
+		//headerKeys: make(map[string]bool),
+		resp: resp,
 	}
-
-	b, err := encFn(reply)
-	if err != nil {
-		return err
-	}
-	head := []byte{0, 0, 0, 0, 0}
-	binary.BigEndian.PutUint32(head[1:5], uint32(len(b)))
-	if _, err := resp.Write(head); err != nil {
-		return err
-	}
-	if _, err := io.Copy(resp, bytes.NewReader(b)); err != nil {
-		return err
-	}
-	return nil
-
 }
 
-func (s *streamWeb) RecvMsg(m interface{}) error {
-	s.recvN += 1
-	args := m.(proto.Message)
+func (w *webWriter) seeHeaders() {
+	hdr := w.Header()
+	hdr.Set("Content-Type", w.typ+"+"+w.enc) // override content-type
 
-	// TODO: compression?
-	var body io.Reader = s.r.Body // body close handled by serveWeb.
-	if s.typ == grpcWebText {
-		body = base64.NewDecoder(base64.StdEncoding, body)
-	}
-
-	b, err := ioutil.ReadAll(io.LimitReader(body, 1024*1024*2))
-	if err != nil {
-		return err
-	}
-	if len(b) < 5 {
-		return fmt.Errorf("zero read")
-	}
-	b = b[1:] // TODO: flags?
-	x := binary.BigEndian.Uint32(b)
-	b = b[4:]
-
-	if int(x) > len(b) {
-		return fmt.Errorf("short read")
-	}
-
-	switch s.enc {
-	case "proto":
-		if err := proto.Unmarshal(b, args); err != nil {
-			return err
+	keys := make(map[string]bool, len(hdr))
+	for k := range hdr {
+		if strings.HasPrefix(k, http.TrailerPrefix) {
+			continue
 		}
-	case "json":
-		if err := protojson.Unmarshal(b, args); err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("unsupported encoding: %s", s.enc)
+		keys[k] = true
 	}
-	return nil
+	w.seenHeaders = keys
+	w.wroteHeader = true
 }
 
-// headers must be lowercase encoded:
-// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-WEB.md#protocol-differences-vs-grpc-over-http2
-func (s *streamWeb) encodeTrailer(w io.Writer, err error) error {
-	hd := make(http.Header, len(s.trailer)+1)
-	for key, val := range s.trailer {
-		hd[key] = val
+func (w *webWriter) Write(b []byte) (int, error) {
+	if !w.wroteHeader {
+		w.seeHeaders()
 	}
-	grpcStatus := status.Code(err)
-	hd["grpc-status"] = []string{strconv.Itoa(int(grpcStatus))}
+	return w.resp.Write(b)
+}
+
+func (w *webWriter) Header() http.Header { return w.w.Header() }
+
+func (w *webWriter) WriteHeader(code int) {
+	w.seeHeaders()
+	w.w.WriteHeader(code)
+}
+
+func (w *webWriter) Flush() {
+	if w.wroteHeader || w.wroteResp {
+		if f, ok := w.w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
+}
+
+func (w *webWriter) writeTrailer() error {
+	hdr := w.Header()
+
+	tr := make(http.Header, len(hdr)-len(w.seenHeaders)+1)
+	for key, val := range hdr {
+		if w.seenHeaders[key] {
+			continue
+		}
+		key = strings.TrimPrefix(key, http.TrailerPrefix)
+		// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-WEB.md#protocol-differences-vs-grpc-over-http2
+		tr[strings.ToLower(key)] = val
+	}
 
 	var buf bytes.Buffer
-	if err := hd.Write(&buf); err != nil {
+	if err := tr.Write(&buf); err != nil {
 		return err
 	}
 
@@ -185,37 +132,53 @@ func (s *streamWeb) encodeTrailer(w io.Writer, err error) error {
 	return nil
 }
 
-func (m *Mux) serveWeb(w http.ResponseWriter, r *http.Request) (err error) {
-	ctx := newIncomingContext(r.Context(), r.Header)
-
-	typ, enc, ok := isWebRequest(r)
-	if !ok {
-		return fmt.Errorf("invalid gRPC-Web content type: %v", r.Header.Get("Content-Type"))
-	}
-	defer r.Body.Close()
-	if fRsp, ok := w.(http.Flusher); ok {
-		defer fRsp.Flush()
-	}
-
-	hd, err := m.loadState().pickMethodHandler(r.URL.Path)
-	if err != nil {
-		return err
-	}
-
-	if hd.descriptor.IsStreamingClient() || hd.descriptor.IsStreamingServer() {
-		return status.Errorf(codes.Unimplemented, "streaming %s not implemented", r.URL.Path)
-	}
-
-	stream := &streamWeb{
-		ctx: ctx,
-		w:   w, r: r,
-		typ: typ,
-		enc: enc,
-	}
-	defer func() {
-		if serr := stream.encodeTrailer(w, err); serr != nil {
-			fmt.Println("stream failure", serr)
+func (w *webWriter) flushWithTrailer() {
+	// Write trailers only if message has been sent.
+	if w.wroteHeader || w.wroteResp {
+		if err := w.writeTrailer(); err != nil {
+			return // nothing
 		}
-	}()
-	return hd.handler(&m.opts, stream)
+	}
+	w.Flush()
+}
+
+type readCloser struct {
+	io.Reader
+	io.Closer
+}
+
+func createGRPCWebHandler(gs *grpc.Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		b, _ := httputil.DumpRequest(r, true)
+		fmt.Println(string(b))
+
+		typ, enc, ok := isWebRequest(r)
+		if !ok {
+			msg := fmt.Sprintf("invalid gRPC-Web content type: %v", r.Header.Get("Content-Type"))
+			http.Error(w, msg, http.StatusBadRequest)
+			return
+		}
+		// TODO: Check for websocket request and upgrade.
+		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+			http.Error(w, "unimplemented websocket support", http.StatusInternalServerError)
+			return
+		}
+
+		r.ProtoMajor = 2
+		r.ProtoMinor = 0
+
+		hdr := r.Header
+		hdr.Del("Content-Length")
+		hdr.Set("Content-Type", grpcBase+"+"+enc)
+
+		if typ == grpcWebText {
+			body := base64.NewDecoder(base64.StdEncoding, r.Body)
+			r.Body = readCloser{body, r.Body}
+		}
+
+		ww := newWebWriter(w, typ, enc)
+		gs.ServeHTTP(ww, r)
+		ww.flushWithTrailer()
+	}
 }

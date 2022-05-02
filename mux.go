@@ -845,14 +845,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(r.URL.Path, "/") {
 		r.URL.Path = "/" + r.URL.Path
 	}
-	if strings.HasPrefix(r.Header.Get("Content-Type"), grpcWeb) {
-		if err := m.serveWeb(w, r); err != nil {
-			encError(w, err) // TODO: webify.
-		}
-		return
-	} else {
-		if err := m.serveHTTP(w, r); err != nil {
-			encError(w, err)
-		}
+	if err := m.serveHTTP(w, r); err != nil {
+		encError(w, err)
 	}
 }

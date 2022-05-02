@@ -7,7 +7,6 @@ package larking
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -19,7 +18,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/soheilhy/cmux"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/trace"
 	"google.golang.org/grpc"
@@ -50,9 +48,10 @@ type Server struct {
 	opts serverOptions
 	mux  *Mux
 
-	closer chan bool
-	gs     *grpc.Server
-	hs     *http.Server
+	//closer chan bool
+	gs  *grpc.Server
+	hs  *http.Server
+	h2s *http2.Server
 
 	events trace.EventLog
 }
@@ -109,104 +108,52 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 	grpcOpts = append(grpcOpts, grpc.Creds(creds))
 
 	gs := grpc.NewServer(grpcOpts...)
-	hs := &http.Server{
-		Handler:   svrOpts.serveMux,
-		TLSConfig: svrOpts.tlsConfig,
-	}
-
 	// Register local gRPC services
 	for sd, ss := range mux.services {
 		gs.RegisterService(sd, ss)
 	}
-
-	//if s.healthServer != nil {
-	//	s.healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
-	//	s.RegisterService(&healthpb.Health_ServiceDesc, s.healthServer)
-	//}
+	serveWeb := createGRPCWebHandler(gs)
+	index := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		contentType := r.Header.Get("content-type")
+		if strings.HasPrefix(contentType, grpcWeb) {
+			serveWeb(w, r)
+		} else if r.ProtoMajor == 2 && strings.HasPrefix(contentType, grpcBase) {
+			gs.ServeHTTP(w, r)
+		} else {
+			svrOpts.serveMux.ServeHTTP(w, r)
+		}
+	})
+	h2s := &http2.Server{}
+	hs := &http.Server{
+		Handler:   index, //h2c.NewHandler(index, h2s),
+		TLSConfig: svrOpts.tlsConfig,
+	}
+	if err := http2.ConfigureServer(hs, h2s); err != nil {
+		return nil, err
+	}
 
 	return &Server{
 		opts:   svrOpts,
 		mux:    mux,
 		gs:     gs,
 		hs:     hs,
+		h2s:    h2s,
 		events: events,
 	}, nil
 }
 
 // Serve accepts incoming connections on the listener.
 // Serve will return always return a non-nil error, http.ErrServerClosed.
-func (s *Server) Serve(l net.Listener) error {
-	s.closer = make(chan bool, 1)
-
-	if config := s.opts.tlsConfig; config != nil {
-		l = tls.NewListener(l, config)
-
-		// TODO: needed?
-		if err := http2.ConfigureServer(s.hs, nil); err != nil {
-			return err
-		}
-	}
-
-	m := cmux.New(l)
-	defer m.Close()
-
-	// grpcL := m.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
-	// gRPC client blocks until it receives a SETTINGS frame from the server.
-	grpcL := m.MatchWithWriters(
-		cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"),
-	)
-	httpL := m.Match(cmux.Any())
-
-	n := 3
-	errs := make(chan error, n)
-
-	go func() { errs <- s.gs.Serve(grpcL) }()
-	defer s.gs.Stop()
-
-	go func() {
-		errs <- s.hs.Serve(httpL)
-		//if s.opts.tlsConfig != nil {
-		//	// TLSConfig must have the cert object.
-		//       errs <- s.hs.ServeTLS(httpL, "", "")
-		//} else {
-		//}
-	}()
-	defer s.hs.Close()
-
-	go func() { errs <- m.Serve() }()
-
-	select {
-	case <-s.closer:
-		return http.ErrServerClosed
-
-	case err := <-errs:
-		switch {
-		case errors.Is(err, cmux.ErrServerClosed):
-			// accept
-		case errors.Is(err, net.ErrClosed):
-			// accpet (TODO: looking why?)
-		case errors.Is(err, grpc.ErrServerStopped):
-			// translate
-		default:
-			return err
-		}
-		return http.ErrServerClosed
-	}
-}
+func (s *Server) Serve(l net.Listener) error { return s.hs.Serve(l) }
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	if s.events != nil {
 		s.events.Finish()
 		s.events = nil
 	}
-	if s.closer == nil {
-		return nil
-	}
 	if err := s.hs.Shutdown(ctx); err != nil {
 		return err
 	}
-	s.gs.GracefulStop()
-	close(s.closer)
 	return nil
 }
 
@@ -227,12 +174,8 @@ type serverOptions struct {
 	insecure  bool
 	log       logr.Logger
 
-	//mux      *Mux
 	muxPatterns []string
 	serveMux    *http.ServeMux
-
-	//muxOpts muxOptions
-	//admin     string
 }
 
 // ServerOption is similar to grpc.ServerOption.
@@ -267,19 +210,10 @@ func LogOption(log logr.Logger) ServerOption {
 	}
 }
 
-//func MuxOptions(muxOpts ...MuxOption) ServerOption {
-//	return func(opts *serverOptions) error {
-//		for _, mo := range muxOpts {
-//			mo(&opts.muxOpts)
-//		}
-//		return nil
-//	}
-//}
-
 func MuxHandleOption(patterns ...string) ServerOption {
 	return func(opts *serverOptions) error {
 		if opts.muxPatterns != nil {
-			return fmt.Errorf("more than one mux registered")
+			return fmt.Errorf("duplicate mux patterns registered")
 		}
 		opts.muxPatterns = patterns
 		return nil

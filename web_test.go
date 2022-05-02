@@ -66,10 +66,14 @@ func TestWeb(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	s, err := NewServer(h, InsecureServerOption())
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	type want struct {
 		statusCode int
 		body       []byte // either
-		//msg        proto.Message // or
 		// TODO: headers, trailers
 	}
 
@@ -81,7 +85,7 @@ func TestWeb(t *testing.T) {
 		out  out
 		want want
 	}{{
-		name: "proto msg",
+		name: "unary proto request",
 		req: func() *http.Request {
 			msg := &testpb.GetMessageRequestOne{Name: "name/hello"}
 			b, err := proto.Marshal(msg)
