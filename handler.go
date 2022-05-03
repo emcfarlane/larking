@@ -84,6 +84,7 @@ func (m *Mux) registerService(gsd *grpc.ServiceDesc, ss interface{}) error {
 			handler: func(opts *muxOptions, stream grpc.ServerStream) error {
 				ctx := stream.Context()
 
+				// TODO: opts?
 				reply, err := d.Handler(ss, ctx, stream.RecvMsg, opts.unaryInterceptor)
 				if err != nil {
 					return err

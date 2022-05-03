@@ -597,14 +597,13 @@ func (s *streamHTTP) SendHeader(md metadata.MD) error {
 	if s.sentHeader {
 		return nil // already sent?
 	}
-	setOutgoingHeader(s.w.Header(), s.header, s.trailer)
+	setOutgoingHeader(s.w.Header(), s.header, md) // TODO: s.trailer
 	s.w.WriteHeader(http.StatusOK)
 	s.sentHeader = true
 	return nil
 }
 
 func (s *streamHTTP) SetTrailer(md metadata.MD) {
-	s.sentHeader = true
 	s.trailer = metadata.Join(s.trailer, md)
 }
 
@@ -626,16 +625,13 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 
 	setOutgoingHeader(s.w.Header(), s.header, s.trailer)
 
-	var resp io.Writer
+	var resp io.Writer = s.w
 	switch acceptEncoding {
 	case "gzip":
 		s.w.Header().Set("Content-Encoding", "gzip")
 		gRsp := gzip.NewWriter(s.w)
 		defer gRsp.Close()
 		resp = gRsp
-
-	default:
-		resp = s.w
 	}
 
 	cur := reply.ProtoReflect()
@@ -790,7 +786,6 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	//if err != nil {
 	//	return err
 	//}
-
 	s := m.loadState()
 	isWebsocket := isWebsocketRequest(r)
 

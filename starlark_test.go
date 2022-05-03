@@ -24,6 +24,7 @@ func TestStarlark(t *testing.T) {
 	opts := cmp.Options{protocmp.Transform()}
 
 	ms := &testpb.UnimplementedMessagingServer{}
+	fs := &testpb.UnimplementedFilesServer{}
 	gs := grpc.NewServer(
 		grpc.UnaryInterceptor(
 			func(
@@ -32,6 +33,7 @@ func TestStarlark(t *testing.T) {
 				info *grpc.UnaryServerInfo,
 				_ grpc.UnaryHandler,
 			) (interface{}, error) {
+				// TODO: fix overrides...
 				wantMethod := "/larking.testpb.Messaging/GetMessageOne"
 				if info.FullMethod != wantMethod {
 					return nil, fmt.Errorf("grpc expected %s, got %s", wantMethod, info.FullMethod)
@@ -52,6 +54,7 @@ func TestStarlark(t *testing.T) {
 		),
 	)
 	testpb.RegisterMessagingServer(gs, ms)
+	testpb.RegisterFilesServer(gs, fs)
 	reflection.Register(gs)
 
 	lis, err := net.Listen("tcp", "localhost:0")

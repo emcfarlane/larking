@@ -53,6 +53,7 @@ type overrides struct {
 	inouts []interface{}
 }
 
+// unary context is used to check if this request should be overriden.
 func (o *overrides) unary() grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
@@ -86,6 +87,7 @@ func (o *overrides) unaryOption() grpc.ServerOption {
 	return grpc.UnaryInterceptor(o.unary())
 }
 
+// stream context is used to check if this request should be overriden.
 func (o *overrides) stream() grpc.StreamServerInterceptor {
 	return func(
 		srv interface{},
@@ -154,7 +156,7 @@ func TestMessageServer(t *testing.T) {
 	fs := &testpb.UnimplementedFilesServer{}
 	js := &testpb.UnimplementedWellKnownServer{}
 
-	o := &overrides{}
+	o := new(overrides)
 	gs := grpc.NewServer(o.unaryOption(), o.streamOption())
 
 	testpb.RegisterMessagingServer(gs, ms)
