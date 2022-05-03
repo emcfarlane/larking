@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"golang.org/x/net/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -125,7 +126,7 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 	})
 	h2s := &http2.Server{}
 	hs := &http.Server{
-		Handler:   index, //h2c.NewHandler(index, h2s),
+		Handler:   h2c.NewHandler(index, h2s),
 		TLSConfig: svrOpts.tlsConfig,
 	}
 	if err := http2.ConfigureServer(hs, h2s); err != nil {
@@ -144,7 +145,12 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 
 // Serve accepts incoming connections on the listener.
 // Serve will return always return a non-nil error, http.ErrServerClosed.
-func (s *Server) Serve(l net.Listener) error { return s.hs.Serve(l) }
+func (s *Server) Serve(l net.Listener) error {
+	if config := s.opts.tlsConfig; config != nil {
+		l = tls.NewListener(l, config)
+	}
+	return s.hs.Serve(l)
+}
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	if s.events != nil {
