@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httputil"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -57,11 +56,9 @@ func newWebWriter(w http.ResponseWriter, typ, enc string) *webWriter {
 	}
 
 	return &webWriter{
-		w:   w,
-		typ: typ,
-		enc: enc,
-		//header: make(http.Header),
-		//headerKeys: make(map[string]bool),
+		w:    w,
+		typ:  typ,
+		enc:  enc,
 		resp: resp,
 	}
 }
@@ -149,10 +146,6 @@ type readCloser struct {
 
 func createGRPCWebHandler(gs *grpc.Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
-		b, _ := httputil.DumpRequest(r, true)
-		fmt.Println(string(b))
-
 		typ, enc, ok := isWebRequest(r)
 		if !ok {
 			msg := fmt.Sprintf("invalid gRPC-Web content type: %v", r.Header.Get("Content-Type"))
