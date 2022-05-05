@@ -97,7 +97,8 @@ func run(ctx context.Context) (err error) {
 	defer healthServer.Shutdown()
 	mux.RegisterService(&healthpb.Health_ServiceDesc, healthServer)
 
-	loader := starlib.NewLoader()
+	globals := starlib.NewGlobals()
+	loader := starlib.NewLoader(globals)
 	defer loader.Close()
 
 	var (

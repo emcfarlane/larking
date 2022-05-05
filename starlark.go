@@ -8,9 +8,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/emcfarlane/larking/starext"
-	"github.com/emcfarlane/larking/starlarkproto"
-	"github.com/emcfarlane/larking/starlarkthread"
+	"github.com/emcfarlane/larking/starlib/encoding/starlarkproto"
+	"github.com/emcfarlane/larking/starlib/starext"
+	"github.com/emcfarlane/larking/starlib/starlarkthread"
 	"github.com/go-logr/logr"
 	"go.starlark.net/starlark"
 	"google.golang.org/grpc"

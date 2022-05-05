@@ -3,7 +3,7 @@ package starlib
 import (
 	"testing"
 
-	"github.com/emcfarlane/larking/starlarkthread"
+	"github.com/emcfarlane/larking/starlib/starlarkthread"
 	"github.com/emcfarlane/starlarkassert"
 	"go.starlark.net/starlark"
 )

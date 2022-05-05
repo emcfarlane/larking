@@ -5,7 +5,7 @@
 package starlib
 
 import (
-	"github.com/emcfarlane/larking/starlarkstruct"
+	"github.com/emcfarlane/larking/starlib/starlarkstruct"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
 )
