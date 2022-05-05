@@ -371,7 +371,7 @@ func (s *starlarkStream) SetTrailer(md metadata.MD) {
 }
 
 func (s *starlarkStream) Context() context.Context {
-	ctx := newIncomingContext(s.ctx, nil) // TODO: remove me?
+	ctx, _ := newIncomingContext(s.ctx, nil) // TODO: remove me?
 	sts := &serverTransportStream{s, s.method}
 	return grpc.NewContextWithServerTransportStream(ctx, sts)
 }

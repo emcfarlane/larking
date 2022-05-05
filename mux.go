@@ -23,8 +23,10 @@ import (
 	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
 	rpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
+	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -82,6 +84,26 @@ type muxOptions struct {
 	types                 protoregistry.MessageTypeResolver
 	unaryInterceptor      grpc.UnaryServerInterceptor
 	streamInterceptor     grpc.StreamServerInterceptor
+	statsHandler          stats.Handler
+}
+
+func (o *muxOptions) readAll(r io.Reader) ([]byte, error) {
+	b, err := ioutil.ReadAll(io.LimitReader(r, int64(o.maxReceiveMessageSize)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > o.maxReceiveMessageSize {
+		return nil, fmt.Errorf("max receive message size reached")
+	}
+	return b, nil
+}
+func (o *muxOptions) writeAll(dst io.Writer, b []byte) error {
+	if len(b) > o.maxSendMessageSize {
+		return fmt.Errorf("max send message size reached")
+	}
+	src := bytes.NewReader(b)
+	_, err := io.Copy(dst, src)
+	return err
 }
 
 // unary is a nil-safe interceptor unary call.
@@ -118,10 +140,9 @@ func StreamServerInterceptorOption(interceptor grpc.StreamServerInterceptor) Mux
 	return func(opts *muxOptions) { opts.streamInterceptor = interceptor }
 }
 
-//// LogOption adds a logr with a unary and stream contexts.
-//func LogOption(log logr.Logger) MuxOption {
-//	return func(opts *muxOption) { opts.log = log }
-//}
+func StatsOption(h stats.Handler) MuxOption {
+	return func(opts *muxOptions) { opts.statsHandler = h }
+}
 
 type Mux struct {
 	opts muxOptions
@@ -572,6 +593,15 @@ func (s *state) match(route, verb string) (*method, params, error) {
 	return s.path.match(route, verb)
 }
 
+var (
+	contentTypeCodec = map[string]encoding.Codec{
+		"application/protobuf":     protoCodec{},
+		"application/octet-stream": protoCodec{},
+		"application/json":         jsonCodec{},
+		"":                         jsonCodec{}, // default
+	}
+)
+
 type streamHTTP struct {
 	ctx    context.Context
 	w      http.ResponseWriter
@@ -584,22 +614,32 @@ type streamHTTP struct {
 	sentHeader bool
 	header     metadata.MD
 	trailer    metadata.MD
+
+	opts muxOptions
 }
 
 func (s *streamHTTP) SetHeader(md metadata.MD) error {
-	if !s.sentHeader {
-		s.header = metadata.Join(s.header, md)
+	if s.sentHeader {
+		return fmt.Errorf("already sent headers")
 	}
+	s.header = metadata.Join(s.header, md)
 	return nil
-
 }
 func (s *streamHTTP) SendHeader(md metadata.MD) error {
 	if s.sentHeader {
-		return nil // already sent?
+		return fmt.Errorf("already sent headers")
 	}
-	setOutgoingHeader(s.w.Header(), s.header, md) // TODO: s.trailer
-	s.w.WriteHeader(http.StatusOK)
+	s.header = metadata.Join(s.header, md)
+	setOutgoingHeader(s.w.Header(), s.header)
+	// don't write the header code, wait for the body.
 	s.sentHeader = true
+
+	if sh := s.opts.statsHandler; sh != nil {
+		sh.HandleRPC(s.ctx, &stats.OutHeader{
+			Header:      s.header.Copy(),
+			Compression: s.r.Header.Get("Accept-Encoding"),
+		})
+	}
 	return nil
 }
 
@@ -649,35 +689,34 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 		pData := cur.Get(fdData)
 
 		s.w.Header().Set("Content-Type", pContentType.String())
-		if _, err := io.Copy(resp, bytes.NewReader(pData.Bytes())); err != nil {
+		// TODO different non-message size?
+		if err := s.opts.writeAll(resp, pData.Bytes()); err != nil {
 			return err
 		}
 		return nil
 	}
 
-	switch accept {
-	case "application/protobuf", "application/octet-stream":
-		b, err := proto.Marshal(msg)
-		if err != nil {
-			return err
-		}
-		s.w.Header().Set("Content-Type", accept)
-		if _, err := io.Copy(resp, bytes.NewReader(b)); err != nil {
-			return err
-		}
-		return nil
-
-	default:
-		b, err := protojson.Marshal(msg)
-		if err != nil {
-			return err
-		}
-		s.w.Header().Set("Content-Type", "application/json")
-		if _, err := io.Copy(resp, bytes.NewReader(b)); err != nil {
-			return err
-		}
-		return nil
+	if accept == "" {
+		accept = "application/json"
 	}
+
+	codec, ok := contentTypeCodec[accept]
+	if !ok {
+		return fmt.Errorf("unknown accept encoding: %s", accept)
+	}
+	b, err := codec.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	s.w.Header().Set("Content-Type", accept)
+	if err := s.opts.writeAll(resp, b); err != nil {
+		return err
+	}
+	if stats := s.opts.statsHandler; stats != nil {
+		// TODO: raw payload stats.
+		stats.HandleRPC(s.ctx, outPayload(false, m, b, b, time.Now()))
+	}
+	return nil
 }
 
 func (s *streamHTTP) decodeRequestArgs(args proto.Message) error {
@@ -698,8 +737,7 @@ func (s *streamHTTP) decodeRequestArgs(args proto.Message) error {
 	}
 	defer body.Close()
 
-	// TODO: mux options.
-	b, err := ioutil.ReadAll(io.LimitReader(body, 1024*1024*2))
+	b, err := s.opts.readAll(body)
 	if err != nil {
 		return err
 	}
@@ -723,17 +761,20 @@ func (s *streamHTTP) decodeRequestArgs(args proto.Message) error {
 		return nil
 	}
 
-	switch contentType {
-	case "application/protobuf", "application/octet-stream":
-		if err := proto.Unmarshal(b, msg); err != nil {
-			return err
-		}
+	if contentType == "" {
+		contentType = "application/json"
+	}
 
-	default:
-		// What marshalling options should we support?
-		if err := protojson.Unmarshal(b, msg); err != nil {
-			return err
-		}
+	codec, ok := contentTypeCodec[contentType]
+	if !ok {
+		return fmt.Errorf("unknown content-type encoding: %s", contentType)
+	}
+	if err := codec.Unmarshal(b, msg); err != nil {
+		return err
+	}
+	if stats := s.opts.statsHandler; stats != nil {
+		// TODO: raw payload stats.
+		stats.HandleRPC(s.ctx, inPayload(false, msg, b, b, time.Now()))
 	}
 	return nil
 }
@@ -779,13 +820,8 @@ func encError(w http.ResponseWriter, err error) {
 }
 
 func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
-	ctx := newIncomingContext(r.Context(), r.Header)
+	ctx, mdata := newIncomingContext(r.Context(), r.Header)
 
-	// TOOD: debug flag?
-	//d, err := httputil.DumpRequest(r, true)
-	//if err != nil {
-	//	return err
-	//}
 	s := m.loadState()
 	isWebsocket := isWebsocketRequest(r)
 
@@ -810,6 +846,31 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	// Handle stats.
+	beginTime := time.Now()
+	if sh := m.opts.statsHandler; sh != nil {
+		ctx = sh.TagRPC(ctx, &stats.RPCTagInfo{
+			FullMethodName: hd.method,
+			FailFast:       false, // TODO
+		})
+
+		sh.HandleRPC(ctx, &stats.InHeader{
+			FullMethod:  method.name,
+			RemoteAddr:  strAddr(r.RemoteAddr),
+			Compression: r.Header.Get("Content-Encoding"),
+			Header:      metadata.MD(mdata).Copy(),
+		})
+
+		sh.HandleRPC(ctx, &stats.Begin{
+			Client:                    false,
+			BeginTime:                 beginTime,
+			FailFast:                  false, // TODO
+			IsClientStream:            hd.descriptor.IsStreamingClient(),
+			IsServerStream:            hd.descriptor.IsStreamingServer(),
+			IsTransparentRetryAttempt: false, // TODO
+		})
+	}
+
 	if isWebsocket {
 		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{})
 		if err != nil {
@@ -822,13 +883,26 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 			method: method,
 			params: params,
 		}
-		if err := hd.handler(&m.opts, stream); err != nil {
-			s, _ := status.FromError(err)
+		herr := hd.handler(&m.opts, stream)
+
+		if herr != nil {
+			s, _ := status.FromError(herr)
 			// TODO: limit message size.
 			c.Close(WSStatusCode(s.Code()), s.Message()) // TODO
-			return nil
+		} else {
+			c.Close(websocket.StatusNormalClosure, "OK") // TODO
 		}
-		c.Close(websocket.StatusNormalClosure, "OK") // TODO
+
+		// Handle stats.
+		if sh := m.opts.statsHandler; sh != nil {
+			endTime := time.Now()
+			sh.HandleRPC(ctx, &stats.End{
+				Client:    false,
+				BeginTime: beginTime,
+				EndTime:   endTime,
+				Error:     err,
+			})
+		}
 		return nil
 	}
 
@@ -837,8 +911,27 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		w:   w, r: r,
 		method: method,
 		params: params,
+		opts:   m.opts,
 	}
-	return hd.handler(&m.opts, stream)
+	herr := hd.handler(&m.opts, stream)
+	// Handle stats.
+	if sh := m.opts.statsHandler; sh != nil {
+		endTime := time.Now()
+
+		// Try to send Trailers, might not be respected.
+		setOutgoingHeader(w.Header(), stream.trailer)
+		sh.HandleRPC(ctx, &stats.OutTrailer{
+			Trailer: stream.trailer.Copy(),
+		})
+
+		sh.HandleRPC(ctx, &stats.End{
+			Client:    false,
+			BeginTime: beginTime,
+			EndTime:   endTime,
+			Error:     err,
+		})
+	}
+	return herr
 }
 
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {

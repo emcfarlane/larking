@@ -49,7 +49,6 @@ type Server struct {
 	opts serverOptions
 	mux  *Mux
 
-	//closer chan bool
 	gs  *grpc.Server
 	hs  *http.Server
 	h2s *http2.Server
@@ -102,6 +101,9 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 	}
 	if i := mux.opts.streamInterceptor; i != nil {
 		grpcOpts = append(grpcOpts, grpc.StreamInterceptor(i))
+	}
+	if h := mux.opts.statsHandler; h != nil {
+		grpcOpts = append(grpcOpts, grpc.StatsHandler(h))
 	}
 
 	// TLS termination controlled by listeners in Serve.
