@@ -8,30 +8,56 @@ import (
 	"fmt"
 
 	"google.golang.org/grpc/encoding"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
 func init() {
-	encoding.RegisterCodec(codec{})
+	encoding.RegisterCodec(protoCodec{})
+	encoding.RegisterCodec(jsonCodec{})
 }
 
-type codec struct{}
+func errInvalidType(v any) error {
+	return fmt.Errorf("marshal invalid type %T", v)
+}
 
-func (codec) Marshal(v interface{}) ([]byte, error) {
+type protoCodec struct{}
+
+func (protoCodec) Marshal(v interface{}) ([]byte, error) {
 	m, ok := v.(proto.Message)
 	if !ok {
-		return nil, fmt.Errorf("marshal invalid type %T", v)
+		return nil, errInvalidType(v)
 	}
 	return proto.Marshal(m)
 }
 
-func (codec) Unmarshal(data []byte, v interface{}) error {
+func (protoCodec) Unmarshal(data []byte, v interface{}) error {
 	m, ok := v.(proto.Message)
 	if !ok {
-		return fmt.Errorf("unmarshal invalid type %T", v)
+		return errInvalidType(v)
 	}
 	return proto.Unmarshal(data, m)
 }
 
 // Name == "proto" overwritting internal proto codec
-func (codec) Name() string { return "proto" }
+func (protoCodec) Name() string { return "proto" }
+
+type jsonCodec struct{}
+
+func (jsonCodec) Marshal(v interface{}) ([]byte, error) {
+	m, ok := v.(proto.Message)
+	if !ok {
+		return nil, errInvalidType(v)
+	}
+	return protojson.Marshal(m)
+}
+
+func (jsonCodec) Unmarshal(data []byte, v interface{}) error {
+	m, ok := v.(proto.Message)
+	if !ok {
+		return errInvalidType(v)
+	}
+	return protojson.Unmarshal(data, m)
+}
+
+func (jsonCodec) Name() string { return "json" }

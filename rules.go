@@ -752,12 +752,12 @@ func (p *path) match(route, verb string) (*method, params, error) {
 
 const httpHeaderPrefix = "http-"
 
-func newIncomingContext(ctx context.Context, header http.Header) context.Context {
+func newIncomingContext(ctx context.Context, header http.Header) (context.Context, metadata.MD) {
 	md := make(metadata.MD, len(header))
 	for k, vs := range header {
 		md.Set(httpHeaderPrefix+k, vs...)
 	}
-	return metadata.NewIncomingContext(ctx, md)
+	return metadata.NewIncomingContext(ctx, md), md
 }
 
 func setOutgoingHeader(header http.Header, mds ...metadata.MD) {
