@@ -22,11 +22,12 @@ func RunTests(t *testing.T, pattern string, globals starlark.StringDict) {
 	for key, val := range globals {
 		g[key] = val
 	}
+	loader := NewLoader(g)
 
 	starlarkassert.RunTests(
 		t, pattern, g,
 		starlarkthread.AssertOption,
-		starlarkassert.WithLoad(StdLoad),
+		starlarkassert.WithLoad(loader.Load),
 	)
 }
 
@@ -44,10 +45,11 @@ func RunBenches(b *testing.B, pattern string, globals starlark.StringDict) {
 	for key, val := range globals {
 		g[key] = val
 	}
+	loader := NewLoader(g)
 
 	starlarkassert.RunBenches(
 		b, pattern, g,
 		starlarkthread.AssertOption,
-		starlarkassert.WithLoad(StdLoad),
+		starlarkassert.WithLoad(loader.Load),
 	)
 }

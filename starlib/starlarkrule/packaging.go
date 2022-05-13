@@ -3,7 +3,6 @@ package starlarkrule
 import (
 	"archive/tar"
 	"compress/gzip"
-	"fmt"
 	"io"
 	"os"
 	"path"

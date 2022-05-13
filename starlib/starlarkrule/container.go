@@ -60,7 +60,7 @@ func containerPull(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 	}
 	ref.Context()
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 
 	img, err := remote.Image(ref,
 		remote.WithAuthFromKeychain(authn.DefaultKeychain),
@@ -105,11 +105,6 @@ func listToStrings(l *starlark.List) ([]string, error) {
 }
 
 func containerBuild(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	bld, err := GetBuilder(thread)
-	if err != nil {
-		return nil, err
-	}
-
 	var (
 		name            string
 		entrypointList  *starlark.List
@@ -141,8 +136,7 @@ func containerBuild(thread *starlark.Thread, fnname string, args starlark.Tuple,
 	baseImage := empty.Image
 	if base != nil {
 		// Load base image from local.
-		imageProvider, err := bld.Load(base)
-		//imageProvider, err := base.action.loadStructValue(ImageConstructor)
+		imageProvider, err := toStruct(base, ImageConstructor)
 		if err != nil {
 			return nil, fmt.Errorf("image provider: %w", err)
 		}
@@ -175,11 +169,8 @@ func containerBuild(thread *starlark.Thread, fnname string, args starlark.Tuple,
 
 	var layers []mutate.Addendum
 
-	tarStruct, err := bld.Load(tar)
+	tarStruct, err := toStruct(tar, FileConstructor)
 	if err != nil {
-		return nil, err
-	}
-	if err := assertConstructor(tarStruct, FileConstructor); err != nil {
 		return nil, err
 	}
 	tarFilename, err := getAttrStr(tarStruct, "path")
@@ -269,7 +260,7 @@ func containerBuild(thread *starlark.Thread, fnname string, args starlark.Tuple,
 
 func containerPush(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	fmt.Println("RUNNING CONTAINER PUSH")
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	var (
 		name      string
 		image     *Label
@@ -285,17 +276,17 @@ func containerPush(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 		return nil, err
 	}
 
-	imageProvider, err := image.action.loadStructValue(ImageConstructor)
+	imageProvider, err := toStruct(image, ImageConstructor)
 	if err != nil {
 		return nil, fmt.Errorf("image provider: %w", err)
 	}
 
 	// TODO: should it be a file provider?
-	filename, err := imageProvider.AttrString("name")
+	filename, err := getAttrStr(imageProvider, "name")
 	if err != nil {
 		return nil, err
 	}
-	imageRef, err := imageProvider.AttrString("reference")
+	imageRef, err := getAttrStr(imageProvider, "reference")
 	if err != nil {
 		return nil, err
 	}

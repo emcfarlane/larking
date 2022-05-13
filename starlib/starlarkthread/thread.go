@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/emcfarlane/larking/starlib/starlarkstruct"
@@ -27,18 +28,18 @@ func NewModule() *starlarkstruct.Module {
 
 const ctxkey = "context"
 
-// SetThreadContext sets the thread context.
+// SetContext sets the thread context.
 func SetContext(thread *starlark.Thread, ctx context.Context) {
 	thread.SetLocal(ctxkey, ctx)
 }
 
-// Context is a simple helper for getting a threads context.
+// GetContext gets the thread context or returns a TODO context.
 // ctx := starlarkthread.Context(thread)
-func Context(thread *starlark.Thread) context.Context {
+func GetContext(thread *starlark.Thread) context.Context {
 	if ctx, ok := thread.Local(ctxkey).(context.Context); ok {
 		return ctx
 	}
-	return context.Background()
+	return context.TODO()
 }
 
 // Resource is a starlark.Value that requires close handling.
@@ -50,44 +51,61 @@ type Resource interface {
 const rsckey = "resources"
 
 // ResourceStore is a thread local storage map for adding resources.
-type ResourceStore map[Resource]bool // resource whether it's living
+// It is thread safe.
+type ResourceStore struct {
+	mu sync.Mutex
+	m  map[Resource]bool // resource whether it's living
+}
 
 // WithResourceStore returns a cleanup function. It is required for
 // packages that add resources.
 func WithResourceStore(thread *starlark.Thread) func() error {
-	store := make(ResourceStore)
-	thread.SetLocal(rsckey, store)
+	store := &ResourceStore{
+		m: make(map[Resource]bool),
+	}
+	SetResourceStore(thread, store)
+	// TODO: runtime.SetFinalizer?
 	return func() error { return CloseResources(thread) }
 }
 
-func AddResource(thread *starlark.Thread, rsc Resource) error {
-	// runtime.SetFinalizer?
-	//
-	store, ok := thread.Local(rsckey).(ResourceStore)
+func SetResourceStore(thread *starlark.Thread, store *ResourceStore) {
+	thread.SetLocal(rsckey, store)
+}
+func GetResourceStore(thread *starlark.Thread) (*ResourceStore, error) {
+	store, ok := thread.Local(rsckey).(*ResourceStore)
 	if !ok {
-		return fmt.Errorf("invalid thread resource store")
+		return nil, fmt.Errorf("thread missing resource store")
 	}
-	store[rsc] = true
-	return nil
+	return store, nil
 }
 
-func Resources(thread *starlark.Thread) ResourceStore {
-	if store, ok := thread.Local(rsckey).(ResourceStore); ok {
-		return store
+func AddResource(thread *starlark.Thread, rsc Resource) error {
+	store, err := GetResourceStore(thread)
+	if err != nil {
+		return err
 	}
+	store.mu.Lock()
+	store.m[rsc] = true
+	store.mu.Unlock()
 	return nil
 }
 
 func CloseResources(thread *starlark.Thread) (firstErr error) {
-	store := Resources(thread)
-	for rsc, open := range store {
+	store, err := GetResourceStore(thread)
+	if err != nil {
+		return err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	for rsc, open := range store.m {
 		if !open {
 			continue
 		}
 		if err := rsc.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
-		store[rsc] = false
+		store.m[rsc] = false
 	}
 	return
 }
@@ -95,7 +113,7 @@ func CloseResources(thread *starlark.Thread) (firstErr error) {
 // AssertOption implements starlarkassert.TestOption
 // Add like so:
 //
-// 	starlarkassert.RunTests(t, "*.star", globals, AssertOption)
+// 	starlarkassert.RunTests(t, "*.star", globals, starlarkthread.AssertOption)
 //
 func AssertOption(t testing.TB, thread *starlark.Thread) func() {
 	close := WithResourceStore(thread)

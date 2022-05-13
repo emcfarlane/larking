@@ -32,7 +32,7 @@ func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 
 	variable, err := runtimevar.OpenVariable(ctx, name)
 	if err != nil {
@@ -98,7 +98,7 @@ func (v *Variable) latest(thread *starlark.Thread, fnname string, args starlark.
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	snapshot, err := v.variable.Latest(ctx)
 	if err != nil {
 		return nil, err

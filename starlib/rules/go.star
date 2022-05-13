@@ -1,21 +1,30 @@
-load("rule.star", "attr", "rule", "actions", "label")
+load("rule.star", "actions", "attr", "label", "rule")
+load("thread.star", "arch", "os")
+
+print("attr", attr)
+print("rule", rule)
+print("actions", actions)
+print("label", label)
 
 # TODO: filepath.Join() support for pathing...
 def _go_impl(ctx):
+    print("GOT CTX", ctx)
     args = ["build", "-o", ctx.attrs.name]
 
     env = []
-    if ctx.attrs.goos != "":
-    	env.append("GOOS=" + ctx.attrs.goos)
+    goos = os or ctx.attrs.goos
+    env.append("GOOS=" + goos)
 
-    if ctx.attrs.goarch != "":
-    	env.append("GOARCH=" + ctx.attrs.goarch)
+    goarch = arch or ctx.attrs.goarch
+    env.append("GOARCH=" + ctx.attrs.goarch)
 
     if ctx.attrs.cgo:
+        # TODO: better.
+        target = {"amd64": "x86_64"}[goarch] + "-" + goos
+
         env.append("CGO_ENABLED=1")
-        env.append("CC=" + ctx.attrs._zcc.value.path)
-        print("ZCC", ctx.attrs._zcc)
-        env.append("CXX=" + ctx.attrs._zxx.value.path)
+        env.append("CC=zig cc -target x86_64-linux")  # + ctx.attrs._zcc.value.path)
+        env.append("CXX=zig c++ -target x86_64-linux")  #  + ctx.attrs._zxx.value.path)
     else:
         env.append("CGO_ENABLED=0")
     print("ENV:", env)
@@ -23,24 +32,23 @@ def _go_impl(ctx):
     args.append(".")
 
     # Maybe?
-    ctx.actions.run(
+    actions.run(
         name = "go",
+        dir = ctx.build_dir,
         args = args,
         env = env,
     )
+
     #name = actions.path.join(ctx.build_dir, ctx.attrs.name)
-    name = label(ctx.build_dir, ctx.attrs.name)
+    name = label(ctx.attrs.name)
     print("name", name)
-    return struct(
-        executable = name,
+    return ctx.outs(
+        bin = name,
     )
-    #ctx.actions.files.stat(
-    #    name = ctx.build_dir + "/" + ctx.attrs.name,
-    #)
 
 go = rule(
     impl = _go_impl,
-    attrs = {
+    ins = {
         "goos": attr.string(values = [
             "aix",
             "android",
@@ -88,12 +96,10 @@ go = rule(
         #"_zxx": attr.label(allow_files = True, default = "file://rules/go/zxx"),
         #"_zcc": attr.label(allow_files = True, default = "file://rules/go/zcc"),
     },
-    returns = {
-        "executable": attr.label(
+    outs = {
+        "bin": attr.label(
             executable = True,
-            allow_single_file = [],
             mandatory = True,
-            #providers = [],
         ),
     },
 )

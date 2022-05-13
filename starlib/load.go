@@ -10,7 +10,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"runtime/debug"
 	"sync"
 
@@ -44,7 +44,10 @@ func makeDict(module *starlarkstruct.Module) starlark.StringDict {
 	for key, val := range module.Members {
 		dict[key] = val
 	}
-	dict[module.Name] = module
+	// Add module if no module name.
+	if _, ok := dict[module.Name]; !ok {
+		dict[module.Name] = module
+	}
 	return dict
 }
 
@@ -67,6 +70,7 @@ var (
 		"runtimevar.star":     makeDict(starlarkruntimevar.NewModule()),
 		"sql.star":            makeDict(starlarksql.NewModule()),
 		"time.star":           makeDict(starlarktime.Module), // starlark
+		"thread.star":         makeDict(starlarkthread.NewModule()),
 		"rule.star":           makeDict(starlarkrule.NewModule()),
 		//"net/grpc.star": makeDict(starlarkgrpc.NewModule()),
 	}
@@ -84,11 +88,12 @@ func (l *Loader) StdLoad(thread *starlark.Thread, module string) (starlark.Strin
 	// Load and eval the file.
 	src, err := local.ReadFile(module)
 	if err != nil {
+		fmt.Println("here?", err)
 		return nil, err
 	}
 	v, err := starlark.ExecFile(thread, module, src, l.globals)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("exec file: %v", err)
 	}
 
 	stdLibMu.Lock()
@@ -107,6 +112,8 @@ type call struct {
 	callers map[*starlark.Thread]bool
 }
 
+// Loader is a cloid.Blob backed loader. It uses thread.Name to figure out the
+// current bucket and module.
 type Loader struct {
 	mu   sync.Mutex       // protects m
 	m    map[string]*call // lazily initialized
@@ -150,6 +157,8 @@ func newPanicError(v interface{}) error {
 
 // Load checks the standard library before loading from buckets.
 func (l *Loader) Load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
+	fmt.Println("loading:", module, "on", thread.Name)
+	defer fmt.Println("done:", module)
 	l.mu.Lock()
 	if l.m == nil {
 		l.m = make(map[string]*call)
@@ -187,7 +196,8 @@ func (l *Loader) Load(thread *starlark.Thread, module string) (starlark.StringDi
 	return c.val, c.err
 }
 
-func (l *Loader) loadBucket(ctx context.Context, bktURL string) (*blob.Bucket, error) {
+// LoadBucket opens a bucket from a bucket of buckets.
+func (l *Loader) LoadBucket(ctx context.Context, bktURL string) (*blob.Bucket, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -225,7 +235,7 @@ func (l *Loader) Close() error {
 
 // LoadSource fetches the source file in bytes from a bucket.
 func (l *Loader) LoadSource(ctx context.Context, bktURL string, key string) ([]byte, error) {
-	bkt, err := l.loadBucket(ctx, bktURL)
+	bkt, err := l.LoadBucket(ctx, bktURL)
 	if err != nil {
 		return nil, err
 	}
@@ -233,31 +243,44 @@ func (l *Loader) LoadSource(ctx context.Context, bktURL string, key string) ([]b
 }
 
 func (l *Loader) load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 
 	v, err := l.StdLoad(thread, module)
+	fmt.Println("error", errors.Is(err, fs.ErrNotExist))
 	if err == nil {
 		return v, nil
 	}
-	if err != os.ErrNotExist {
+	if !errors.Is(err, fs.ErrNotExist) {
+		fmt.Println("error", errors.Is(err, fs.ErrNotExist))
 		return nil, err
 	}
 
-	bktURL, key, err := resolveModuleURL(thread.Name, module)
+	fmt.Println("---")
+	fmt.Println(thread.Name)
+	fmt.Println(module)
+	label, err := starlarkrule.ParseLabel(thread.Name, module)
+	fmt.Println("=>", label, err)
+	fmt.Println("---")
 	if err != nil {
 		return nil, err
 	}
+
+	bktURL := label.BucketURL()
+	fmt.Println("bktURL", bktURL)
+	key := label.Key()
+	fmt.Println("key", key)
 
 	src, err := l.LoadSource(ctx, bktURL, key)
 	if err != nil {
 		return nil, err
 	}
 
-	oldName, newName := thread.Name, bktURL
+	oldName, newName := thread.Name, label.String()
+	fmt.Println("NAME:", oldName, "->", newName)
 	thread.Name = newName
 	defer func() { thread.Name = oldName }()
 
-	v, err = starlark.ExecFile(thread, key, src, nil)
+	v, err = starlark.ExecFile(thread, key, src, l.globals)
 	if err != nil {
 		return nil, err
 	}

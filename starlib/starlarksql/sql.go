@@ -65,7 +65,7 @@ func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 
 	var db *sql.DB
 	switch {
@@ -221,7 +221,7 @@ func (v *DB) exec(thread *starlark.Thread, fnname string, args starlark.Tuple, k
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	result, err := v.db.ExecContext(ctx, query, dbArgs...)
 	if err != nil {
 		return nil, err
@@ -245,7 +245,7 @@ func (v *DB) query(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	rows, err := v.db.QueryContext(ctx, query, dbArgs...)
 	if err != nil {
 		return nil, err
@@ -288,7 +288,7 @@ func (v *DB) queryRow(thread *starlark.Thread, fnname string, args starlark.Tupl
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	rows, err := v.db.QueryContext(ctx, query, dbArgs...)
 	if err != nil {
 		return nil, err
@@ -331,7 +331,7 @@ func (v *DB) ping(thread *starlark.Thread, fnname string, args starlark.Tuple, k
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	if err := v.db.PingContext(ctx); err != nil {
 		return nil, err
 	}

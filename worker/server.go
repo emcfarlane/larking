@@ -22,8 +22,8 @@ import (
 
 	"github.com/emcfarlane/larking/apipb/controlpb"
 	"github.com/emcfarlane/larking/apipb/workerpb"
-	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"
+	"github.com/emcfarlane/larking/starlib/starlarkthread"
 	"github.com/emcfarlane/starlarkassert"
 )
 

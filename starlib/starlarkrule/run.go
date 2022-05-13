@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path"
 
 	"github.com/emcfarlane/larking/starlib/starlarkthread"
 	"go.starlark.net/starlark"
@@ -53,9 +52,9 @@ func run(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []s
 	}
 	iter.Done()
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	cmd := exec.CommandContext(ctx, name, cmdArgs...)
-	cmd.Dir = path.Dir(dir)
+	cmd.Dir = dir // TODO: filepath.ToSlash?
 	cmd.Env = append(os.Environ(), cmdEnv...)
 
 	var output bytes.Buffer

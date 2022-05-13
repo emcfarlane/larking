@@ -10,7 +10,7 @@ import (
 var actionsModule = &starlarkstruct.Module{
 	Name: "actions",
 	Members: starlark.StringDict{
-		"files":     nil, //newFilesModule(a),
+		"files":     starlark.None, //newFilesModule(a),
 		"packaging": packagingModule,
 		"container": containerModule,
 		"run":       starext.MakeBuiltin("run", run),

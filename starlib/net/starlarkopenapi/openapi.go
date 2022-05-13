@@ -70,7 +70,7 @@ func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 
 	variable, err := runtimevar.OpenVariable(ctx, name)
 	if err != nil {
@@ -316,7 +316,7 @@ var (
 
 func (m *Method) Name() string { return m.name }
 func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	hasArgs := len(args) > 0
 	//hasKwargs := len(kwargs) > 0
 

@@ -16,11 +16,7 @@ func toStruct(v starlark.Value, constructor starlark.Value) (*starlarkstruct.Str
 	if !ok {
 		return nil, fmt.Errorf("invalid type: %T, expected struct", v)
 	}
-	// Constructor values must be comparable
-	if c := s.Constructor(); c != constructor {
-		return nil, fmt.Errorf("invalid struct type: %s", c)
-	}
-	return nil, nil
+	return s, assertConstructor(s, constructor)
 }
 
 // Constructor values must be comparable.

@@ -1,4 +1,4 @@
-load("rule.star", "attr", "rule")
+load("rule.star", "actions", "attr", "rule")
 
 def _container_pull_impl(ctx):
     return ctx.actions.container.pull(

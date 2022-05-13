@@ -33,7 +33,7 @@ func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	bkt, err := blob.OpenBucket(ctx, name)
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func (v *Bucket) attributes(thread *starlark.Thread, fnname string, args starlar
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	p, err := v.bkt.Attributes(ctx, key)
 	if err != nil {
 		return nil, err
@@ -158,7 +158,7 @@ func (v *Bucket) writeAll(thread *starlark.Thread, fnname string, args starlark.
 	}
 	// TODO: handle As method beforeWrite.
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	if err := v.bkt.WriteAll(ctx, key, []byte(bytes), &opts); err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (v *Bucket) readAll(thread *starlark.Thread, fnname string, args starlark.T
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	p, err := v.bkt.ReadAll(ctx, key) // &opts)
 	if err != nil {
 		return nil, err
@@ -190,7 +190,7 @@ func (v *Bucket) delete(thread *starlark.Thread, fnname string, args starlark.Tu
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	if err := v.bkt.Delete(ctx, key); err != nil {
 		return nil, err
 	}

@@ -82,6 +82,19 @@ func FromStringDict(constructor starlark.Value, d starlark.StringDict) *Struct {
 	}
 }
 
+// FromOrderedStringDict returns a new struct instance whose elements are those of d.
+// The struct owns the dictionary values.
+// The constructor parameter specifies the constructor; use Default for an ordinary struct.
+func FromOrderedStringDict(constructor starlark.Value, d *starext.OrderedStringDict) *Struct {
+	if constructor == nil {
+		panic("nil constructor")
+	}
+	return &Struct{
+		constructor: constructor,
+		osd:         *d,
+	}
+}
+
 // FromKeyValues returns a new struct instance with an array of key/value pairs.
 // Keys must be of type string, values of type starlark.Value.
 func FromKeyValues(constructor starlark.Value, kvs ...any) *Struct {
@@ -141,10 +154,10 @@ func (s *Struct) ToStringDict(d starlark.StringDict) {
 
 func (s *Struct) String() string {
 	buf := new(strings.Builder)
-	if s.constructor == Default {
+	if v, ok := s.constructor.(starlark.String); ok {
 		// NB: The Java implementation always prints struct
 		// even for Bazel provider instances.
-		buf.WriteString("struct") // avoid String()'s quotation
+		buf.WriteString(string(v)) // avoid String()'s quotation
 	} else {
 		buf.WriteString(s.constructor.String())
 	}

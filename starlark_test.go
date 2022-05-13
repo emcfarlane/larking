@@ -6,8 +6,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"
+	"github.com/emcfarlane/larking/starlib/starlarkthread"
 	"github.com/emcfarlane/larking/testpb"
 	"github.com/emcfarlane/starlarkassert"
 	"github.com/google/go-cmp/cmp"

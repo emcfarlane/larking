@@ -145,7 +145,7 @@ func (v *Client) get(thread *starlark.Thread, fnname string, args starlark.Tuple
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	req, err := http.NewRequestWithContext(ctx, "GET", urlstr, nil)
 	if err != nil {
 		return nil, err
@@ -162,7 +162,7 @@ func (v *Client) head(thread *starlark.Thread, fnname string, args starlark.Tupl
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	req, err := http.NewRequestWithContext(ctx, "HEAD", urlstr, nil)
 	if err != nil {
 		return nil, err
@@ -187,7 +187,7 @@ func (v *Client) post(thread *starlark.Thread, fnname string, args starlark.Tupl
 		return nil, err
 	}
 
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	req, err := http.NewRequestWithContext(ctx, "HEAD", urlstr, rdr)
 	if err != nil {
 		return nil, err
@@ -256,7 +256,7 @@ func MakeRequest(thread *starlark.Thread, name string, args starlark.Tuple, kwar
 	if err != nil {
 		return nil, err
 	}
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	request = request.WithContext(ctx)
 
 	return &Request{
