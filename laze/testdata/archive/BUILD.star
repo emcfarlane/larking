@@ -1,4 +1,4 @@
-load("rules/packaging.star", "tar")
+load("rules/archive.star", "tar")
 
 tar(
     name = "hello.tar",
@@ -7,7 +7,7 @@ tar(
 
 tar(
     name = "helloc.tar.gz",
-    srcs = ["file://testdata/cgo/helloc?goarch=amd64&goos=linux"],
+    srcs = ["../cgo/helloc?goarch=amd64&goos=linux"],
     package_dir = "/usr/bin",
     strip_prefix = "testdata/cgo",
 )

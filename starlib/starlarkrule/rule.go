@@ -21,10 +21,10 @@ func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
 		Name: "rule",
 		Members: starlark.StringDict{
-			"rule":    starext.MakeBuiltin("rule", MakeRule),
-			"attr":    NewAttrModule(),
-			"label":   starext.MakeBuiltin("label", MakeLabel),
-			"actions": actionsModule,
+			"rule":       starext.MakeBuiltin("rule.rule", MakeRule),
+			"attr":       NewAttrModule(),
+			"provider":   starext.MakeBuiltin("rule.provider", MakeProvider),
+			"attributes": starext.MakeBuiltin("rule.attrs", MakeProvider),
 		},
 	}
 }
@@ -50,6 +50,7 @@ func (l *Label) BucketURL() string {
 	u := l.URL
 	q := u.Query()
 	q.Del("key")
+	q.Del("keyargs")
 	u.RawQuery = q.Encode()
 	return u.String()
 }
@@ -390,23 +391,93 @@ func (t *Target) SetQuery(values url.Values) error {
 	return nil
 }
 
-type AttrValue struct {
-	*Attr
-	Key   string
-	Value starlark.Value
-}
-
-func (t *Target) Len() int { return t.args.Len() }
-func (t *Target) Index(i int) AttrValue {
-	key, arg := t.args.KeyIndex(i)
-	attr := t.rule.ins[key]
-	return AttrValue{attr, key, arg}
-}
-
 func (t *Target) Attrs() *starlarkstruct.Struct {
 	return starlarkstruct.FromOrderedStringDict(Attrs, &t.args)
 }
 
 func (t *Target) Rule() *Rule { return t.rule }
 
-//func (t *Target) Label() *Label { return t.label }
+func (t *Target) Deps() ([]*Label, error) {
+	fmt.Println("--- DEPS ---")
+	n := t.args.Len()
+	deps := make([]*Label, 0, n/2)
+	for i := 0; i < n; i++ {
+		key, arg := t.args.KeyIndex(i)
+		attr := t.rule.ins[key]
+		fmt.Println("attrs", "key", key, "arg", arg, "attr", attr)
+
+		switch attr.Typ {
+		case AttrTypeLabel:
+			l, err := AsLabel(arg)
+			if err != nil {
+				return nil, err
+			}
+			fmt.Println("\tlabel")
+			deps = append(deps, l)
+
+		case AttrTypeLabelList:
+			v := arg.(starlark.Indexable)
+			for i, n := 0, v.Len(); i < n; i++ {
+				x := v.Index(i)
+				l, err := AsLabel(x)
+				if err != nil {
+					return nil, err
+				}
+				fmt.Println("\tlabel")
+				deps = append(deps, l)
+			}
+
+		case AttrTypeLabelKeyedStringDict:
+			panic("TODO")
+		}
+	}
+	fmt.Println("-----------")
+	return deps, nil
+}
+
+type Provider struct {
+	// TODO
+}
+
+func MakeProvider(_ *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var (
+		attrs = new(starlark.Dict)
+	)
+	if err := starlark.UnpackArgs(
+		fnname, args, kwargs,
+		"impl", &impl, "ins?", &ins, "outs?", &outs,
+	); err != nil {
+		return nil, err
+	}
+
+	// type checks
+	if impl.NumParams() != 1 {
+		return nil, fmt.Errorf("unexpected number of params: %d", impl.NumParams())
+	}
+
+	inAttrs, err := dictToAttrs(ins)
+	if err != nil {
+		return nil, err
+	}
+	inAttrs["name"] = &Attr{
+		Typ:       AttrTypeString,
+		Def:       starlark.String(""),
+		Doc:       "Name of rule",
+		Mandatory: true,
+	}
+
+	outAttrs, err := dictToAttrs(outs)
+	if err != nil {
+		return nil, err
+	}
+
+	// key=dir:target.tar.gz
+	// key=dir/target.tar.gz
+
+	return &Rule{
+		impl: impl,
+		ins:  inAttrs,
+		outs: outAttrs,
+	}, nil
+
+}

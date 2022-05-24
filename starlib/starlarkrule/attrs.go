@@ -594,6 +594,7 @@ func asAttrValue(
 		return nil
 	//case attrTypeLabelKeyedStringDict:
 	case AttrTypeLabelList:
+		fmt.Println("HERE?", *value)
 		list, ok := (*value).(*starlark.List)
 		if !ok {
 			return errField()
@@ -602,6 +603,7 @@ func asAttrValue(
 		var elems []starlark.Value
 		for i, n := 0, list.Len(); i < n; i++ {
 			val := list.Index(i)
+			fmt.Println("OK?", val)
 
 			l, err := toLabel(val)
 			if err != nil {

@@ -3,18 +3,20 @@ package starlarkrule
 import (
 	"archive/tar"
 	"compress/gzip"
+	"fmt"
 	"io"
-	"os"
 	"path"
 	"strings"
 	"time"
 
 	"github.com/emcfarlane/larking/starlib/starext"
+	"github.com/emcfarlane/larking/starlib/starlarkthread"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
+	"gocloud.dev/blob"
 )
 
-var packagingModule = &starlarkstruct.Module{
+var archiveModule = &starlarkstruct.Module{
 	Name: "packaging",
 	Members: starlark.StringDict{
 		"tar": starext.MakeBuiltin("packaging.tar", makeTar),
@@ -23,6 +25,8 @@ var packagingModule = &starlarkstruct.Module{
 
 // makeTar creates a tarball.
 func makeTar(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	ctx := starlarkthread.GetContext(thread)
+
 	var (
 		name        string
 		srcs        *starlark.List
@@ -39,46 +43,66 @@ func makeTar(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs
 		return nil, err
 	}
 
-	creationTime := time.Time{} // zero
-	filename := ""              // p.key
+	var (
+		creationTime time.Time // zero
+	)
 
-	createTar := func(filename string) error {
-		f, err := os.Create(filename)
+	createTar := func(l *Label) error {
+		fmt.Println("createTar", l)
+		bktURL := l.BucketURL()
+
+		bkt, err := blob.OpenBucket(ctx, bktURL)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer bkt.Close()
+
+		key := l.Key()
+		w, err := bkt.NewWriter(ctx, key, nil)
+		if err != nil {
+			return err
+		}
+		fmt.Println("writer:", key)
+		defer w.Close()
 
 		// compress writer
 		var cw io.WriteCloser
 		switch {
-		case strings.HasSuffix(filename, ".tar.gz"):
-			cw = gzip.NewWriter(f)
+		case strings.HasSuffix(key, ".tar.gz"):
+			cw = gzip.NewWriter(w)
 			defer cw.Close()
 		default:
-			cw = f
+			cw = w
 		}
 
 		tw := tar.NewWriter(cw)
 		defer tw.Close()
 
-		addFile := func(filename, key string) error {
-			file, err := os.Open(filename)
+		addFile := func(l *Label, key string) error {
+			fmt.Println("addFile", l, key)
+			bktURL := l.BucketURL()
+			bkt, err := blob.OpenBucket(ctx, bktURL)
 			if err != nil {
 				return err
 			}
-			defer file.Close()
+			defer bkt.Close()
 
-			stat, err := file.Stat()
+			r, err := bkt.NewReader(ctx, l.Key(), nil)
+			if err != nil {
+				return err
+			}
+			defer r.Close()
+
+			attrs, err := bkt.Attributes(ctx, key)
 			if err != nil {
 				return err
 			}
 
 			header := &tar.Header{
 				Name:     key,
-				Size:     stat.Size(),
+				Size:     attrs.Size,
 				Typeflag: tar.TypeReg,
-				Mode:     int64(stat.Mode()),
+				Mode:     0600,
 				ModTime:  creationTime,
 			}
 			// write the header to the tarball archive
@@ -86,7 +110,7 @@ func makeTar(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs
 				return err
 			}
 			// copy the file data to the tarball
-			if _, err := io.Copy(tw, file); err != nil {
+			if _, err := io.Copy(tw, r); err != nil {
 				return err
 			}
 			return nil
@@ -97,37 +121,29 @@ func makeTar(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs
 
 		var x starlark.Value
 		for iter.Next(&x) {
-			fileProvider, err := toStruct(x, FileConstructor)
-			if err != nil {
-				return err
-			}
-
-			filename, err := getAttrStr(fileProvider, "path")
-			if err != nil {
-				return err
-			}
-			name, err := getAttrStr(fileProvider, "name")
-			if err != nil {
-				return err
-			}
+			l := x.(*Label) // must be
 
 			// Form the key path of the file in the tar fs.
-			key := path.Join(packageDir, strings.TrimPrefix(name, stripPrefix))
+			key := path.Join(
+				packageDir,
+				strings.TrimPrefix(l.Key(), stripPrefix),
+			)
 
 			// TODO: strip_prefix
-			if err := addFile(filename, key); err != nil {
+			if err := addFile(l, key); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
-	if err := createTar(filename); err != nil {
-		return nil, err
-	}
-
-	fi, err := os.Stat(filename)
+	l, err := ParseLabel(thread.Name, name)
 	if err != nil {
 		return nil, err
 	}
-	return NewFile(filename, fi)
+
+	if err := createTar(l); err != nil {
+		return nil, err
+	}
+	fmt.Println("makeTar", l)
+	return l, nil
 }

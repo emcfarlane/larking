@@ -7,7 +7,7 @@ require (
 	github.com/containerd/stargz-snapshotter/estargz v0.10.1
 	github.com/emcfarlane/starlarkassert v0.0.0-20220406142958-771296b4bdb6
 	github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82
-	github.com/go-logr/logr v1.2.0
+	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/stdr v1.2.0
 	github.com/go-openapi/spec v0.20.4
 	github.com/google/go-cmp v0.5.7

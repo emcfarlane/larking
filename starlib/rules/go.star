@@ -1,10 +1,5 @@
-load("rule.star", "actions", "attr", "label", "rule")
+load("rule.star", "DefaultInfo", "attr", "provider", "rule")
 load("thread.star", "arch", "os")
-
-print("attr", attr)
-print("rule", rule)
-print("actions", actions)
-print("label", label)
 
 # TODO: filepath.Join() support for pathing...
 def _go_impl(ctx):
@@ -32,15 +27,14 @@ def _go_impl(ctx):
     args.append(".")
 
     # Maybe?
-    actions.run(
+    ctx.actions.run(
         name = "go",
         dir = ctx.build_dir,
         args = args,
         env = env,
     )
 
-    #name = actions.path.join(ctx.build_dir, ctx.attrs.name)
-    name = label(ctx.attrs.name)
+    name = ctx.actions.label(ctx.attrs.name)
     print("name", name)
     return ctx.outs(
         bin = name,
@@ -48,6 +42,12 @@ def _go_impl(ctx):
 
 go = rule(
     impl = _go_impl,
+    #attrs = provider(
+    #    goos = attr.string(values = [
+    #        ,
+    #    ])
+    #)
+    #provides = [DefaultInfo]
     ins = {
         "goos": attr.string(values = [
             "aix",
