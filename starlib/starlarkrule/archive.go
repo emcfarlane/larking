@@ -136,7 +136,7 @@ func makeTar(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs
 		}
 		return nil
 	}
-	l, err := ParseLabel(thread.Name, name)
+	l, err := ParseRelativeLabel(thread.Name, name)
 	if err != nil {
 		return nil, err
 	}

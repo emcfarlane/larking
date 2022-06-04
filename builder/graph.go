@@ -1,4 +1,4 @@
-package laze
+package builder
 
 import (
 	"bytes"
@@ -9,6 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/emcfarlane/larking/starlib"
+	"github.com/emcfarlane/larking/starlib/starlarkrule"
+	"github.com/emcfarlane/larking/starlib/starlarkthread"
+	"go.starlark.net/starlark"
 )
 
 // TODO: build dot-graph
@@ -34,7 +39,7 @@ func dotToSvg(dot []byte) ([]byte, error) {
 	return svg, nil
 }
 
-func generateDot(a *Action) ([]byte, error) {
+func generateDot(a *starlarkrule.Action) ([]byte, error) {
 	var (
 		buf  bytes.Buffer
 		tabs = 0
@@ -56,17 +61,17 @@ func generateDot(a *Action) ([]byte, error) {
 	p(`node [fontname="Helvetica,Arial,sans-serif"]`)
 	p(`edge [fontname="Helvetica,Arial,sans-serif"]`)
 	p(`node [shape=box];`)
-	p(`rankdir="LR"`)
+	//p(`rankdir="LR"`)
 
-	deps := []*Action{a}
+	deps := []*starlarkrule.Action{a}
 	for n := len(deps); n > 0; n = len(deps) {
-		a, deps = deps[n-1], deps[:n-1]
+		a, deps = deps[n-1], deps[:n-1] // pop
 
-		p(q, a.Label.Key(), q)
+		p(q, a.Key(), q)
 
 		deps = append(deps, a.Deps...)
-		for _, at := range a.triggers {
-			p(q, at.Label.Key(), " -> ", a.Label.Key(), q)
+		for _, at := range a.Deps {
+			p(q, at.Key(), q, " -> ", q, a.Key(), q)
 		}
 	}
 
@@ -83,12 +88,28 @@ var isLocalhost = map[string]bool{
 	"::1":       true,
 }
 
-func (b *Builder) Serve(l net.Listener) error { //addr string) error {
-
+func Serve(l net.Listener) error { //addr string) error {
 	host, _, err := net.SplitHostPort(l.Addr().String())
 	if err != nil {
 		return err
 	}
+
+	dir := ""
+	label, err := starlarkrule.ParseRelativeLabel("file://./?metadata=skip", dir)
+	if err != nil {
+		return err
+	}
+
+	b, err := starlarkrule.NewBuilder(label)
+	if err != nil {
+		return err
+	}
+
+	globals := starlib.NewGlobals()
+	loader := starlib.NewLoader(globals)
+
+	resources := starlarkthread.ResourceStore{} // resources
+	defer resources.Close()
 
 	isLocal := isLocalhost[host]
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -102,15 +123,27 @@ func (b *Builder) Serve(l net.Listener) error { //addr string) error {
 		}
 
 		name := strings.TrimPrefix(r.URL.Path, "/graph/")
-
-		ctx := r.Context()
-		a, err := b.Build(ctx, nil, name)
+		l, err := label.Parse(name)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		dot, err := generateDot(a)
+		ctx := r.Context()
+		thread := &starlark.Thread{
+			Name: l.String(),
+			Load: loader.Load,
+		}
+		starlarkthread.SetResourceStore(thread, &resources)
+		starlarkthread.SetContext(thread, ctx)
+
+		action, err := b.Build(thread, label)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		dot, err := generateDot(action)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

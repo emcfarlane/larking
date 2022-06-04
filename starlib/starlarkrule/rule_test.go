@@ -1,13 +1,19 @@
-package starlarkrule
+package starlarkrule_test
 
 import (
 	"context"
 	"net/url"
 	"testing"
 
+	"github.com/emcfarlane/larking/starlib"
+	"github.com/emcfarlane/larking/starlib/starlarkrule"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob"
 )
+
+func TestExecFile(t *testing.T) {
+	starlib.RunTests(t, "testdata/*.star", nil)
+}
 
 func TestLabels(t *testing.T) {
 	tests := []struct {
@@ -115,7 +121,7 @@ func TestLabels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			l, err := ParseLabel(tt.source, tt.label)
+			l, err := starlarkrule.ParseRelativeLabel(tt.source, tt.label)
 			if err != tt.wantErr {
 				t.Fatalf("error got: %v, want: %v", err, tt.wantErr)
 			}

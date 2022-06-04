@@ -28,6 +28,10 @@ func RunTests(t *testing.T, pattern string, globals starlark.StringDict) {
 		t, pattern, g,
 		starlarkthread.AssertOption,
 		starlarkassert.WithLoad(loader.Load),
+		func(_ testing.TB, thread *starlark.Thread) func() {
+			thread.Name = "file://./?metadata=skip"
+			return nil
+		},
 	)
 }
 
@@ -51,5 +55,9 @@ func RunBenches(b *testing.B, pattern string, globals starlark.StringDict) {
 		b, pattern, g,
 		starlarkthread.AssertOption,
 		starlarkassert.WithLoad(loader.Load),
+		func(_ testing.TB, thread *starlark.Thread) func() {
+			thread.Name = "file://./?metadata=skip"
+			return nil
+		},
 	)
 }

@@ -90,24 +90,29 @@ func AddResource(thread *starlark.Thread, rsc Resource) error {
 	return nil
 }
 
+func (s *ResourceStore) Close() (firstErr error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for rsc, open := range s.m {
+		if !open {
+			continue
+		}
+		if err := rsc.Close(); err != nil && firstErr == nil {
+			// TODO: chain errors?
+			firstErr = err
+		}
+		delete(s.m, rsc)
+	}
+	return
+}
+
 func CloseResources(thread *starlark.Thread) (firstErr error) {
 	store, err := GetResourceStore(thread)
 	if err != nil {
 		return err
 	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
-
-	for rsc, open := range store.m {
-		if !open {
-			continue
-		}
-		if err := rsc.Close(); err != nil && firstErr == nil {
-			firstErr = err
-		}
-		store.m[rsc] = false
-	}
-	return
+	return store.Close()
 }
 
 // AssertOption implements starlarkassert.TestOption

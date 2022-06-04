@@ -1,4 +1,4 @@
-load("rule.star", "DefaultInfo", "attr", "provider", "rule")
+load("rule.star", "DefaultInfo", "attr", "attrs", "rule")
 load("thread.star", "arch", "os")
 
 # TODO: filepath.Join() support for pathing...
@@ -15,11 +15,25 @@ def _go_impl(ctx):
 
     if ctx.attrs.cgo:
         # TODO: better.
-        target = {"amd64": "x86_64"}[goarch] + "-" + goos
+        #
+        target = {
+            "amd64": "x86_64",
+        }[goarch] + "-" + {
+            "linux": "linux",
+            "darwin": "macos",
+        }[goos]
 
         env.append("CGO_ENABLED=1")
-        env.append("CC=zig cc -target x86_64-linux")  # + ctx.attrs._zcc.value.path)
-        env.append("CXX=zig c++ -target x86_64-linux")  #  + ctx.attrs._zxx.value.path)
+        env.append("CC=zig cc -target " + target)  # + ctx.attrs._zcc.value.path)
+        env.append("CXX=zig c++ -target " + target)  #  + ctx.attrs._zxx.value.path)
+
+        # https://github.com/ziglang/zig/issues/11303
+        if goos == "darwin":
+            args.extend([
+                "-buildmode=pie",
+                "-ldflags",
+                "-s -w -linkmode external -extldflags '--sysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -F /System/Library/Frameworks'",
+            ])
     else:
         env.append("CGO_ENABLED=0")
     print("ENV:", env)
@@ -36,20 +50,15 @@ def _go_impl(ctx):
 
     name = ctx.actions.label(ctx.attrs.name)
     print("name", name)
-    return ctx.outs(
-        bin = name,
-    )
+    return [DefaultInfo(
+        executable = name,
+    )]
 
 go = rule(
     impl = _go_impl,
-    #attrs = provider(
-    #    goos = attr.string(values = [
-    #        ,
-    #    ])
-    #)
-    #provides = [DefaultInfo]
-    ins = {
-        "goos": attr.string(values = [
+    provides = [DefaultInfo],
+    attrs = attrs(
+        goos = attr.string(values = [
             "aix",
             "android",
             "darwin",
@@ -67,7 +76,7 @@ go = rule(
             "windows",
             "zos",
         ]),
-        "goarch": attr.string(values = [
+        goarch = attr.string(values = [
             "386",
             "amd64",
             "amd64p32",
@@ -92,14 +101,14 @@ go = rule(
             "sparc64",
             "wasm",
         ]),
-        "cgo": attr.bool(),
+        cgo = attr.bool(),
         #"_zxx": attr.label(allow_files = True, default = "file://rules/go/zxx"),
         #"_zcc": attr.label(allow_files = True, default = "file://rules/go/zcc"),
-    },
-    outs = {
-        "bin": attr.label(
-            executable = True,
-            mandatory = True,
-        ),
-    },
+    ),
+    #outs = {
+    #    "bin": attr.label(
+    #        executable = True,
+    #        mandatory = True,
+    #    ),
+    #},
 )

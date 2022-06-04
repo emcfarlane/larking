@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"os"
 
+	"github.com/emcfarlane/larking/builder"
 	_ "github.com/emcfarlane/larking/cmd/internal/bindings"
-	"github.com/emcfarlane/larking/laze"
 	"github.com/pkg/browser"
 )
 
@@ -26,15 +26,10 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("missing label")
 	}
 
-	label := args[len(args)-1]
-	args = args[:len(args)-1]
+	label := args[0]
+	//args = args[:len(args)-1]
 
-	b, err := laze.NewBuilder("") // TODO: configuration?
-	if err != nil {
-		return err
-	}
-
-	a, err := b.Build(ctx, args, label)
+	a, err := builder.Build(ctx, label)
 	if err != nil {
 		return err
 	}
@@ -59,10 +54,10 @@ func run(ctx context.Context) error {
 		}()
 
 		fmt.Println(ln.Addr())
-		return b.Serve(ln)
+		return builder.Serve(ln)
 	}
 
-	b.Run(ctx, a)
+	//b.Run(ctx, a)
 
 	// Report error on failed actions.
 	if err := a.FailureErr(); err != nil {

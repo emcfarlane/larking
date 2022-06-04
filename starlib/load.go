@@ -17,6 +17,7 @@ import (
 	"github.com/emcfarlane/larking/starlib/encoding/starlarkproto"
 	"github.com/emcfarlane/larking/starlib/net/starlarkhttp"
 	"github.com/emcfarlane/larking/starlib/net/starlarkopenapi"
+	"github.com/go-logr/logr"
 
 	//"github.com/emcfarlane/larking/starlib/net/starlarkgrpc"
 	"github.com/emcfarlane/larking/starlib/starlarkblob"
@@ -88,7 +89,6 @@ func (l *Loader) StdLoad(thread *starlark.Thread, module string) (starlark.Strin
 	// Load and eval the file.
 	src, err := local.ReadFile(module)
 	if err != nil {
-		fmt.Println("here?", err)
 		return nil, err
 	}
 	v, err := starlark.ExecFile(thread, module, src, l.globals)
@@ -157,8 +157,12 @@ func newPanicError(v interface{}) error {
 
 // Load checks the standard library before loading from buckets.
 func (l *Loader) Load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
-	fmt.Println("loading:", module, "on", thread.Name)
-	defer fmt.Println("done:", module)
+	ctx := starlarkthread.GetContext(thread)
+	log := logr.FromContextOrDiscard(ctx)
+
+	log.Info("loading module", "module", module)
+	defer log.Info("finsihed loading", "module", module)
+
 	l.mu.Lock()
 	if l.m == nil {
 		l.m = make(map[string]*call)
@@ -246,7 +250,6 @@ func (l *Loader) load(thread *starlark.Thread, module string) (starlark.StringDi
 	ctx := starlarkthread.GetContext(thread)
 
 	v, err := l.StdLoad(thread, module)
-	fmt.Println("error", errors.Is(err, fs.ErrNotExist))
 	if err == nil {
 		return v, nil
 	}
@@ -255,20 +258,13 @@ func (l *Loader) load(thread *starlark.Thread, module string) (starlark.StringDi
 		return nil, err
 	}
 
-	fmt.Println("---")
-	fmt.Println(thread.Name)
-	fmt.Println(module)
-	label, err := starlarkrule.ParseLabel(thread.Name, module)
-	fmt.Println("=>", label, err)
-	fmt.Println("---")
+	label, err := starlarkrule.ParseRelativeLabel(thread.Name, module)
 	if err != nil {
 		return nil, err
 	}
 
 	bktURL := label.BucketURL()
-	fmt.Println("bktURL", bktURL)
 	key := label.Key()
-	fmt.Println("key", key)
 
 	src, err := l.LoadSource(ctx, bktURL, key)
 	if err != nil {
@@ -276,7 +272,6 @@ func (l *Loader) load(thread *starlark.Thread, module string) (starlark.StringDi
 	}
 
 	oldName, newName := thread.Name, label.String()
-	fmt.Println("NAME:", oldName, "->", newName)
 	thread.Name = newName
 	defer func() { thread.Name = oldName }()
 

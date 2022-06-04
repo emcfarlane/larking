@@ -82,16 +82,16 @@ func FromStringDict(constructor starlark.Value, d starlark.StringDict) *Struct {
 	}
 }
 
-// FromOrderedStringDict returns a new struct instance whose elements are those of d.
-// The struct owns the dictionary values.
+// OrderedStringDictAsStruct returns a new struct instance whose elements are
+// those of osd. The struct owns the dictionary values.
 // The constructor parameter specifies the constructor; use Default for an ordinary struct.
-func FromOrderedStringDict(constructor starlark.Value, d *starext.OrderedStringDict) *Struct {
+func OrderedStringDictAsStruct(constructor starlark.Value, osd *starext.OrderedStringDict) *Struct {
 	if constructor == nil {
 		panic("nil constructor")
 	}
 	return &Struct{
 		constructor: constructor,
-		osd:         *d,
+		osd:         *osd,
 	}
 }
 
@@ -149,6 +149,13 @@ func (s *Struct) ToStringDict(d starlark.StringDict) {
 	for i := 0; i < s.osd.Len(); i++ {
 		k, v := s.osd.KeyIndex(i)
 		d[k] = v
+	}
+}
+
+func (s *Struct) ToOrderedStringDict(osd *starext.OrderedStringDict) {
+	for i := 0; i < s.osd.Len(); i++ {
+		k, v := s.osd.KeyIndex(i)
+		osd.Insert(k, v)
 	}
 }
 
@@ -304,3 +311,6 @@ func (s *Struct) SetField(name string, value starlark.Value) error {
 	}
 	return nil
 }
+
+func (s *Struct) Len() int                                { return s.osd.Len() }
+func (s *Struct) KeyIndex(i int) (string, starlark.Value) { return s.osd.KeyIndex(i) }

@@ -11,6 +11,7 @@ import (
 	"github.com/emcfarlane/larking/starlib/starext"
 	"github.com/emcfarlane/larking/starlib/starlarkstruct"
 	"go.starlark.net/starlark"
+	"go.starlark.net/syntax"
 )
 
 func NewAttrModule() *starlarkstruct.Module {
@@ -22,10 +23,10 @@ func NewAttrModule() *starlarkstruct.Module {
 			"int_list": starext.MakeBuiltin("attr.int_list", attrIntList),
 			"label":    starext.MakeBuiltin("attr.label", attrLabel),
 			//TODO:"label_keyed_string_dict": starext.MakeBuiltin("attr.label_keyed_string_dict", attrLabelKeyedStringDict),
-			"label_list":  starext.MakeBuiltin("attr.label_list", attrLabelList),
-			"output":      starext.MakeBuiltin("attr.output", attrOutput),
-			"output_list": starext.MakeBuiltin("attr.output_list", attrOutputList),
-			"string":      starext.MakeBuiltin("attr.string", attrString),
+			"label_list": starext.MakeBuiltin("attr.label_list", attrLabelList),
+			//"output":      starext.MakeBuiltin("attr.output", attrOutput),
+			//"output_list": starext.MakeBuiltin("attr.output_list", attrOutputList),
+			"string": starext.MakeBuiltin("attr.string", attrString),
 			//TODO:"string_dict":             starext.MakeBuiltin("attr.string_dict", attrStringDict),
 			"string_list": starext.MakeBuiltin("attr.string_list", attrStringList),
 			//TODO:"string_list_dict":        starext.MakeBuiltin("attr.string_list_dict", attrStringListDict),
@@ -50,7 +51,7 @@ const (
 	AttrTypeStringListDict       AttrType = "attr.string_list_dict"
 	AttrTypeResolver             AttrType = "attr.resolver"
 
-	Attrs starlark.String = "attrs" // starlarkstruct constructor
+	AttrArgsConstructor starlark.String = "attr.args" // starlarkstruct constructor
 )
 
 // Attr defines attributes to a rules attributes.
@@ -104,7 +105,25 @@ func (a *Attr) AttrType() AttrType   { return a.Typ }
 func (a *Attr) Freeze()              {} // immutable
 func (a *Attr) Truth() starlark.Bool { return true }
 func (a *Attr) Hash() (uint32, error) {
-	return 0, fmt.Errorf("unhashable type: %s", a.Type())
+	var x, mult uint32 = 0x345678, 1000003
+	for _, elem := range []starlark.Value{
+		starlark.String(a.Typ),
+		starlark.String(a.Def.String()), // TODO
+		starlark.String(a.Doc),
+		starlark.Bool(a.Executable),
+		starlark.Bool(a.Mandatory),
+		starlark.Bool(a.AllowEmpty),
+		starlark.String(fmt.Sprintf("%v", a.AllowFiles)),
+		starlark.String(fmt.Sprintf("%v", a.Values)),
+	} {
+		y, err := elem.Hash()
+		if err != nil {
+			return 0, err
+		}
+		x = x ^ y*mult
+		mult += 82520
+	}
+	return x, nil
 }
 
 func (a *Attr) IsValidType(value starlark.Value) bool {
@@ -118,6 +137,7 @@ func (a *Attr) IsValidType(value starlark.Value) bool {
 		_, ok = (value).(*starlark.List)
 	case AttrTypeLabel:
 		_, ok = (value).(*Label)
+		fmt.Printf("label: %T\n", value)
 	//case attrTypeLabelKeyedStringDict:
 	case AttrTypeLabelList:
 		list, lok := (value).(*starlark.List)
@@ -144,6 +164,70 @@ func (a *Attr) IsValidType(value starlark.Value) bool {
 		panic(fmt.Sprintf("unhandled type: %s", a.Typ))
 	}
 	return ok
+}
+
+func attrEqual(x, y *Attr, depth int) (bool, error) {
+	if ok := (x.Typ == y.Typ &&
+		x.Def == y.Def &&
+		x.Executable == y.Executable &&
+		x.Mandatory == y.Mandatory &&
+		x.AllowEmpty == y.AllowEmpty); !ok {
+		return ok, nil
+	}
+
+	if ok, err := starlark.EqualDepth(x.Def, y.Def, depth-1); !ok || err != nil {
+		return ok, err
+	}
+
+	switch x := x.Values.(type) {
+	case []string:
+		y, ok := y.Values.([]string)
+		if !ok {
+			return false, nil
+		}
+		if len(x) != len(y) {
+			return false, nil
+		}
+		for i, n := 0, len(x); i < n; i++ {
+			if x[i] != y[i] {
+				return false, nil
+			}
+		}
+
+	case []int:
+		y, ok := y.Values.([]int)
+		if !ok {
+			return false, nil
+		}
+		if len(x) != len(y) {
+			return false, nil
+		}
+		for i, n := 0, len(x); i < n; i++ {
+			if x[i] != y[i] {
+				return false, nil
+			}
+		}
+	case nil:
+		if ok := x == y.Values; !ok {
+			return ok, nil
+		}
+	default:
+		return false, nil
+	}
+	return true, nil
+}
+
+func (x *Attr) CompareSameType(op syntax.Token, y_ starlark.Value, depth int) (bool, error) {
+	y := y_.(*Attr)
+	switch op {
+	case syntax.EQL:
+		return attrEqual(x, y, depth)
+	case syntax.NEQ:
+		eq, err := attrEqual(x, y, depth)
+		return !eq, err
+	default:
+		return false, fmt.Errorf("%s %s %s not implemented", x.Type(), op, y.Type())
+	}
 }
 
 // Attribute attr.bool(default=False, doc='', mandatory=False)
@@ -297,9 +381,14 @@ func attrLabel(thread *starlark.Thread, fnname string, args starlark.Tuple, kwar
 		return nil, err
 	}
 
+	var defValue starlark.Value = starlark.None
+	if len(def) > 0 {
+		defValue = def
+	}
+
 	return &Attr{
 		Typ:        AttrTypeLabel,
-		Def:        def,
+		Def:        defValue,
 		Doc:        doc,
 		Mandatory:  mandatory,
 		Values:     vals,
@@ -323,7 +412,7 @@ func attrLabelList(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 		return nil, err
 	}
 
-	// TODO: default checks?
+	var defValue starlark.Value = starlark.None
 	if def != nil {
 		iter := def.Iterate()
 		var x starlark.Value
@@ -333,6 +422,7 @@ func attrLabelList(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 			}
 		}
 		iter.Done()
+		defValue = def
 	}
 
 	af, err := parseAllowFiles(allowFiles)
@@ -342,8 +432,8 @@ func attrLabelList(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 
 	return &Attr{
 		Typ:        AttrTypeLabelList,
-		Def:        def,
 		Doc:        doc,
+		Def:        defValue,
 		Mandatory:  mandatory,
 		AllowEmpty: allowEmpty,
 		AllowFiles: af,
@@ -465,57 +555,189 @@ func attrStringList(thread *starlark.Thread, fnname string, args starlark.Tuple,
 	}, nil
 }
 
-type AttrFields struct {
-	m map[string]*Attr
+// Attrs -> AttrArgs
+type Attrs struct {
+	osd    starext.OrderedStringDict
+	frozen bool
 }
 
-func (afs AttrFields) MakeAttrs(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	osd, err := afs.buildAttrs(thread, fnname, args, kwargs)
-	if err != nil {
+func (a *Attrs) String() string {
+	buf := new(strings.Builder)
+	buf.WriteString("attrs")
+	buf.WriteByte('(')
+	for i := 0; i < a.osd.Len(); i++ {
+		k, v := a.osd.KeyIndex(i)
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(k)
+		buf.WriteString(" = ")
+		buf.WriteString(v.String())
+	}
+	buf.WriteByte(')')
+	return buf.String()
+}
+func (a *Attrs) Truth() starlark.Bool { return true } // even when empty
+func (a *Attrs) Type() string         { return "attrs" }
+func (a *Attrs) Hash() (uint32, error) {
+	// Same algorithm as struct...
+	var x, m uint32 = 8731, 9839
+	for i, n := 0, a.osd.Len(); i < n; i++ {
+		k, v := a.osd.KeyIndex(i)
+		namehash, _ := starlark.String(k).Hash()
+		x = x ^ 3*namehash
+		y, err := v.Hash()
+		if err != nil {
+			return 0, err
+		}
+		x = x ^ y*m
+		m += 7349
+	}
+	return x, nil
+}
+func (a *Attrs) Freeze() {
+	if a.frozen {
+		return
+	}
+	a.frozen = true
+	for i, n := 0, a.osd.Len(); i < n; i++ {
+		a.osd.Index(i).Freeze()
+	}
+}
+
+// checkMutable reports an error if the list should not be mutated.
+// verb+" list" should describe the operation.
+func (a *Attrs) checkMutable(verb string) error {
+	if a.frozen {
+		return fmt.Errorf("cannot %s frozen attrs", verb)
+	}
+	return nil
+}
+
+func (a *Attrs) Attr(name string) (starlark.Value, error) {
+	if v, ok := a.osd.Get(name); ok {
+		return v, nil
+	}
+	return nil, starlark.NoSuchAttrError(
+		fmt.Sprintf("attrs has no .%s attribute", name))
+}
+func (a *Attrs) AttrNames() []string { return a.osd.Keys() }
+
+func attrsEqual(x, y *Attrs, depth int) (bool, error) {
+	if x.Len() != y.Len() {
+		return false, nil
+	}
+	for i, n := 0, x.Len(); i < n; i++ {
+		x, y := x.Index(i).(*Attr), y.Index(i).(*Attr)
+		eq, err := attrEqual(x, y, depth-1)
+		if !eq || err != nil {
+			return eq, err
+		}
+	}
+	return true, nil
+}
+
+func (x *Attrs) CompareSameType(op syntax.Token, y_ starlark.Value, depth int) (bool, error) {
+	y := y_.(*Attrs)
+	switch op {
+	case syntax.EQL:
+		return attrsEqual(x, y, depth)
+	case syntax.NEQ:
+		eq, err := attrsEqual(x, y, depth)
+		return !eq, err
+	default:
+		return false, fmt.Errorf("%s %s %s not implemented", x.Type(), op, y.Type())
+	}
+}
+func (a *Attrs) Index(i int) starlark.Value { return a.osd.Index(i) }
+func (a *Attrs) Len() int                   { return a.osd.Len() }
+
+func MakeAttrs(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if err := starlark.UnpackArgs(fnname, args, nil); err != nil {
 		return nil, err
 	}
 
-	attrs := starlarkstruct.FromOrderedStringDict(Attrs, osd)
-	return attrs, nil
+	osd := starext.NewOrderedStringDict(len(kwargs))
+	for _, kwarg := range kwargs {
+		name, _ := starlark.AsString(kwarg[0])
+		a, ok := kwarg[1].(*Attr)
+		if !ok {
+			return nil, fmt.Errorf("unexpected attribute value type: %T", kwarg[1])
+		}
+		osd.Insert(name, a)
+	}
+	osd.Sort()
+
+	return &Attrs{
+		osd:    *osd,
+		frozen: false,
+	}, nil
 }
 
-func (afs AttrFields) buildAttrs(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (*starext.OrderedStringDict, error) {
+func (a *Attrs) Get(name string) (*Attr, bool) {
+	attr, ok := a.osd.Get(name)
+	if !ok {
+		return nil, ok
+	}
+	return attr.(*Attr), ok
+}
+
+func (a *Attrs) MakeArgs(source *Label, kwargs []starlark.Tuple) (*AttrArgs, error) {
 	attrSeen := make(map[string]bool)
 	attrArgs := starext.NewOrderedStringDict(len(kwargs))
 	for _, kwarg := range kwargs {
 		name := string(kwarg[0].(starlark.String))
 		value := kwarg[1]
 
-		attr, ok := afs.m[name]
+		attr, ok := a.Get(name)
 		if !ok {
 			return nil, fmt.Errorf("unexpected attribute: %s", name)
 		}
 
-		if err := asAttrValue(thread, name, attr, &value); err != nil {
+		value, err := asAttrValue(source, name, attr, value)
+		if err != nil {
 			return nil, err
 		}
-
 		attrArgs.Insert(name, value)
 		attrSeen[name] = true
 	}
 
 	// Mandatory checks
-	for name, a := range afs.m {
+	for i, n := 0, a.osd.Len(); i < n; i++ {
+		name, x := a.osd.KeyIndex(i)
+		attr := x.(*Attr)
 		if !attrSeen[name] {
-			if a.Mandatory {
+			if attr.Mandatory {
 				return nil, fmt.Errorf("missing mandatory attribute: %s", name)
 			}
-			attrArgs.Insert(name, a.Def)
+			attrArgs.Insert(name, attr.Def)
 		}
 	}
 	attrArgs.Sort()
-	return attrArgs, nil
+	s := starlarkstruct.OrderedStringDictAsStruct(AttrArgsConstructor, attrArgs)
+	return &AttrArgs{
+		attrs:  a,
+		Struct: *s,
+	}, nil
 }
 
-func (afs AttrFields) Validate(thread *starlark.Thread, value starlark.Value) error {
-	s, ok := value.(*starlarkstruct.Struct)
+func (a *Attrs) Name() string { return "attrargs" }
+func (a *Attrs) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if err := starlark.UnpackArgs("attrs", args, nil); err != nil {
+		return nil, err
+	}
+	source, err := ParseLabel(thread.Name)
+	if err != nil {
+		fmt.Println("Here?", err)
+		return nil, err
+	}
+	return a.MakeArgs(source, kwargs)
+}
+
+func (a *Attrs) checkArgs(thread *starlark.Thread, value starlark.Value) (*AttrArgs, error) {
+	s, ok := value.(*AttrArgs)
 	if !ok {
-		return fmt.Errorf("expected struct, got %v", value)
+		return nil, fmt.Errorf("expected %s, got %v", AttrArgsConstructor, value.Type())
 	}
 
 	attrSeen := make(map[string]bool)
@@ -524,51 +746,54 @@ func (afs AttrFields) Validate(thread *starlark.Thread, value starlark.Value) er
 	for _, name := range names {
 		value, err := s.Attr(name)
 		if value == nil || err != nil {
-			return err
+			return nil, err
 		}
 
-		attr, ok := afs.m[name]
+		x, ok := a.osd.Get(name)
 		if !ok {
-			return fmt.Errorf("unexpected attribute: %s", name)
+			return nil, fmt.Errorf("unexpected attribute: %s", name)
 		}
+		attr := x.(*Attr)
 		if ok := attr.IsValidType(value); !ok {
-			return fmt.Errorf("invalid attr %v: %v", attr, value)
+			return nil, fmt.Errorf("invalid attr %v: %v", attr, value)
 		}
 		attrSeen[name] = true
 	}
 
 	// Mandatory checks
-	for name, a := range afs.m {
+	for i, n := 0, a.osd.Len(); i < n; i++ {
+		name, x := a.osd.KeyIndex(i)
+		attr := x.(*Attr)
 		if !attrSeen[name] {
-			if a.Mandatory {
-				return fmt.Errorf("missing mandatory attribute: %s", name)
+			if attr.Mandatory {
+				return nil, fmt.Errorf("missing mandatory attribute: %s", name)
 			}
 		}
 	}
-	return nil
+	return s, nil
 }
 
 func asAttrValue(
-	thread *starlark.Thread,
+	source *Label,
 	name string,
 	attr *Attr,
-	value *starlark.Value,
-) error {
-	errField := func() error {
+	value starlark.Value,
+) (starlark.Value, error) {
+	errField := func(msg string) error {
 		return fmt.Errorf(
-			"invalid field %s(%s): %v", name, attr.Typ, value,
+			"%s %s(%s): %v", msg, name, attr.Typ, value,
 		)
 	}
 	errError := func(err error) error {
 		return fmt.Errorf(
-			"invalid field %s(%s): %v: %v",
+			"invalid %s(%s): %v: %v",
 			name, attr.Typ, value, err,
 		)
 	}
 	toLabel := func(v starlark.Value) (*Label, error) {
 		switch v := (v).(type) {
 		case starlark.String:
-			l, err := ParseLabel(thread.Name, string(v))
+			l, err := source.Parse(string(v))
 			if err != nil {
 				return nil, errError(err)
 			}
@@ -576,44 +801,114 @@ func asAttrValue(
 		case *Label:
 			return v, nil
 		default:
-			return nil, errField()
+			return nil, errField("invalid")
 		}
 	}
 
-	if attr.IsValidType(*value) {
-		return nil
+	if attr.IsValidType(value) {
+		return value, nil
 	}
 
 	switch attr.Typ {
 	case AttrTypeLabel:
-		l, err := toLabel(*value)
-		if err != nil {
-			return err
+		if value == starlark.None {
+			return value, nil
 		}
-		*value = l
-		return nil
+
+		l, err := toLabel(value)
+		if err != nil {
+			return nil, err
+		}
+		return l, nil
 	//case attrTypeLabelKeyedStringDict:
 	case AttrTypeLabelList:
-		fmt.Println("HERE?", *value)
-		list, ok := (*value).(*starlark.List)
+		if value == starlark.None {
+			return value, nil
+		}
+
+		list, ok := (value).(*starlark.List)
 		if !ok {
-			return errField()
+			return nil, errField("type")
 		}
 
 		var elems []starlark.Value
 		for i, n := 0, list.Len(); i < n; i++ {
 			val := list.Index(i)
-			fmt.Println("OK?", val)
 
 			l, err := toLabel(val)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			elems = append(elems, l)
 		}
-		*value = starlark.NewList(elems)
-		return nil
+		return starlark.NewList(elems), nil
 	default:
-		return errField()
+		return nil, errField("undefined")
 	}
 }
+
+type AttrArgs struct {
+	attrs *Attrs
+	starlarkstruct.Struct
+}
+
+func attrArgsEqual(x, y *AttrArgs, depth int) (bool, error) {
+	if ok, err := attrsEqual(x.attrs, y.attrs, depth-1); !ok || err != nil {
+		return ok, err
+	}
+	return x.Struct.CompareSameType(syntax.EQL, &y.Struct, depth-1)
+}
+
+func (x *AttrArgs) CompareSameType(op syntax.Token, y_ starlark.Value, depth int) (bool, error) {
+	y := y_.(*AttrArgs)
+	switch op {
+	case syntax.EQL:
+		return attrArgsEqual(x, y, depth)
+	case syntax.NEQ:
+		eq, err := attrArgsEqual(x, y, depth)
+		return !eq, err
+	default:
+		return false, fmt.Errorf("%s %s %s not implemented", x.Type(), op, y.Type())
+	}
+}
+
+func (a *AttrArgs) Attrs() *Attrs { return a.attrs }
+
+func (a *AttrArgs) Clone() *AttrArgs {
+	osd := starext.NewOrderedStringDict(a.attrs.Len())
+	a.ToOrderedStringDict(osd)
+	s := starlarkstruct.OrderedStringDictAsStruct(AttrArgsConstructor, osd)
+	return &AttrArgs{
+		attrs:  a.attrs,
+		Struct: *s,
+	}
+}
+
+var DefaultInfo = func() *Attrs {
+	thread := &starlark.Thread{Name: "memory://./?"}
+	fnname := "makeDefaultInfo"
+
+	filesValue, err := attrLabelList(thread, fnname, nil, []starlark.Tuple{
+		{starlark.String("doc"), starlark.String("A list of files.")},
+	})
+	if err != nil {
+		panic(err)
+	}
+	executableValue, err := attrLabel(thread, fnname, nil, []starlark.Tuple{
+		{starlark.String("doc"), starlark.String("Executable, if runnable.")},
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	attrs, err := MakeAttrs(thread, fnname, nil, []starlark.Tuple{
+		{starlark.String("files"), filesValue},
+		{starlark.String("executable"), executableValue},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return attrs.(*Attrs)
+}()
+
+var _ (starlark.Callable) = DefaultInfo
