@@ -8,7 +8,6 @@ package starlarkrule
 
 import (
 	"container/heap"
-	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -113,8 +112,8 @@ type Builder struct {
 	//loader    *starlib.Loader
 	//resources *starlarkthread.ResourceStore // resources
 
-	dir    *Label // directory
-	tmpDir string // temporary directory TODO: caching tmp dir?
+	dir *Label // directory
+	//tmpDir string // temporary directory TODO: caching tmp dir?
 
 	actionCache map[string]*Action // a cache of already-constructed actions
 	targetCache map[string]*Target // a cache of created targets
@@ -389,7 +388,9 @@ func (b *Builder) createAction(thread *starlark.Thread, label *Label) (*Action, 
 						)
 					}
 					attrs := args.Attrs()
-					provides.Delete(attrs)
+					if _, err := provides.Delete(attrs); err != nil {
+						panic(err)
+					}
 					results[i] = args
 				}
 
@@ -423,42 +424,42 @@ func (b *Builder) createAction(thread *starlark.Thread, label *Label) (*Action, 
 	})
 }
 
-// TODO: caching with tmp dir.
-func (b *Builder) init(ctx context.Context) error {
-	//tmpDir, err := ioutil.TempDir("", "laze")
-	//if err != nil {
-	//	return err
-	//}
-	//b.tmpDir = tmpDir
-	return nil
-}
-
-func (b *Builder) cleanup() error {
-	if b.tmpDir != "" {
-		fmt.Println("cleanup", b.tmpDir)
-		// return os.RemoveAll(b.tmpDir)
-	}
-	return nil
-	//if b.WorkDir != "" {
-	//	start := time.Now()
-	//	for {
-	//		err := os.RemoveAll(b.WorkDir)
-	//		if err == nil {
-	//			break
-	//		}
-	//		// On some configurations of Windows, directories containing executable
-	//		// files may be locked for a while after the executable exits (perhaps
-	//		// due to antivirus scans?). It's probably worth a little extra latency
-	//		// on exit to avoid filling up the user's temporary directory with leaked
-	//		// files. (See golang.org/issue/30789.)
-	//		if runtime.GOOS != "windows" || time.Since(start) >= 500*time.Millisecond {
-	//			return fmt.Errorf("failed to remove work dir: %v", err)
-	//		}
-	//		time.Sleep(5 * time.Millisecond)
-	//	}
-	//}
-	//return nil
-}
+//// TODO: caching with tmp dir.
+//func (b *Builder) init(ctx context.Context) error {
+//	//tmpDir, err := ioutil.TempDir("", "laze")
+//	//if err != nil {
+//	//	return err
+//	//}
+//	//b.tmpDir = tmpDir
+//	return nil
+//}
+//
+//func (b *Builder) cleanup() error {
+//	if b.tmpDir != "" {
+//		fmt.Println("cleanup", b.tmpDir)
+//		// return os.RemoveAll(b.tmpDir)
+//	}
+//	return nil
+//	//if b.WorkDir != "" {
+//	//	start := time.Now()
+//	//	for {
+//	//		err := os.RemoveAll(b.WorkDir)
+//	//		if err == nil {
+//	//			break
+//	//		}
+//	//		// On some configurations of Windows, directories containing executable
+//	//		// files may be locked for a while after the executable exits (perhaps
+//	//		// due to antivirus scans?). It's probably worth a little extra latency
+//	//		// on exit to avoid filling up the user's temporary directory with leaked
+//	//		// files. (See golang.org/issue/30789.)
+//	//		if runtime.GOOS != "windows" || time.Since(start) >= 500*time.Millisecond {
+//	//			return fmt.Errorf("failed to remove work dir: %v", err)
+//	//		}
+//	//		time.Sleep(5 * time.Millisecond)
+//	//	}
+//	//}
+//	//return nil
+//}
 
 func (b *Builder) Build(thread *starlark.Thread, label *Label) (*Action, error) {
 	setBuilder(thread, b)

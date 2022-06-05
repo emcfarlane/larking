@@ -13,11 +13,6 @@ import (
 
 func TestRun(t *testing.T) {
 
-	type result struct {
-		value starlark.Value
-		error error
-	}
-
 	src := "file://./?metadata=skip"
 	makeLabel := func(name string) *starlarkrule.Label {
 		l, err := starlarkrule.ParseRelativeLabel(src, name)

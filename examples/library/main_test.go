@@ -11,7 +11,7 @@ import (
 )
 
 func TestScripts(t *testing.T) {
-	db, err := sql.Open("sqlite", "sqlite:file::memory:?cache=shared")
+	db, err := sql.Open("sqlite", "file::memory:?cache=shared")
 	if err != nil {
 		t.Fatal(err)
 	}

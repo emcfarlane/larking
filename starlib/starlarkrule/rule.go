@@ -336,10 +336,10 @@ func (r *Rule) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwargs
 
 // Target is defined by a call to a rule.
 type Target struct {
-	label  *Label
-	rule   *Rule
-	args   AttrArgs //starext.OrderedStringDict // attribute args
-	frozen bool
+	label *Label
+	rule  *Rule
+	args  AttrArgs //starext.OrderedStringDict // attribute args
+	//frozen bool
 }
 
 func NewTarget(
@@ -378,10 +378,10 @@ func (t *Target) Clone() *Target {
 	}
 }
 
-// TODO?
-func (t *Target) Hash() (uint32, error) {
-	return 0, fmt.Errorf("unhashable type: %s", t.Type())
-}
+//// TODO?
+//func (t *Target) Hash() (uint32, error) {
+//	return 0, fmt.Errorf("unhashable type: %s", t.Type())
+//}
 
 func (t *Target) String() string {
 	var buf strings.Builder
@@ -425,7 +425,9 @@ func (t *Target) SetQuery(values url.Values) error {
 			}
 			s := vals[0]
 			// TODO: attr validation?
-			t.args.SetField(key, starlark.String(s))
+			if err := t.args.SetField(key, starlark.String(s)); err != nil {
+				panic(err)
+			}
 
 		default:
 			panic("TODO: query parsing")
@@ -436,50 +438,3 @@ func (t *Target) SetQuery(values url.Values) error {
 
 func (t *Target) Args() *AttrArgs { return &t.args }
 func (t *Target) Rule() *Rule     { return t.rule }
-
-/*type Provider struct {
-	// TODO
-}
-
-func MakeProvider(_ *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var (
-		attrs = new(starlark.Dict)
-	)
-	if err := starlark.UnpackArgs(
-		fnname, args, kwargs,
-		"impl", &impl, "ins?", &ins, "outs?", &outs,
-	); err != nil {
-		return nil, err
-	}
-
-	// type checks
-	if impl.NumParams() != 1 {
-		return nil, fmt.Errorf("unexpected number of params: %d", impl.NumParams())
-	}
-
-	inAttrs, err := dictToAttrs(ins)
-	if err != nil {
-		return nil, err
-	}
-	inAttrs["name"] = &Attr{
-		Typ:       AttrTypeString,
-		Def:       starlark.String(""),
-		Doc:       "Name of rule",
-		Mandatory: true,
-	}
-
-	outAttrs, err := dictToAttrs(outs)
-	if err != nil {
-		return nil, err
-	}
-
-	// key=dir:target.tar.gz
-	// key=dir/target.tar.gz
-
-	return &Rule{
-		impl: impl,
-		ins:  inAttrs,
-		outs: outAttrs,
-	}, nil
-
-}*/

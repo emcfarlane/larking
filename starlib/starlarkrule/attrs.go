@@ -25,9 +25,7 @@ func NewAttrModule() *starlarkstruct.Module {
 			"label":    starext.MakeBuiltin("attr.label", attrLabel),
 			//TODO:"label_keyed_string_dict": starext.MakeBuiltin("attr.label_keyed_string_dict", attrLabelKeyedStringDict),
 			"label_list": starext.MakeBuiltin("attr.label_list", attrLabelList),
-			//"output":      starext.MakeBuiltin("attr.output", attrOutput),
-			//"output_list": starext.MakeBuiltin("attr.output_list", attrOutputList),
-			"string": starext.MakeBuiltin("attr.string", attrString),
+			"string":     starext.MakeBuiltin("attr.string", attrString),
 			//TODO:"string_dict":             starext.MakeBuiltin("attr.string_dict", attrStringDict),
 			"string_list": starext.MakeBuiltin("attr.string_list", attrStringList),
 			//TODO:"string_list_dict":        starext.MakeBuiltin("attr.string_list_dict", attrStringListDict),
@@ -328,7 +326,7 @@ func attrIntList(thread *starlark.Thread, fnname string, args starlark.Tuple, kw
 
 type allowedFiles struct {
 	allow bool
-	types []string
+	types []string // path.Match syntax?
 }
 
 func parseAllowFiles(allowFiles starlark.Value) (allowedFiles, error) {
@@ -337,6 +335,17 @@ func parseAllowFiles(allowFiles starlark.Value) (allowedFiles, error) {
 		return allowedFiles{allow: false}, nil
 	case starlark.Bool:
 		return allowedFiles{allow: bool(v)}, nil
+	case *starlark.List:
+		types := make([]string, v.Len())
+		for i, n := 0, v.Len(); i < n; i++ {
+			x := v.Index(i)
+			v, ok := starlark.AsString(x)
+			if !ok {
+				return allowedFiles{}, fmt.Errorf("unexpected type: %v", x.Type())
+			}
+			types[i] = string(v)
+		}
+		return allowedFiles{allow: true, types: types}, nil
 	default:
 		panic(fmt.Sprintf("TODO: handle allow_files type: %T", allowFiles))
 	}
@@ -438,49 +447,6 @@ func attrLabelList(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 		Mandatory:  mandatory,
 		AllowEmpty: allowEmpty,
 		AllowFiles: af,
-	}, nil
-}
-
-// Attribute attr.output(doc='', mandatory=False)
-func attrOutput(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var (
-		doc       string
-		mandatory bool
-	)
-
-	if err := starlark.UnpackArgs(
-		fnname, args, kwargs,
-		"doc?", &doc, "mandatory?", &mandatory,
-	); err != nil {
-		return nil, err
-	}
-
-	return &Attr{
-		Typ:       AttrTypeOutput,
-		Doc:       doc,
-		Mandatory: mandatory,
-	}, nil
-}
-
-// Attribute attr.output_list(allow_empty=True, *, doc='', mandatory=False)
-func attrOutputList(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var (
-		doc        string
-		mandatory  bool
-		allowEmpty bool
-	)
-	if err := starlark.UnpackArgs(
-		fnname, args, kwargs,
-		"doc?", &doc, "mandatory?", &mandatory, "allowEmpty?", &allowEmpty,
-	); err != nil {
-		return nil, err
-	}
-
-	return &Attr{
-		Typ:        AttrTypeOutputList,
-		Doc:        doc,
-		Mandatory:  mandatory,
-		AllowEmpty: allowEmpty,
 	}, nil
 }
 
@@ -733,45 +699,6 @@ func (a *Attrs) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwarg
 		return nil, err
 	}
 	return a.MakeArgs(source, kwargs)
-}
-
-func (a *Attrs) checkArgs(thread *starlark.Thread, value starlark.Value) (*AttrArgs, error) {
-	s, ok := value.(*AttrArgs)
-	if !ok {
-		return nil, fmt.Errorf("expected %s, got %v", AttrArgsConstructor, value.Type())
-	}
-
-	attrSeen := make(map[string]bool)
-	names := s.AttrNames()
-
-	for _, name := range names {
-		value, err := s.Attr(name)
-		if value == nil || err != nil {
-			return nil, err
-		}
-
-		x, ok := a.osd.Get(name)
-		if !ok {
-			return nil, fmt.Errorf("unexpected attribute: %s", name)
-		}
-		attr := x.(*Attr)
-		if ok := attr.IsValidType(value); !ok {
-			return nil, fmt.Errorf("invalid attr %v: %v", attr, value)
-		}
-		attrSeen[name] = true
-	}
-
-	// Mandatory checks
-	for i, n := 0, a.osd.Len(); i < n; i++ {
-		name, x := a.osd.KeyIndex(i)
-		attr := x.(*Attr)
-		if !attrSeen[name] {
-			if attr.Mandatory {
-				return nil, fmt.Errorf("missing mandatory attribute: %s", name)
-			}
-		}
-	}
-	return s, nil
 }
 
 func asAttrValue(
