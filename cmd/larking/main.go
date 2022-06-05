@@ -16,8 +16,8 @@ import (
 	_ "github.com/emcfarlane/larking/cmd/internal/bindings"
 	"github.com/emcfarlane/larking/control"
 	"github.com/emcfarlane/larking/health"
-	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"
+	"github.com/emcfarlane/larking/starlib/starlarkthread"
 	"github.com/emcfarlane/larking/worker"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
@@ -97,7 +97,8 @@ func run(ctx context.Context) (err error) {
 	defer healthServer.Shutdown()
 	mux.RegisterService(&healthpb.Health_ServiceDesc, healthServer)
 
-	loader := starlib.NewLoader()
+	globals := starlib.NewGlobals()
+	loader := starlib.NewLoader(globals)
 	defer loader.Close()
 
 	var (

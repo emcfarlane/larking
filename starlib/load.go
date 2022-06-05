@@ -7,66 +7,99 @@ package starlib
 import (
 	"bytes"
 	"context"
+	"embed"
 	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"runtime/debug"
 	"sync"
 
-	"github.com/emcfarlane/larking/starlarkblob"
-	"github.com/emcfarlane/larking/starlarkdocstore"
-	"github.com/emcfarlane/larking/starlarkerrors"
-	"github.com/emcfarlane/larking/starlarkhttp"
-	"github.com/emcfarlane/larking/starlarkopenapi"
-	"github.com/emcfarlane/larking/starlarkproto"
-	"github.com/emcfarlane/larking/starlarkpubsub"
-	"github.com/emcfarlane/larking/starlarkruntimevar"
-	"github.com/emcfarlane/larking/starlarksql"
-	"github.com/emcfarlane/larking/starlarkstruct"
-	"github.com/emcfarlane/larking/starlarkthread"
+	"github.com/emcfarlane/larking/starlib/encoding/starlarkproto"
+	"github.com/emcfarlane/larking/starlib/net/starlarkhttp"
+	"github.com/emcfarlane/larking/starlib/net/starlarkopenapi"
+	"github.com/emcfarlane/larking/starlib/starext"
+	"github.com/go-logr/logr"
+
+	//"github.com/emcfarlane/larking/starlib/net/starlarkgrpc"
+	"github.com/emcfarlane/larking/starlib/starlarkblob"
+	"github.com/emcfarlane/larking/starlib/starlarkdocstore"
+	"github.com/emcfarlane/larking/starlib/starlarkerrors"
+	"github.com/emcfarlane/larking/starlib/starlarkpubsub"
+	"github.com/emcfarlane/larking/starlib/starlarkrule"
+	"github.com/emcfarlane/larking/starlib/starlarkruntimevar"
+	"github.com/emcfarlane/larking/starlib/starlarksql"
+	"github.com/emcfarlane/larking/starlib/starlarkstruct"
+	"github.com/emcfarlane/larking/starlib/starlarkthread"
 	starlarkjson "go.starlark.net/lib/json"
 	starlarkmath "go.starlark.net/lib/math"
 	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
-	"gocloud.dev/blob"
 )
 
-var stdLib = func() map[string]starlark.StringDict {
-	stdLib := make(map[string]starlark.StringDict)
-	modules := []*starlarkstruct.Module{
-		// Native modules
-		starlarkjson.Module,
-		starlarkmath.Module,
-		starlarktime.Module,
+// content holds our static web server content.
+//go:embed rules/*
+var local embed.FS
 
-		starlarkblob.NewModule(),
-		starlarkdocstore.NewModule(),
-		starlarkerrors.NewModule(),
-		starlarkhttp.NewModule(),
-		starlarkopenapi.NewModule(),
-		starlarkproto.NewModule(),
-		starlarkpubsub.NewModule(),
-		starlarkruntimevar.NewModule(),
-		starlarksql.NewModule(),
-
-		// TODO: starlarkgrpc...
+func makeDict(module *starlarkstruct.Module) starlark.StringDict {
+	dict := make(starlark.StringDict, len(module.Members)+1)
+	for key, val := range module.Members {
+		dict[key] = val
 	}
-	for _, module := range modules {
-		dict := make(starlark.StringDict, len(module.Members)+1)
-		for key, val := range module.Members {
-			dict[key] = val
-		}
+	// Add module if no module name.
+	if _, ok := dict[module.Name]; !ok {
 		dict[module.Name] = module
-		stdLib[module.Name+".star"] = dict
 	}
-	return stdLib
-}()
+	return dict
+}
 
-func StdLoad(_ *starlark.Thread, module string) (starlark.StringDict, error) {
+var (
+	stdLibMu sync.Mutex
+	stdLib   = map[string]starlark.StringDict{
+		//"archive/container.star":           makeDict(starlarkcontainer.NewModule()),
+		//"archive/tar.star":           makeDict(starlarktar.NewModule()),
+		//"archive/zip.star":           makeDict(starlarkzip.NewModule()),
+
+		"blob.star":           makeDict(starlarkblob.NewModule()),
+		"docstore.star":       makeDict(starlarkdocstore.NewModule()),
+		"encoding/json.star":  makeDict(starlarkjson.Module), // starlark
+		"encoding/proto.star": makeDict(starlarkproto.NewModule()),
+		"errors.star":         makeDict(starlarkerrors.NewModule()),
+		"math.star":           makeDict(starlarkmath.Module), // starlark
+		"net/http.star":       makeDict(starlarkhttp.NewModule()),
+		"net/openapi.star":    makeDict(starlarkopenapi.NewModule()),
+		"pubsub.star":         makeDict(starlarkpubsub.NewModule()),
+		"runtimevar.star":     makeDict(starlarkruntimevar.NewModule()),
+		"sql.star":            makeDict(starlarksql.NewModule()),
+		"time.star":           makeDict(starlarktime.Module), // starlark
+		"thread.star":         makeDict(starlarkthread.NewModule()),
+		"rule.star":           makeDict(starlarkrule.NewModule()),
+		//"net/grpc.star": makeDict(starlarkgrpc.NewModule()),
+	}
+)
+
+// StdLoad loads files from the standard library.
+func (l *Loader) StdLoad(thread *starlark.Thread, module string) (starlark.StringDict, error) {
+	stdLibMu.Lock()
 	if e, ok := stdLib[module]; ok {
+		stdLibMu.Unlock()
 		return e, nil
 	}
-	return nil, os.ErrNotExist
+	stdLibMu.Unlock()
+
+	// Load and eval the file.
+	src, err := local.ReadFile(module)
+	if err != nil {
+		return nil, err
+	}
+	v, err := starlark.ExecFile(thread, module, src, l.globals)
+	if err != nil {
+		return nil, fmt.Errorf("exec file: %v", err)
+	}
+
+	stdLibMu.Lock()
+	stdLib[module] = v // cache
+	stdLibMu.Unlock()
+	return v, nil
 }
 
 // call is an in-flight or completed load call
@@ -79,16 +112,22 @@ type call struct {
 	callers map[*starlark.Thread]bool
 }
 
+// Loader is a cloid.Blob backed loader. It uses thread.Name to figure out the
+// current bucket and module.
 type Loader struct {
-	mu   sync.Mutex       // protects m
-	m    map[string]*call // lazily initialized
-	bkts map[string]*blob.Bucket
+	starext.Blobs
 
-	//
+	mu sync.Mutex       // protects m
+	m  map[string]*call // lazily initialized
+
+	// Predeclared globals
+	globals starlark.StringDict
 }
 
-func NewLoader() *Loader {
-	return &Loader{}
+func NewLoader(globals starlark.StringDict) *Loader {
+	return &Loader{
+		globals: globals,
+	}
 }
 
 // errCycle indicates the load caused a cycle.
@@ -117,7 +156,14 @@ func newPanicError(v interface{}) error {
 	return &panicError{value: v, stack: stack}
 }
 
+// Load checks the standard library before loading from buckets.
 func (l *Loader) Load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
+	ctx := starlarkthread.GetContext(thread)
+	log := logr.FromContextOrDiscard(ctx)
+
+	log.Info("loading module", "module", module)
+	defer log.Info("finished loading", "module", module)
+
 	l.mu.Lock()
 	if l.m == nil {
 		l.m = make(map[string]*call)
@@ -155,43 +201,9 @@ func (l *Loader) Load(thread *starlark.Thread, module string) (starlark.StringDi
 	return c.val, c.err
 }
 
-func (l *Loader) loadBucket(ctx context.Context, bktURL string) (*blob.Bucket, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if bkt, ok := l.bkts[bktURL]; ok {
-		return bkt, nil
-	}
-
-	bkt, err := blob.OpenBucket(ctx, bktURL)
-	if err != nil {
-		return nil, err
-	}
-
-	if l.bkts == nil {
-		l.bkts = make(map[string]*blob.Bucket)
-	}
-	l.bkts[bktURL] = bkt
-	return bkt, nil
-}
-
-func (l *Loader) Close() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	var firstErr error
-	for _, bkt := range l.bkts {
-		if err := bkt.Close(); err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
-		}
-	}
-	return firstErr
-}
-
+// LoadSource fetches the source file in bytes from a bucket.
 func (l *Loader) LoadSource(ctx context.Context, bktURL string, key string) ([]byte, error) {
-	bkt, err := l.loadBucket(ctx, bktURL)
+	bkt, err := l.OpenBucket(ctx, bktURL)
 	if err != nil {
 		return nil, err
 	}
@@ -199,31 +211,34 @@ func (l *Loader) LoadSource(ctx context.Context, bktURL string, key string) ([]b
 }
 
 func (l *Loader) load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 
-	v, err := StdLoad(thread, module)
+	v, err := l.StdLoad(thread, module)
 	if err == nil {
 		return v, nil
 	}
-	if err != os.ErrNotExist {
+	if !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 
-	bktURL, key, err := resolveModuleURL(thread.Name, module)
+	label, err := starlarkrule.ParseRelativeLabel(thread.Name, module)
 	if err != nil {
 		return nil, err
 	}
+
+	bktURL := label.BucketURL()
+	key := label.Key()
 
 	src, err := l.LoadSource(ctx, bktURL, key)
 	if err != nil {
 		return nil, err
 	}
 
-	oldName, newName := thread.Name, bktURL
+	oldName, newName := thread.Name, label.String()
 	thread.Name = newName
 	defer func() { thread.Name = oldName }()
 
-	v, err = starlark.ExecFile(thread, key, src, nil)
+	v, err = starlark.ExecFile(thread, key, src, l.globals)
 	if err != nil {
 		return nil, err
 	}

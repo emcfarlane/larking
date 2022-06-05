@@ -25,8 +25,8 @@ import (
 	"github.com/emcfarlane/larking/apipb/workerpb"
 	_ "github.com/emcfarlane/larking/cmd/internal/bindings"
 	"github.com/emcfarlane/larking/control"
-	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"
+	"github.com/emcfarlane/larking/starlib/starlarkthread"
 	"github.com/emcfarlane/larking/worker"
 	"github.com/emcfarlane/starlarkassert"
 	"github.com/peterh/liner"
@@ -206,7 +206,7 @@ func printer() func(*starlark.Thread, string) {
 
 func local(ctx context.Context, line *liner.State, autocomplete bool) (err error) {
 	globals := starlib.NewGlobals()
-	loader := starlib.NewLoader()
+	loader := starlib.NewLoader(globals)
 	defer loader.Close()
 
 	thread := &starlark.Thread{
@@ -391,7 +391,7 @@ func exec(ctx context.Context, opts *Options) (err error) {
 	}
 
 	globals := starlib.NewGlobals()
-	loader := starlib.NewLoader()
+	loader := starlib.NewLoader(globals)
 	defer loader.Close()
 
 	thread := &starlark.Thread{
@@ -488,10 +488,10 @@ func test(ctx context.Context, pattern string) error {
 		return err // invalid pattern
 	}
 
-	loader := starlib.NewLoader()
+	globals := starlib.NewGlobals()
+	loader := starlib.NewLoader(globals)
 	defer loader.Close()
 
-	globals := starlib.NewGlobals()
 	runner := func(t testing.TB, thread *starlark.Thread) func() {
 		thread.Load = loader.Load
 

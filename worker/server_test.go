@@ -21,6 +21,7 @@ import (
 	"go.starlark.net/starlark"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
@@ -70,7 +71,10 @@ func TestAPIServer(t *testing.T) {
 	defer grpcServer.GracefulStop()
 
 	// Create the client.
-	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
+	conn, err := grpc.Dial(
+		lis.Addr().String(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
 		t.Fatalf("cannot connect to server: %v", err)
 	}

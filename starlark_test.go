@@ -6,15 +6,13 @@ import (
 	"net"
 	"testing"
 
-	"github.com/emcfarlane/larking/starlarkthread"
 	"github.com/emcfarlane/larking/starlib"
 	"github.com/emcfarlane/larking/testpb"
-	"github.com/emcfarlane/starlarkassert"
 	"github.com/google/go-cmp/cmp"
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkstruct"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -77,7 +75,10 @@ func TestStarlark(t *testing.T) {
 	t.Cleanup(gs.Stop)
 
 	// Create client.
-	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
+	conn, err := grpc.Dial(
+		lis.Addr().String(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
 		t.Fatalf("cannot connect to server: %v", err)
 	}
@@ -93,15 +94,8 @@ func TestStarlark(t *testing.T) {
 	}
 
 	globals := starlark.StringDict{
-		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
-		//"proto":  starlarkproto.NewModule(),
 		"mux": mux,
 	}
 	t.Log("running")
-	starlarkassert.RunTests(
-		t, "testdata/*.star", globals,
-		starlarkthread.AssertOption,
-		starlarkassert.WithLoad(starlib.StdLoad),
-	)
-	defer t.Log("CLOSING")
+	starlib.RunTests(t, "testdata/*.star", globals)
 }

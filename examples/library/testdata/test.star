@@ -1,4 +1,4 @@
-load("proto.star", "proto")
+load("encoding/proto.star", "proto")
 
 # Load the proto file descriptor to create.
 apipb = proto.file("apipb/library.proto")

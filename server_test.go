@@ -111,7 +111,11 @@ func TestServer(t *testing.T) {
 		}
 	}()
 
-	cc, err := grpc.Dial(lisProxy.Addr().String(), grpc.WithInsecure(), grpc.WithBlock())
+	cc, err := grpc.Dial(
+		lisProxy.Addr().String(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

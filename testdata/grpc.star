@@ -1,6 +1,6 @@
 # Tests of Starlark 'grpc' extension.
 
-load("proto.star", "proto")
+load("encoding/proto.star", "proto")
 
 # TODO: show dialing to add a new stream.
 #grpc.dial("//")

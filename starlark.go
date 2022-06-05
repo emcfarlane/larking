@@ -8,9 +8,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/emcfarlane/larking/starext"
-	"github.com/emcfarlane/larking/starlarkproto"
-	"github.com/emcfarlane/larking/starlarkthread"
+	"github.com/emcfarlane/larking/starlib/encoding/starlarkproto"
+	"github.com/emcfarlane/larking/starlib/starext"
+	"github.com/emcfarlane/larking/starlib/starlarkthread"
 	"github.com/go-logr/logr"
 	"go.starlark.net/starlark"
 	"google.golang.org/grpc"
@@ -411,7 +411,7 @@ func (s *StarlarkUnary) Truth() starlark.Bool  { return starlark.True }
 func (s *StarlarkUnary) Hash() (uint32, error) { return 0, nil }
 func (s *StarlarkUnary) Name() string          { return "" }
 func (s *StarlarkUnary) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	opts := &s.mux.opts
 
 	// Buffer channels one message for unary.
@@ -467,7 +467,7 @@ func (s *StarlarkStream) getErr() error {
 
 // init lazy initializes the streaming handler.
 func (s *StarlarkStream) init(thread *starlark.Thread) error {
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	opts := &s.mux.opts
 
 	s.once.Do(func() {
@@ -565,7 +565,7 @@ func promiseResponse(
 }
 
 func (s *StarlarkStream) recv(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	if err := s.init(thread); err != nil {
 		return nil, err
 	}
@@ -587,7 +587,7 @@ func (s *StarlarkStream) recv(thread *starlark.Thread, fnname string, args starl
 	}
 }
 func (s *StarlarkStream) send(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	ctx := starlarkthread.Context(thread)
+	ctx := starlarkthread.GetContext(thread)
 	if err := s.init(thread); err != nil {
 		return nil, err
 	}
