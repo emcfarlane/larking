@@ -10,7 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/emcfarlane/larking/starlib"
+	"larking.io/starlib"
 	"go.starlark.net/starlark"
 )
 

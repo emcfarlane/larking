@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/emcfarlane/larking/starlib/starext"
-	"github.com/emcfarlane/larking/starlib/starlarkstruct"
-	"github.com/emcfarlane/larking/starlib/starlarkthread"
+	"larking.io/starlib/starext"
+	"larking.io/starlib/starlarkstruct"
+	"larking.io/starlib/starlarkthread"
 
 	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"

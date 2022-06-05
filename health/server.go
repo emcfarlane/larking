@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	healthpb "github.com/emcfarlane/larking/apipb/healthpb"
+	healthpb "larking.io/apipb/healthpb"
 )
 
 // Server implements `service Health`.

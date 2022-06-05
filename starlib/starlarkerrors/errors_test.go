@@ -8,8 +8,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/emcfarlane/larking/starlib"
-	"github.com/emcfarlane/larking/starlib/starlarkerrors"
+	"larking.io/starlib"
+	"larking.io/starlib/starlarkerrors"
 	"go.starlark.net/starlark"
 )
 

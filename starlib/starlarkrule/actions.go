@@ -1,7 +1,7 @@
 package starlarkrule
 
 import (
-	"github.com/emcfarlane/larking/starlib/starext"
+	"larking.io/starlib/starext"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 )

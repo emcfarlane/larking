@@ -32,7 +32,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/emcfarlane/larking/testpb"
+	"larking.io/testpb"
 )
 
 type in struct {

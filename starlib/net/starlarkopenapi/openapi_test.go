@@ -18,8 +18,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/emcfarlane/larking/starlib"
-	"github.com/emcfarlane/larking/starlib/net/starlarkhttp"
+	"larking.io/starlib"
+	"larking.io/starlib/net/starlarkhttp"
 	"go.starlark.net/starlark"
 	_ "gocloud.dev/blob/fileblob"
 	_ "gocloud.dev/runtimevar/filevar"

@@ -11,7 +11,7 @@ import (
 	"io/ioutil"
 	"sort"
 
-	"github.com/emcfarlane/larking/starlib/starext"
+	"larking.io/starlib/starext"
 	"go.starlark.net/starlark"
 )
 

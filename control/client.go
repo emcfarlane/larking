@@ -14,7 +14,7 @@ import (
 	"path"
 	"sync"
 
-	"github.com/emcfarlane/larking/apipb/controlpb"
+	"larking.io/apipb/controlpb"
 	"github.com/pkg/browser"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/encoding/protojson"

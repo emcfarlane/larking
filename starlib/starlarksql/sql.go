@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/emcfarlane/larking/starlib/starext"
-	"github.com/emcfarlane/larking/starlib/starlarkerrors"
-	"github.com/emcfarlane/larking/starlib/starlarkthread"
+	"larking.io/starlib/starext"
+	"larking.io/starlib/starlarkerrors"
+	"larking.io/starlib/starlarkthread"
 	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"

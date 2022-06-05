@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/emcfarlane/larking/starlib/starlarkstruct"
+	"larking.io/starlib/starlarkstruct"
 	"go.starlark.net/starlark"
 )
 

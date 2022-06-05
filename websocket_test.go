@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/emcfarlane/larking/testpb"
+	"larking.io/testpb"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"

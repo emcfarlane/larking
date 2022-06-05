@@ -7,8 +7,8 @@ import (
 	"log"
 	"net"
 
-	"github.com/emcfarlane/larking"
-	"github.com/emcfarlane/larking/examples/library/apipb"
+	"larking.io"
+	"larking.io/examples/library/apipb"
 	_ "modernc.org/sqlite"
 )
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/emcfarlane/larking/starlib/starlarkrule"
+	"larking.io/starlib/starlarkrule"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/testr"
 	"go.starlark.net/starlark"

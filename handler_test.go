@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/emcfarlane/larking/testpb"
+	"larking.io/testpb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"

@@ -20,8 +20,8 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/dynamicpb"
 
-	"github.com/emcfarlane/larking/starlib/starext"
-	"github.com/emcfarlane/larking/starlib/starlarkstruct"
+	"larking.io/starlib/starext"
+	"larking.io/starlib/starlarkstruct"
 )
 
 const (

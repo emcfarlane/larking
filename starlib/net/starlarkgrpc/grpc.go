@@ -9,9 +9,9 @@ package starlarkgrpc
 	"time"
 
 	"go.starlark.net/starlark"
-	"github.com/emcfarlane/larking/starlib/starlarkstruct"
-	"github.com/emcfarlane/larking/starlib/starlarkthread"
-	"github.com/emcfarlane/larking/starlib/starlarkproto"
+	"larking.io/starlib/starlarkstruct"
+	"larking.io/starlib/starlarkthread"
+	"larking.io/starlib/starlarkproto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

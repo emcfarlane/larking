@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/emcfarlane/larking"
-	"github.com/emcfarlane/larking/examples/library/apipb"
-	"github.com/emcfarlane/larking/starlib"
+	"larking.io"
+	"larking.io/examples/library/apipb"
+	"larking.io/starlib"
 	"go.starlark.net/starlark"
 )
 

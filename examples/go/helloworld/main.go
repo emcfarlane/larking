@@ -8,8 +8,8 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/emcfarlane/larking"
-	pb "github.com/emcfarlane/larking/examples/proto/helloworld"
+	"larking.io"
+	pb "larking.io/examples/proto/helloworld"
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"

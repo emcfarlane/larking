@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	//"github.com/emcfarlane/larking/starlib"
-	"github.com/emcfarlane/larking/starlib/starlarkstruct"
-	"github.com/emcfarlane/larking/starlib/starlarkthread"
+	//"larking.io/starlib"
+	"larking.io/starlib/starlarkstruct"
+	"larking.io/starlib/starlarkthread"
 	"github.com/go-logr/logr"
 	"go.starlark.net/starlark"
 	"gocloud.dev/blob"

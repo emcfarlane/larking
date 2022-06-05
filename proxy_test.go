@@ -18,7 +18,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"github.com/emcfarlane/larking/testpb"
+	"larking.io/testpb"
 	"golang.org/x/sync/errgroup"
 )
 

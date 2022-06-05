@@ -5,8 +5,8 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/emcfarlane/larking/starlib"
-	"github.com/emcfarlane/larking/starlib/starlarkrule"
+	"larking.io/starlib"
+	"larking.io/starlib/starlarkrule"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob"
 )
