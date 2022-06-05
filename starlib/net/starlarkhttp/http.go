@@ -13,11 +13,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/emcfarlane/larking/starlib/starext"
-	"github.com/emcfarlane/larking/starlib/starlarkerrors"
-	"github.com/emcfarlane/larking/starlib/starlarkio"
-	"github.com/emcfarlane/larking/starlib/starlarkstruct"
-	"github.com/emcfarlane/larking/starlib/starlarkthread"
+	"larking.io/starlib/starext"
+	"larking.io/starlib/starlarkerrors"
+	"larking.io/starlib/starlarkio"
+	"larking.io/starlib/starlarkstruct"
+	"larking.io/starlib/starlarkthread"
 	"go.starlark.net/starlark"
 )
 

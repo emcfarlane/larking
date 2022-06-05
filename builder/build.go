@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/emcfarlane/larking/starlib"
-	"github.com/emcfarlane/larking/starlib/starlarkrule"
-	"github.com/emcfarlane/larking/starlib/starlarkthread"
+	"larking.io/starlib"
+	"larking.io/starlib/starlarkrule"
+	"larking.io/starlib/starlarkthread"
 	"github.com/go-logr/logr"
 	"go.starlark.net/starlark"
 )

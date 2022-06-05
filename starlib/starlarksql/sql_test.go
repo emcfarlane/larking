@@ -7,7 +7,7 @@ package starlarksql_test
 import (
 	"testing"
 
-	"github.com/emcfarlane/larking/starlib"
+	"larking.io/starlib"
 
 	_ "modernc.org/sqlite"
 )

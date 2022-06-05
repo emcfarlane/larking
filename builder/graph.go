@@ -10,9 +10,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/emcfarlane/larking/starlib"
-	"github.com/emcfarlane/larking/starlib/starlarkrule"
-	"github.com/emcfarlane/larking/starlib/starlarkthread"
+	"larking.io/starlib"
+	"larking.io/starlib/starlarkrule"
+	"larking.io/starlib/starlarkthread"
 	"go.starlark.net/starlark"
 )
 

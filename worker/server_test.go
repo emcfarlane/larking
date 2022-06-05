@@ -10,9 +10,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/emcfarlane/larking/apipb/workerpb"
-	"github.com/emcfarlane/larking/control"
-	"github.com/emcfarlane/larking/worker"
+	"larking.io/apipb/workerpb"
+	"larking.io/control"
+	"larking.io/worker"
 
 	"github.com/go-logr/logr"
 	testing_logr "github.com/go-logr/logr/testing"

@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/emcfarlane/larking/starlib/starext"
+	"larking.io/starlib/starext"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 )

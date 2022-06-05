@@ -6,8 +6,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/emcfarlane/larking/starlib"
-	"github.com/emcfarlane/larking/testpb"
+	"larking.io/starlib"
+	"larking.io/testpb"
 	"github.com/google/go-cmp/cmp"
 	"go.starlark.net/starlark"
 	"golang.org/x/sync/errgroup"

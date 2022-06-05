@@ -1,4 +1,4 @@
-module github.com/emcfarlane/larking
+module larking.io
 
 go 1.18
 

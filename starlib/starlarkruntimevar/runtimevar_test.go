@@ -7,7 +7,7 @@ package starlarkruntimevar_test
 import (
 	"testing"
 
-	"github.com/emcfarlane/larking/starlib"
+	"larking.io/starlib"
 	"go.starlark.net/starlark"
 
 	_ "gocloud.dev/runtimevar/constantvar"

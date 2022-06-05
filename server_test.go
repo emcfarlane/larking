@@ -34,9 +34,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"github.com/emcfarlane/larking/apipb/healthpb"
-	"github.com/emcfarlane/larking/health"
-	"github.com/emcfarlane/larking/testpb"
+	"larking.io/apipb/healthpb"
+	"larking.io/health"
+	"larking.io/testpb"
 )
 
 func testContext(t *testing.T) context.Context {

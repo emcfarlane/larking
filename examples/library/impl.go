@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/emcfarlane/larking/examples/library/apipb"
+	"larking.io/examples/library/apipb"
 )
 
 func createTables(db *sql.DB) error {

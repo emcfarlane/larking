@@ -3,7 +3,7 @@ package starlarkproto_test
 import (
 	"testing"
 
-	"github.com/emcfarlane/larking/starlib"
+	"larking.io/starlib"
 	_ "github.com/emcfarlane/starlarkproto/testpb"
 	"go.starlark.net/starlark"
 )

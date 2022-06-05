@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/emcfarlane/larking/builder"
-	_ "github.com/emcfarlane/larking/cmd/internal/bindings"
+	"larking.io/builder"
+	_ "larking.io/cmd/internal/bindings"
 	"github.com/pkg/browser"
 )
 

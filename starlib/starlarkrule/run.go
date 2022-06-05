@@ -7,7 +7,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/emcfarlane/larking/starlib/starlarkthread"
+	"larking.io/starlib/starlarkthread"
 	"go.starlark.net/starlark"
 )
 

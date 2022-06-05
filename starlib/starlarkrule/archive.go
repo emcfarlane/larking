@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/emcfarlane/larking/starlib/starext"
-	"github.com/emcfarlane/larking/starlib/starlarkthread"
+	"larking.io/starlib/starext"
+	"larking.io/starlib/starlarkthread"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"gocloud.dev/blob"

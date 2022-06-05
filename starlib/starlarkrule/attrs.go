@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/emcfarlane/larking/starlib/starext"
-	"github.com/emcfarlane/larking/starlib/starlarkstruct"
+	"larking.io/starlib/starext"
+	"larking.io/starlib/starlarkstruct"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 )

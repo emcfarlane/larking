@@ -5,9 +5,9 @@ import (
 	"io"
 
 	"github.com/containerd/stargz-snapshotter/estargz"
-	"github.com/emcfarlane/larking/starlib/starext"
-	"github.com/emcfarlane/larking/starlib/starlarkstruct"
-	"github.com/emcfarlane/larking/starlib/starlarkthread"
+	"larking.io/starlib/starext"
+	"larking.io/starlib/starlarkstruct"
+	"larking.io/starlib/starlarkthread"
 	"github.com/google/go-containerregistry/pkg/authn"
 	cname "github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"

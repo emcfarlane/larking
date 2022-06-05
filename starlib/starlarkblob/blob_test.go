@@ -7,7 +7,7 @@ package starlarkblob_test
 import (
 	"testing"
 
-	"github.com/emcfarlane/larking/starlib"
+	"larking.io/starlib"
 	_ "gocloud.dev/blob/memblob"
 )
 

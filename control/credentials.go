@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/emcfarlane/larking/apipb/controlpb"
+	"larking.io/apipb/controlpb"
 	"gocloud.dev/runtimevar"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
