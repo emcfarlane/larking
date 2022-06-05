@@ -2,7 +2,7 @@ syntax = "proto3";
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/emcfarlane/larking/starlarkproto/testpb";
+option go_package = "larking.io/starlarkproto/testpb";
 
 package starlarkproto.test;
 

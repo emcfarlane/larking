@@ -9,7 +9,7 @@ package larking.api.control;
 import "google/api/annotations.proto";
 import "google/rpc/status.proto";
 
-option go_package = "github.com/emcfarlane/larking/apipb/controlpb;controlpb";
+option go_package = "larking.io/apipb/controlpb;controlpb";
 
 // Based on google APIs Service Control:
 // https://github.com/googleapis/googleapis/blob/master/google/api/servicecontrol/v1/service_controller.proto

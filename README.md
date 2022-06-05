@@ -1,6 +1,6 @@
 # [larking.io](https://larking.io)
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/emcfarlane/larking.svg)](https://pkg.go.dev/github.com/emcfarlane/larking)
+[![Go Reference](https://pkg.go.dev/badge/larking.io.svg)](https://pkg.go.dev/larking.io)
 
 Reflective gRPC transcoding handler. Get started: [larking.io/docs](https://larking.io/docs)
 

@@ -5,7 +5,7 @@ package larking.examples.library;
 
 import "google/api/annotations.proto";
 
-option go_package = "github.com/emcfarlane/larking/examples/library/apipb;apipb";
+option go_package = "larking.io/examples/library/apipb;apipb";
 
 service Library {
   rpc GetBook(GetBookRequest) returns (Book) {
