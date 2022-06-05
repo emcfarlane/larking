@@ -23,7 +23,7 @@ package grpc.health.v1;
 
 import "google/api/annotations.proto";
 
-option go_package = "github.com/emcfarlane/larking/apipb/healthpb;healthpb";
+option go_package = "larking.io/apipb/healthpb;healthpb";
 
 message HealthCheckRequest { string service = 1; }
 
