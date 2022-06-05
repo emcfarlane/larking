@@ -16,19 +16,19 @@ Reflective gRPC transcoding handler. Get started: [larking.io/docs](https://lark
 ## Install
 
 ```
-go get github.com/emcfarlane/larking@latest
+go get larking.io@latest
 ```
 
 ### Install the REPL
 
 ```
-go install github.com/emcfarlane/larking/cmd/lark@latest
+go install larking.io/cmd/lark@latest
 ```
 
 ### Install the worker
 
 ```
-go install github.com/emcfarlane/larking/cmd/larking@latest
+go install larking.io/cmd/larking@latest
 ```
 
 ## Quickstart
