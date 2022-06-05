@@ -9,7 +9,6 @@ import (
 	"github.com/emcfarlane/larking/starlib/starlarkstruct"
 	"github.com/emcfarlane/larking/starlib/starlarkthread"
 	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/name"
 	cname "github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -44,17 +43,17 @@ func NewContainerImage(filename, reference string) starlark.Value {
 
 func containerPull(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		rname     string
+		name      string
 		reference string
 	)
 	if err := starlark.UnpackArgs(
 		fnname, args, kwargs,
-		"name", &rname, "reference", &reference,
+		"name", &name, "reference", &reference,
 	); err != nil {
 		return nil, err
 	}
 
-	ref, err := name.ParseReference(reference)
+	ref, err := cname.ParseReference(reference)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +71,7 @@ func containerPull(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 		return nil, err
 	}
 
-	l, err := ParseRelativeLabel(thread.Name, rname)
+	l, err := ParseRelativeLabel(thread.Name, name)
 	if err != nil {
 		return nil, err
 	}
