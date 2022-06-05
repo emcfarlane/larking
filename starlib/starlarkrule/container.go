@@ -2,7 +2,7 @@ package starlarkrule
 
 import (
 	"fmt"
-	"os"
+	"io"
 
 	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/emcfarlane/larking/starlib/starext"
@@ -62,29 +62,42 @@ func containerPull(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 
 	ctx := starlarkthread.GetContext(thread)
 
+	fmt.Println("image?")
 	img, err := remote.Image(ref,
 		remote.WithAuthFromKeychain(authn.DefaultKeychain),
 		remote.WithContext(ctx),
 	)
 	if err != nil {
+		fmt.Println("image?", err)
 		return nil, err
 	}
 
-	// TODO: caching...
-	// HACK: lets just stat the existance of the file
-	filename := "" // c.key
-	if _, err := os.Stat(filename); err != nil {
-		f, err := os.Create(filename)
-		if err != nil {
-			panic(err)
-		}
-		defer f.Close()
+	l, err := ParseRelativeLabel(thread.Name, rname)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("HERE?", l)
 
-		if err := tarball.Write(ref, img, f); err != nil {
+	blobs := starext.Blobs{}
+	defer blobs.Close()
+
+	// TODO: caching.
+	// HACK: check we have hash.
+	var rebuild = true
+
+	if rebuild {
+		w, err := blobs.NewWriter(ctx, l.BucketURL(), l.Key(), nil)
+		if err != nil {
+			return nil, err
+		}
+		defer w.Close()
+
+		if err := tarball.Write(ref, img, w); err != nil {
 			return nil, err
 		}
 	}
-	return NewContainerImage(filename, reference), nil
+	fmt.Println("HERE??", l)
+	return l, nil
 }
 
 func listToStrings(l *starlark.List) ([]string, error) {
@@ -92,7 +105,6 @@ func listToStrings(l *starlark.List) ([]string, error) {
 	defer iter.Done()
 
 	var ss []string
-
 	var x starlark.Value
 	for iter.Next(&x) {
 		s, ok := starlark.AsString(x)
@@ -104,19 +116,44 @@ func listToStrings(l *starlark.List) ([]string, error) {
 	return ss, nil
 }
 
+func containerInfo(args *AttrArgs) (src *Label, ref string, err error) {
+	srcValue, err := args.Attr("src")
+	if err != nil {
+		return nil, "", err
+	}
+	src, ok := srcValue.(*Label)
+	if !ok {
+		return nil, "", fmt.Errorf("invalid source")
+	}
+
+	refValue, err := args.Attr("reference")
+	if err != nil {
+		return nil, "", err
+	}
+	ref, ok = starlark.AsString(refValue)
+	if !ok {
+		return nil, "", fmt.Errorf("invalid reference")
+	}
+	return src, ref, nil
+}
+
 func containerBuild(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	ctx := starlarkthread.GetContext(thread)
+
 	var (
 		name            string
 		entrypointList  *starlark.List
 		tar             *Label
-		base            *Label
+		base            *AttrArgs //*Label
 		prioritizedList *starlark.List
+		reference       string
 	)
 	if err := starlark.UnpackArgs(
 		fnname, args, kwargs,
 		"name", &name,
 		"entrypoint", &entrypointList,
 		"tar", &tar,
+		"reference", &reference,
 		"base?", &base,
 		"prioritized_files?", &prioritizedList,
 	); err != nil {
@@ -133,34 +170,46 @@ func containerBuild(thread *starlark.Thread, fnname string, args starlark.Tuple,
 		return nil, err
 	}
 
+	blobs := starext.Blobs{}
+	defer blobs.Close()
+
 	baseImage := empty.Image
 	if base != nil {
-		// Load base image from local.
-		imageProvider, err := toStruct(base, ImageConstructor)
-		if err != nil {
-			return nil, fmt.Errorf("image provider: %w", err)
-		}
-		if err := assertConstructor(imageProvider, ImageConstructor); err != nil {
-			return nil, err
-		}
-
-		filename, err := getAttrStr(imageProvider, "name")
+		src, reference, err := containerInfo(base)
 		if err != nil {
 			return nil, err
 		}
 
-		reference, err := getAttrStr(imageProvider, "reference")
-		if err != nil {
-			return nil, err
-		}
+		//// Load base image from local.
+		//imageProvider, err := toStruct(base, ImageConstructor)
+		//if err != nil {
+		//	return nil, fmt.Errorf("image provider: %w", err)
+		//}
+		//if err := assertConstructor(imageProvider, ImageConstructor); err != nil {
+		//	return nil, err
+		//}
+
+		//filename, err := getAttrStr(imageProvider, "name")
+		//if err != nil {
+		//	return nil, err
+		//}
+
+		//reference, err := getAttrStr(imageProvider, "reference")
+		//if err != nil {
+		//	return nil, err
+		//}
 
 		tag, err := cname.NewTag(reference, cname.StrictValidation)
 		if err != nil {
 			return nil, err
 		}
 
+		opener := func() (io.ReadCloser, error) {
+			return blobs.NewReader(ctx, src.BucketURL(), src.Key(), nil)
+		}
+
 		// Load base from filesystem.
-		img, err := tarball.ImageFromPath(filename, &tag)
+		img, err := tarball.Image(opener, &tag)
 		if err != nil {
 			return nil, err
 		}
@@ -169,16 +218,16 @@ func containerBuild(thread *starlark.Thread, fnname string, args starlark.Tuple,
 
 	var layers []mutate.Addendum
 
-	tarStruct, err := toStruct(tar, FileConstructor)
-	if err != nil {
-		return nil, err
-	}
-	tarFilename, err := getAttrStr(tarStruct, "path")
-	if err != nil {
-		return nil, err
-	}
+	//tarStruct, err := toStruct(tar, FileConstructor)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//tarFilename, err := getAttrStr(tarStruct, "path")
+	//if err != nil {
+	//	return nil, err
+	//}
 
-	r, err := os.Open(tarFilename)
+	r, err := blobs.NewReader(ctx, tar.BucketURL(), tar.Key(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -239,23 +288,34 @@ func containerBuild(thread *starlark.Thread, fnname string, args starlark.Tuple,
 	//	return mutate.CreatedAt(image, g.creationTime)
 	//}
 
-	filename := "" // c.key
-	f, err := os.Create(filename)
+	l, err := ParseRelativeLabel(thread.Name, name)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	defer f.Close()
 
-	reference := "gcr.io/foo/bar:latest" // TODO: Reference?
+	w, err := blobs.NewWriter(ctx, l.BucketURL(), l.Key(), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer w.Close()
+
+	//filename := "" // c.key
+	//f, err := os.Create(filename)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//defer f.Close()
+
 	ref, err := cname.ParseReference(reference)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := tarball.Write(ref, img, f); err != nil {
+	if err := tarball.Write(ref, img, w); err != nil {
 		return nil, err
 	}
-	return NewContainerImage(filename, reference), nil
+	return l, nil
+	//return NewContainerImage(filename, reference), nil
 }
 
 func containerPush(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -263,7 +323,7 @@ func containerPush(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 	ctx := starlarkthread.GetContext(thread)
 	var (
 		name      string
-		image     *Label
+		image     *AttrArgs
 		reference string
 	)
 	if err := starlark.UnpackArgs(
@@ -276,29 +336,41 @@ func containerPush(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 		return nil, err
 	}
 
-	imageProvider, err := toStruct(image, ImageConstructor)
-	if err != nil {
-		return nil, fmt.Errorf("image provider: %w", err)
-	}
-
-	// TODO: should it be a file provider?
-	filename, err := getAttrStr(imageProvider, "name")
-	if err != nil {
-		return nil, err
-	}
-	imageRef, err := getAttrStr(imageProvider, "reference")
+	src, reference, err := containerInfo(image)
 	if err != nil {
 		return nil, err
 	}
 
-	tag, err := cname.NewTag(imageRef, cname.StrictValidation)
+	//imageProvider, err := toStruct(image, ImageConstructor)
+	//if err != nil {
+	//	return nil, fmt.Errorf("image provider: %w", err)
+	//}
+
+	//// TODO: should it be a file provider?
+	//filename, err := getAttrStr(imageProvider, "name")
+	//if err != nil {
+	//	return nil, err
+	//}
+	//imageRef, err := getAttrStr(imageProvider, "reference")
+	//if err != nil {
+	//	return nil, err
+	//}
+
+	tag, err := cname.NewTag(reference, cname.StrictValidation)
 	if err != nil {
 		fmt.Println("FAILED ON tag")
 		return nil, err
 	}
 
+	blobs := starext.Blobs{}
+	defer blobs.Close()
+
+	opener := func() (io.ReadCloser, error) {
+		return blobs.NewReader(ctx, src.BucketURL(), src.Key(), nil)
+	}
+
 	// Load base from filesystem.
-	img, err := tarball.ImageFromPath(filename, &tag)
+	img, err := tarball.Image(opener, &tag)
 	if err != nil {
 		fmt.Println("FAILED ON image load")
 		return nil, err
@@ -317,6 +389,6 @@ func containerPush(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 		fmt.Println("failing here?", err)
 		return nil, err
 	}
-	fmt.Println("DONE CONTAINER PUSH")
-	return NewContainerImage(filename, reference), nil
+	return src, nil
+	//return NewContainerImage(filename, reference), nil
 }

@@ -9,7 +9,9 @@ package starlarkrule
 import (
 	"container/heap"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"path"
 	"strings"
 	"time"
@@ -24,25 +26,18 @@ import (
 
 // An Action represents a single action in the action graph.
 type Action struct {
-	// Label is the unique key for an action.
-	*Label
+	*Label // Label is the unique key for an action.
 
 	Deps []*Action // Actions this action depends on.
 
-	// REMOTE: 	http://network.com/?key=file
-	// ABSOLUTE: 	file:///root/?key=file%2Fpath
-	// LOCAL: 	file://local/file/path
-	// RELATIVE: 	file ./file ../file
-	// QUERY:       file?name=abc
-	//Func func(*starlark.Thread) (starlark.Value, error)
-	Func ImplFunc
+	Func ImplFunc // Implementation is run when built.
 
 	triggers []*Action // reverse of deps
 	pending  int       // number of actions pending
 	priority int       // relative execution priority
 
 	// Results
-	Value     []*AttrArgs //starlark.Value // caller value
+	Value     []*AttrArgs //starlark.Value // caller values
 	Error     error       // caller error
 	Failed    bool        // whether the action failed
 	TimeReady time.Time
@@ -70,74 +65,6 @@ func (a *Action) Get(k starlark.Value) (v starlark.Value, found bool, err error)
 	}
 	return starlark.None, false, nil
 }
-
-//// Target lazily resolves the action to a starlark value.
-//type Target struct {
-//	label  string
-//	action *Action
-//}
-//
-//func NewTarget(label string, action *Action) *Target {
-//	return &Target{
-//		label:  label,
-//		action: action,
-//	}
-//}
-//
-//func (t *Target) String() string {
-//	return fmt.Sprintf("target(label = %s, value = %s)", t.label, t.action.Value)
-//}
-//func (t *Target) Type() string          { return "target" }
-//func (t *Target) Truth() starlark.Bool  { return t.action.Value.Truth() }
-//func (t *Target) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable") }
-//func (t *Target) Freeze()               {} // immutable
-
-//// Attr returns the value of the specified field.
-//func (t *Target) Attr(name string) (starlark.Value, error) {
-//	switch name {
-//	case "label":
-//		return starlark.String(t.label), nil
-//	case "value":
-//		return t.action.Value, nil
-//	default:
-//		return nil, starlark.NoSuchAttrError(
-//			fmt.Sprintf("target has no .%s attribute", name))
-//	}
-//}
-//
-//// AttrNames returns a new sorted list of the struct fields.
-//func (t *Target) AttrNames() []string { return []string{"label", "value"} }
-
-//// loadStructValue gets the value and checks the constructor type matches.
-//func (a *Action) loadStructValue(constructor starlark.Value) (*starlarkstruct.Struct, error) {
-//	if a.Value == nil {
-//		return nil, fmt.Errorf("missing struct value")
-//	}
-//	s, ok := a.Value.(*starlarkstruct.Struct)
-//	if !ok {
-//		return nil, fmt.Errorf("invalid type: %T", a.Value)
-//	}
-//	// Constructor values must be comparable
-//	if c := s.Constructor(); c != constructor {
-//		return nil, fmt.Errorf("invalid struct type: %s", c)
-//	}
-//	return nil, nil
-//}
-
-// ctx.action(target = file://...)
-// load_action(target = file://...)
-
-//func getAttrStr(v *starlarkstruct.Struct, name string) (string, error) {
-//	x, err := v.Attr(name)
-//	if err != nil {
-//		return "", err
-//	}
-//	s, ok := starlark.AsString(x)
-//	if !ok {
-//		return "", fmt.Errorf("attr %q not a string", name)
-//	}
-//	return s, nil
-//}
 
 // FailureErr is a DFS on the failed action, returns nil if not failed.
 func (a *Action) FailureErr() error {
@@ -214,6 +141,8 @@ func (b *Builder) addAction(action *Action) (*Action, error) {
 }
 
 func (b *Builder) RegisterTarget(thread *starlark.Thread, target *Target) error {
+	ctx := starlarkthread.GetContext(thread)
+	log := logr.FromContextOrDiscard(ctx)
 
 	// We are in a dir/BUILD.star file
 	// Create the target name dir:name
@@ -226,6 +155,10 @@ func (b *Builder) RegisterTarget(thread *starlark.Thread, target *Target) error 
 		b.targetCache = make(map[string]*Target)
 	}
 	b.targetCache[labelURL] = target
+
+	bktURL := target.label.BucketURL()
+	key := target.label.Key()
+	log.Info("registered target", "bkt", bktURL, "key", key)
 	return nil
 }
 
@@ -293,13 +226,8 @@ func (b *Builder) createAction(thread *starlark.Thread, label *Label) (*Action, 
 	bktURL := label.BucketURL()
 
 	log.Info("creating action", "bkt", bktURL, "key", labelKey)
-	//bkt, err := b.loader.LoadBucket(ctx, bktURL)
-	//if err != nil {
-	//	return nil, err
-	//}
 
 	moduleKey := path.Join(dir, "BUILD.star")
-	fmt.Println("PATH.JOIN", dir, "BUILD.star", "=>", moduleKey)
 	mod, err := label.Parse(moduleKey)
 	if err != nil {
 		return nil, err
@@ -307,79 +235,67 @@ func (b *Builder) createAction(thread *starlark.Thread, label *Label) (*Action, 
 	moduleURL := mod.String()
 
 	// Load module.
-	//exists := func(key string) bool {
-	//	ok, err := bkt.Exists(ctx, key)
-	//	if err != nil {
-	//		return false
-	//	}
-	//	return ok
-	//}
-
 	if ok := b.moduleCache[moduleURL]; !ok { //&& exists(moduleKey) {
 		log.Info("loading module", "bkt", bktURL, "key", moduleKey)
 
-		d, err := thread.Load(thread, moduleKey)
+		_, err := thread.Load(thread, moduleKey)
 		if err != nil {
-			log.Error(err, "failed to load", "key", moduleKey)
-			// TODO: handle not exists errors gracefully.
-			return nil, err
-		}
+			if !errors.Is(err, fs.ErrNotExist) {
+				log.Error(err, "failed to load", "key", moduleKey)
+				return nil, err
+			}
+			// ignore not found
 
-		// rule will inject the value?
-		for key, val := range d {
-			fmt.Println(" - ", key, val)
+		} else {
+			// rule will inject the value?
+			//for key, val := range d {
+			//	fmt.Println(" - ", key, val)
+			//}
+			if b.moduleCache == nil {
+				b.moduleCache = make(map[string]bool)
+			}
+			b.moduleCache[moduleURL] = true
 		}
-		if b.moduleCache == nil {
-			b.moduleCache = make(map[string]bool)
-		}
-		b.moduleCache[moduleURL] = true
 	}
 
 	// Load rule, or file.
 	t, ok := b.targetCache[labelURL]
 	if !ok {
-		log.Info("key", "key", labelURL)
-		log.Info("want target", "bkt", bktURL, "key", labelKey)
-		for key, tgt := range b.targetCache {
-			l := tgt.label
-
-			log.Info("key", "key", key)
-			log.Info("have target", "bkt", l.BucketURL(), "key", l.Key())
+		cleanURL := label.CleanURL()
+		t, ok = b.targetCache[cleanURL]
+		if !ok {
+			log.Info("unknown label target", "bkt", bktURL, "key", labelKey)
+			return b.addAction(&Action{
+				Label: label,
+				Deps:  nil,
+				Func:  makeDefaultImpl(label),
+			})
 		}
 
-		return b.addAction(&Action{
-			Label: label,
-			Deps:  nil,
-			Func:  makeDefaultImpl(label),
-		})
-	}
-	log.Info("have target", "target", t.label.String())
+		kvs, err := label.KeyArgs()
+		if err != nil {
+			log.Error(err, "invalid key args")
+			return nil, err
+		}
 
-	kvs, err := label.KeyArgs()
-	if err != nil {
-		fmt.Println("erroring here?", err)
-		log.Info("ERROR")
-		return nil, err
-	}
-	if len(kvs) > 0 {
 		t = t.Clone()
-
-		fmt.Println("SetQuery", label.String(), label.Query())
 
 		// Parse query params, override args.
 		if err := t.SetQuery(kvs); err != nil {
-			fmt.Println("HERE?")
-			log.Info("ERROR")
+			log.Error(err, "failed to set key args")
 			return nil, err
 		}
+
+		log.Info("registered query target", "bkt", bktURL, "key", labelKey)
+		b.targetCache[labelURL] = t
+
 	}
-	log.Info("okay")
+	log.Info("found label target", "bkt", bktURL, "key", labelKey)
 
 	// TODO: caching the ins & outs?
 	// should caching be done on the action execution?
 
 	// Find arg deps as attributes and resolve args to targets.
-	fmt.Println("--- DEPS ---")
 	args := t.Args()
 	rule := t.Rule()
 	attrs := rule.Attrs()
@@ -400,9 +316,7 @@ func (b *Builder) createAction(thread *starlark.Thread, label *Label) (*Action, 
 	}
 	for i := 0; i < n; i++ {
 		key, arg := args.KeyIndex(i)
-		fmt.Println("==>", i, "key", key, "arg", arg)
 		attr, _ := attrs.Get(key)
-		//fmt.Println("attrs", "key", key, "arg", arg, "attr", attr)
 
 		switch attr.Typ {
 		case AttrTypeLabel:
@@ -419,7 +333,6 @@ func (b *Builder) createAction(thread *starlark.Thread, label *Label) (*Action, 
 			elems := make([]starlark.Value, v.Len())
 			for i, n := 0, v.Len(); i < n; i++ {
 				x := v.Index(i)
-				fmt.Println("---------> creating action?", x)
 				action, err := createAction(x)
 				if err != nil {
 					return nil, err
@@ -437,7 +350,6 @@ func (b *Builder) createAction(thread *starlark.Thread, label *Label) (*Action, 
 			continue
 		}
 	}
-	fmt.Println("-----------")
 
 	ruleCtx := starlarkstruct.FromKeyValues(
 		starlark.String("ctx"),
@@ -455,7 +367,6 @@ func (b *Builder) createAction(thread *starlark.Thread, label *Label) (*Action, 
 		Label: label,
 		Deps:  deps,
 		Func: func(thread *starlark.Thread) ([]*AttrArgs, error) {
-			//fmt.Println("calling func", thread.Name)
 			args := starlark.Tuple{ruleCtx}
 			val, err := starlark.Call(thread, rule.Impl(), args, nil)
 			if err != nil {
@@ -478,7 +389,6 @@ func (b *Builder) createAction(thread *starlark.Thread, label *Label) (*Action, 
 						)
 					}
 					attrs := args.Attrs()
-					fmt.Println("\t\tDELETE", attrs.String())
 					provides.Delete(attrs)
 					results[i] = args
 				}
@@ -502,7 +412,6 @@ func (b *Builder) createAction(thread *starlark.Thread, label *Label) (*Action, 
 						buf.WriteString(", ")
 					}
 					attrs := p.(*Attrs)
-					fmt.Println("\t\tattrs", attrs.String())
 					buf.WriteString(attrs.String())
 					first = true
 				}
@@ -621,18 +530,9 @@ func (b *Builder) Run(root *Action, threads ...*starlark.Thread) {
 		log := logr.FromContextOrDiscard(ctx)
 
 		go func() {
-			//thread := &starlark.Thread{
-			//	Name: "",
-			//	Load: b.loader.Load,
-			//}
-			//starlarkthread.SetResourceStore(thread, b.resources)
-			//starlarkthread.SetContext(thread, ctx)
-			////SetBuilder(thread, b)
-
 			for a := range jobs {
 
 				// Run job.
-				//var value starlark.Value = starlark.None
 				var value []*AttrArgs
 				var err error
 
@@ -641,15 +541,15 @@ func (b *Builder) Run(root *Action, threads ...*starlark.Thread) {
 					thread.Name = a.Label.String()
 					value, err = a.Func(thread)
 					thread.Name = ""
+					log.Info("completed action", "key", a.Key())
 				}
 				if err != nil {
-					// Log?
+					log.Error(err, "action failed", "key", a.Key())
 					a.Failed = true
 					a.Error = err
 				}
 				a.Value = value
 				a.TimeDone = time.Now()
-				log.Info("completed action", "key", a.Key())
 				done <- a
 			}
 		}()
@@ -664,10 +564,8 @@ func (b *Builder) Run(root *Action, threads ...*starlark.Thread) {
 			workerN--
 		}
 
-		fmt.Println("waiting for action")
 		// Wait for completed actions via the done queue.
 		a := <-done
-		fmt.Println("got action")
 		workerN++
 
 		for _, a0 := range a.triggers {
@@ -680,5 +578,4 @@ func (b *Builder) Run(root *Action, threads ...*starlark.Thread) {
 			}
 		}
 	}
-	fmt.Println("completed do")
 }

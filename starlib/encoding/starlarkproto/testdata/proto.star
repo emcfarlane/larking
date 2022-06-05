@@ -1,5 +1,5 @@
 # Tests of Starlark 'proto' extension.
-load("proto.star", "proto")
+load("encoding/proto.star", "proto")
 
 def test_protos(t):
     s = struct(body = "hello")

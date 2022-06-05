@@ -2,11 +2,13 @@ package builder
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 
 	"github.com/emcfarlane/larking/starlib"
 	"github.com/emcfarlane/larking/starlib/starlarkrule"
 	"github.com/emcfarlane/larking/starlib/starlarkthread"
+	"github.com/go-logr/logr"
 	"go.starlark.net/starlark"
 )
 
@@ -28,6 +30,7 @@ func Build(ctx context.Context, label string, opts ...BuildOption) (*starlarkrul
 	for _, opt := range opts {
 		opt(&bldOpts)
 	}
+	log := logr.FromContextOrDiscard(ctx)
 
 	dir := "" // todo?
 	l, err := starlarkrule.ParseRelativeLabel("file://./?metadata=skip", dir)
@@ -51,6 +54,10 @@ func Build(ctx context.Context, label string, opts ...BuildOption) (*starlarkrul
 		thread := &starlark.Thread{
 			Name: bktURL,
 			Load: loader.Load,
+			Print: func(thread *starlark.Thread, msg string) {
+				fmt.Println("MSG!", msg)
+				log.Info(msg, "name", thread.Name)
+			},
 		}
 		starlarkthread.SetResourceStore(thread, &resources)
 		starlarkthread.SetContext(thread, ctx)

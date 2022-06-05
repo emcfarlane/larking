@@ -9,10 +9,17 @@ import (
 
 type Blobs struct {
 	mu   sync.Mutex // protects bkts
-	bkts map[string]*blob.Bucket
+	bkts map[string]Bucket
 }
 
-func (b *Blobs) OpenBucket(ctx context.Context, urlstr string) (*blob.Bucket, error) {
+type Bucket struct {
+	*blob.Bucket
+}
+
+func (b Bucket) Close() error { panic("close on pooled bucket") }
+
+// Load bucket from blobs pool, close handled by blobs.Close.
+func (b *Blobs) OpenBucket(ctx context.Context, urlstr string) (Bucket, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -22,14 +29,14 @@ func (b *Blobs) OpenBucket(ctx context.Context, urlstr string) (*blob.Bucket, er
 
 	bkt, err := blob.OpenBucket(ctx, urlstr)
 	if err != nil {
-		return nil, err
+		return Bucket{}, err
 	}
 
 	if b.bkts == nil {
-		b.bkts = make(map[string]*blob.Bucket)
+		b.bkts = make(map[string]Bucket)
 	}
-	b.bkts[urlstr] = bkt
-	return bkt, nil
+	b.bkts[urlstr] = Bucket{bkt}
+	return Bucket{bkt}, nil
 }
 
 // Close open buckets.
@@ -39,7 +46,7 @@ func (b *Blobs) Close() error {
 
 	var firstErr error
 	for _, bkt := range b.bkts {
-		if err := bkt.Close(); err != nil {
+		if err := bkt.Bucket.Close(); err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}

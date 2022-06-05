@@ -52,6 +52,7 @@ def _go_impl(ctx):
     print("name", name)
     return [DefaultInfo(
         executable = name,
+        files = [name],
     )]
 
 go = rule(

@@ -1,6 +1,6 @@
 package starlarkrule
 
-import (
+/*import (
 	"fmt"
 
 	"github.com/emcfarlane/larking/starlib/starlarkstruct"
@@ -37,4 +37,4 @@ func getAttrStr(v *starlarkstruct.Struct, name string) (string, error) {
 		return "", fmt.Errorf("attr %q not a string", name)
 	}
 	return s, nil
-}
+}*/

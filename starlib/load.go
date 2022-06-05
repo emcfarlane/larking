@@ -17,6 +17,7 @@ import (
 	"github.com/emcfarlane/larking/starlib/encoding/starlarkproto"
 	"github.com/emcfarlane/larking/starlib/net/starlarkhttp"
 	"github.com/emcfarlane/larking/starlib/net/starlarkopenapi"
+	"github.com/emcfarlane/larking/starlib/starext"
 	"github.com/go-logr/logr"
 
 	//"github.com/emcfarlane/larking/starlib/net/starlarkgrpc"
@@ -33,7 +34,6 @@ import (
 	starlarkmath "go.starlark.net/lib/math"
 	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
-	"gocloud.dev/blob"
 )
 
 // content holds our static web server content.
@@ -115,9 +115,10 @@ type call struct {
 // Loader is a cloid.Blob backed loader. It uses thread.Name to figure out the
 // current bucket and module.
 type Loader struct {
-	mu   sync.Mutex       // protects m
-	m    map[string]*call // lazily initialized
-	bkts map[string]*blob.Bucket
+	starext.Blobs
+
+	mu sync.Mutex       // protects m
+	m  map[string]*call // lazily initialized
 
 	// Predeclared globals
 	globals starlark.StringDict
@@ -161,7 +162,7 @@ func (l *Loader) Load(thread *starlark.Thread, module string) (starlark.StringDi
 	log := logr.FromContextOrDiscard(ctx)
 
 	log.Info("loading module", "module", module)
-	defer log.Info("finsihed loading", "module", module)
+	defer log.Info("finished loading", "module", module)
 
 	l.mu.Lock()
 	if l.m == nil {
@@ -200,46 +201,9 @@ func (l *Loader) Load(thread *starlark.Thread, module string) (starlark.StringDi
 	return c.val, c.err
 }
 
-// LoadBucket opens a bucket from a bucket of buckets.
-func (l *Loader) LoadBucket(ctx context.Context, bktURL string) (*blob.Bucket, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if bkt, ok := l.bkts[bktURL]; ok {
-		return bkt, nil
-	}
-
-	bkt, err := blob.OpenBucket(ctx, bktURL)
-	if err != nil {
-		return nil, err
-	}
-
-	if l.bkts == nil {
-		l.bkts = make(map[string]*blob.Bucket)
-	}
-	l.bkts[bktURL] = bkt
-	return bkt, nil
-}
-
-// Close open buckets.
-func (l *Loader) Close() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	var firstErr error
-	for _, bkt := range l.bkts {
-		if err := bkt.Close(); err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
-		}
-	}
-	return firstErr
-}
-
 // LoadSource fetches the source file in bytes from a bucket.
 func (l *Loader) LoadSource(ctx context.Context, bktURL string, key string) ([]byte, error) {
-	bkt, err := l.LoadBucket(ctx, bktURL)
+	bkt, err := l.OpenBucket(ctx, bktURL)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +218,6 @@ func (l *Loader) load(thread *starlark.Thread, module string) (starlark.StringDi
 		return v, nil
 	}
 	if !errors.Is(err, fs.ErrNotExist) {
-		fmt.Println("error", errors.Is(err, fs.ErrNotExist))
 		return nil, err
 	}
 

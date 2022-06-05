@@ -45,24 +45,19 @@ func makeTar(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs
 
 	var (
 		creationTime time.Time // zero
+		blobs        starext.Blobs
 	)
+	defer blobs.Close()
 
 	createTar := func(l *Label) error {
 		fmt.Println("createTar", l)
 		bktURL := l.BucketURL()
-
-		bkt, err := blob.OpenBucket(ctx, bktURL)
-		if err != nil {
-			return err
-		}
-		defer bkt.Close()
-
 		key := l.Key()
-		w, err := bkt.NewWriter(ctx, key, nil)
+
+		w, err := blobs.NewWriter(ctx, bktURL, key, nil)
 		if err != nil {
 			return err
 		}
-		fmt.Println("writer:", key)
 		defer w.Close()
 
 		// compress writer
@@ -79,21 +74,19 @@ func makeTar(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs
 		defer tw.Close()
 
 		addFile := func(l *Label, key string) error {
-			fmt.Println("addFile", l, key)
 			bktURL := l.BucketURL()
 			bkt, err := blob.OpenBucket(ctx, bktURL)
 			if err != nil {
 				return err
 			}
-			defer bkt.Close()
 
-			r, err := bkt.NewReader(ctx, l.Key(), nil)
+			r, err := blobs.NewReader(ctx, bktURL, l.Key(), nil)
 			if err != nil {
 				return err
 			}
 			defer r.Close()
 
-			attrs, err := bkt.Attributes(ctx, key)
+			attrs, err := bkt.Attributes(ctx, l.Key())
 			if err != nil {
 				return err
 			}
@@ -116,12 +109,12 @@ func makeTar(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs
 			return nil
 		}
 
-		iter := srcs.Iterate()
-		defer iter.Done()
-
-		var x starlark.Value
-		for iter.Next(&x) {
-			l := x.(*Label) // must be
+		for i, n := 0, srcs.Len(); i < n; i++ {
+			src := srcs.Index(i)
+			l, ok := src.(*Label)
+			if !ok {
+				return fmt.Errorf("invalid src type: %T", src.Type())
+			}
 
 			// Form the key path of the file in the tar fs.
 			key := path.Join(

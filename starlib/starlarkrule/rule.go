@@ -22,10 +22,11 @@ func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
 		Name: "rule",
 		Members: starlark.StringDict{
-			"rule":        starext.MakeBuiltin("rule.rule", MakeRule),
-			"attr":        NewAttrModule(),
-			"attrs":       starext.MakeBuiltin("rule.attrs", MakeAttrs),
-			"DefaultInfo": DefaultInfo,
+			"rule":          starext.MakeBuiltin("rule.rule", MakeRule),
+			"attr":          NewAttrModule(),
+			"attrs":         starext.MakeBuiltin("rule.attrs", MakeAttrs),
+			"DefaultInfo":   DefaultInfo,
+			"ContainerInfo": ContainerInfo,
 		},
 	}
 }
@@ -58,6 +59,7 @@ var labelAttrs = map[string]labelAttr{
 	"query":    func(l *Label) starlark.Value { return starlark.String(l.RawQuery) },
 	"fragment": func(l *Label) starlark.Value { return starlark.String(l.Fragment) },
 
+	// Blob type parameters.
 	"bucket": func(l *Label) starlark.Value { return starlark.String(l.BucketURL()) },
 	"key":    func(l *Label) starlark.Value { return starlark.String(l.Key()) },
 }
@@ -89,6 +91,15 @@ func (l *Label) Key() string { return l.Query().Get("key") }
 func (l *Label) KeyArgs() (url.Values, error) {
 	s := l.Query().Get("keyargs")
 	return url.ParseQuery(s)
+}
+
+// Strip keyargs to match target URL.
+func (l *Label) CleanURL() string {
+	u := l.URL
+	q := u.Query()
+	q.Del("keyargs")
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func (x *Label) CompareSameType(op syntax.Token, _y starlark.Value, depth int) (bool, error) {
@@ -312,49 +323,6 @@ func (r *Rule) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwargs
 		return nil, err
 	}
 
-	// Call from go(...)
-	//if len(args) > 0 {
-	//	return nil, fmt.Errorf("error: got %d arguments, want 0", len(args))
-	//}
-
-	//attrSeen := make(map[string]bool)
-	//attrArgs := starext.NewOrderedStringDict(len(kwargs))
-	//for _, kwarg := range kwargs {
-	//	name := string(kwarg[0].(starlark.String))
-	//	value := kwarg[1]
-	//	//value.Freeze()? Needed?
-	//	fmt.Println("\t\tname:", name)
-
-	//	attr, ok := r.ins[name]
-	//	if !ok {
-	//		return nil, fmt.Errorf("unexpected attribute: %s", name)
-	//	}
-
-	//	if err := asAttrValue(thread, name, attr, &value); err != nil {
-	//		return nil, err
-	//	}
-
-	//	fmt.Println("setting value", name, value)
-	//	attrArgs.Insert(name, value)
-	//	attrSeen[name] = true
-	//}
-
-	//// Mandatory checks
-	//for name, a := range r.ins {
-	//	if !attrSeen[name] {
-	//		if a.Mandatory {
-	//			return nil, fmt.Errorf("missing mandatory attribute: %s", name)
-	//		}
-	//		attrArgs.Insert(name, a.Def)
-	//	}
-	//}
-
-	//module, ok := thread.Local("module").(string)
-	//if !ok {
-	//	return nil, fmt.Errorf("error internal: unknown module")
-	//}
-	//attrArgs.Sort()
-
 	target, err := NewTarget(source, r, attrArgs)
 	if err != nil {
 		return nil, err
@@ -411,7 +379,9 @@ func (t *Target) Clone() *Target {
 }
 
 // TODO?
-func (t *Target) Hash() (uint32, error) { return 0, nil }
+func (t *Target) Hash() (uint32, error) {
+	return 0, fmt.Errorf("unhashable type: %s", t.Type())
+}
 
 func (t *Target) String() string {
 	var buf strings.Builder

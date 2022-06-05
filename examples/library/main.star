@@ -1,5 +1,5 @@
 load("blob.star", "read_all")
-load("proto.star", "proto")
+load("encoding/proto.star", "proto")
 
 library_bin = read_all("apipb/library.bin")
 print("loading library.bin")

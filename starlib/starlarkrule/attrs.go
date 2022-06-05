@@ -5,6 +5,7 @@
 package starlarkrule
 
 import (
+	_ "embed"
 	"fmt"
 	"strings"
 
@@ -884,31 +885,29 @@ func (a *AttrArgs) Clone() *AttrArgs {
 	}
 }
 
-var DefaultInfo = func() *Attrs {
-	thread := &starlark.Thread{Name: "memory://./?"}
-	fnname := "makeDefaultInfo"
+var _ (starlark.Callable) = (*Attrs)(nil)
 
-	filesValue, err := attrLabelList(thread, fnname, nil, []starlark.Tuple{
-		{starlark.String("doc"), starlark.String("A list of files.")},
-	})
+//go:embed info.star
+var infoSrc string
+
+var (
+	DefaultInfo   *Attrs
+	ContainerInfo *Attrs
+)
+
+func init() {
+	info, err := starlark.ExecFile(
+		&starlark.Thread{Name: "internal"},
+		"rule/info.star",
+		infoSrc,
+		starlark.StringDict{
+			"attr":  NewAttrModule(),
+			"attrs": starext.MakeBuiltin("rule.attrs", MakeAttrs),
+		},
+	)
 	if err != nil {
 		panic(err)
 	}
-	executableValue, err := attrLabel(thread, fnname, nil, []starlark.Tuple{
-		{starlark.String("doc"), starlark.String("Executable, if runnable.")},
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	attrs, err := MakeAttrs(thread, fnname, nil, []starlark.Tuple{
-		{starlark.String("files"), filesValue},
-		{starlark.String("executable"), executableValue},
-	})
-	if err != nil {
-		panic(err)
-	}
-	return attrs.(*Attrs)
-}()
-
-var _ (starlark.Callable) = DefaultInfo
+	DefaultInfo = info["DefaultInfo"].(*Attrs)
+	ContainerInfo = info["ContainerInfo"].(*Attrs)
+}
