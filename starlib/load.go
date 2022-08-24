@@ -7,100 +7,21 @@ package starlib
 import (
 	"bytes"
 	"context"
-	"embed"
 	"errors"
 	"fmt"
 	"io/fs"
 	"runtime/debug"
 	"sync"
 
-	"larking.io/starlib/encoding/starlarkproto"
-	"larking.io/starlib/net/starlarkhttp"
-	"larking.io/starlib/net/starlarkopenapi"
-	"larking.io/starlib/starext"
 	"github.com/go-logr/logr"
+	"larking.io/starlib/starext"
 
 	//"larking.io/starlib/net/starlarkgrpc"
-	"larking.io/starlib/starlarkblob"
-	"larking.io/starlib/starlarkdocstore"
-	"larking.io/starlib/starlarkerrors"
-	"larking.io/starlib/starlarkpubsub"
-	"larking.io/starlib/starlarkrule"
-	"larking.io/starlib/starlarkruntimevar"
-	"larking.io/starlib/starlarksql"
-	"larking.io/starlib/starlarkstruct"
-	"larking.io/starlib/starlarkthread"
-	starlarkjson "go.starlark.net/lib/json"
-	starlarkmath "go.starlark.net/lib/math"
-	starlarktime "go.starlark.net/lib/time"
+
 	"go.starlark.net/starlark"
+	"larking.io/starlib/starlarkrule"
+	"larking.io/starlib/starlarkthread"
 )
-
-// content holds our static web server content.
-//go:embed rules/*
-var local embed.FS
-
-func makeDict(module *starlarkstruct.Module) starlark.StringDict {
-	dict := make(starlark.StringDict, len(module.Members)+1)
-	for key, val := range module.Members {
-		dict[key] = val
-	}
-	// Add module if no module name.
-	if _, ok := dict[module.Name]; !ok {
-		dict[module.Name] = module
-	}
-	return dict
-}
-
-var (
-	stdLibMu sync.Mutex
-	stdLib   = map[string]starlark.StringDict{
-		//"archive/container.star":           makeDict(starlarkcontainer.NewModule()),
-		//"archive/tar.star":           makeDict(starlarktar.NewModule()),
-		//"archive/zip.star":           makeDict(starlarkzip.NewModule()),
-
-		"blob.star":           makeDict(starlarkblob.NewModule()),
-		"docstore.star":       makeDict(starlarkdocstore.NewModule()),
-		"encoding/json.star":  makeDict(starlarkjson.Module), // starlark
-		"encoding/proto.star": makeDict(starlarkproto.NewModule()),
-		"errors.star":         makeDict(starlarkerrors.NewModule()),
-		"math.star":           makeDict(starlarkmath.Module), // starlark
-		"net/http.star":       makeDict(starlarkhttp.NewModule()),
-		"net/openapi.star":    makeDict(starlarkopenapi.NewModule()),
-		"pubsub.star":         makeDict(starlarkpubsub.NewModule()),
-		"runtimevar.star":     makeDict(starlarkruntimevar.NewModule()),
-		"sql.star":            makeDict(starlarksql.NewModule()),
-		"time.star":           makeDict(starlarktime.Module), // starlark
-		"thread.star":         makeDict(starlarkthread.NewModule()),
-		"rule.star":           makeDict(starlarkrule.NewModule()),
-		//"net/grpc.star": makeDict(starlarkgrpc.NewModule()),
-	}
-)
-
-// StdLoad loads files from the standard library.
-func (l *Loader) StdLoad(thread *starlark.Thread, module string) (starlark.StringDict, error) {
-	stdLibMu.Lock()
-	if e, ok := stdLib[module]; ok {
-		stdLibMu.Unlock()
-		return e, nil
-	}
-	stdLibMu.Unlock()
-
-	// Load and eval the file.
-	src, err := local.ReadFile(module)
-	if err != nil {
-		return nil, err
-	}
-	v, err := starlark.ExecFile(thread, module, src, l.globals)
-	if err != nil {
-		return nil, fmt.Errorf("exec file: %v", err)
-	}
-
-	stdLibMu.Lock()
-	stdLib[module] = v // cache
-	stdLibMu.Unlock()
-	return v, nil
-}
 
 // call is an in-flight or completed load call
 type call struct {
@@ -112,13 +33,15 @@ type call struct {
 	callers map[*starlark.Thread]bool
 }
 
-// Loader is a cloid.Blob backed loader. It uses thread.Name to figure out the
+// Loader is a cloud.Blob backed loader. It uses thread.Name to figure out the
 // current bucket and module.
+// TODO: document how this works.
 type Loader struct {
 	starext.Blobs
 
-	mu sync.Mutex       // protects m
-	m  map[string]*call // lazily initialized
+	mu    sync.Mutex       // protects m
+	m     map[string]*call // lazily initialized
+	cache map[string]starlark.StringDict
 
 	// Predeclared globals
 	globals starlark.StringDict
