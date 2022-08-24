@@ -676,10 +676,22 @@ func NewMessage(msg protoreflect.Message, args starlark.Tuple, kwargs []starlark
 		return nil, fmt.Errorf("unxpected args and kwargs")
 	}
 
+	// Reset message.
+	dst := msg.Interface()
+	proto.Reset(dst)
+
 	if hasArgs {
 		switch v := args[0].(type) {
 		case *Message:
-			return v, nil
+			if msg.Type() != v.msg.Type() {
+				return nil, fmt.Errorf("mismatching type")
+			}
+			// shallow copy.
+			v.msg.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+				msg.Set(fd, v)
+				return true
+			})
+			return &Message{msg: msg, frozen: new(bool)}, nil
 		case starlark.NoneType:
 			return &Message{msg: msg.Type().Zero(), frozen: new(bool)}, nil // RO
 		case starlark.IterableMapping:
