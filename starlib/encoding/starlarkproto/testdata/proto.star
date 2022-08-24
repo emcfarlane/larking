@@ -86,13 +86,11 @@ def test_protos(t):
     # Messages can be assigned Messages
     nested = test.Message(body = "nested")
     m.nested = nested
-    print("here")
 
     # Maps shallow copy Dicts on set
     m.maps = {
         "hello": struct(body = "world!", type = "GREETING"),
     }
-    print("here")
     print(m)
 
     # Oneofs
