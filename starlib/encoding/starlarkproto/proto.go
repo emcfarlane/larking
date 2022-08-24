@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/google/go-cmp/cmp"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -18,6 +19,7 @@ import (
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/dynamicpb"
 
 	"larking.io/starlib/starext"
@@ -838,6 +840,11 @@ func (x *Message) CompareSameType(op syntax.Token, y_ starlark.Value, depth int)
 	default:
 		panic(op)
 	}
+}
+
+func (x *Message) DiffSameType(y_ starlark.Value) (string, error) {
+	y := y_.(*Message)
+	return cmp.Diff(x.msg.Interface(), y.msg.Interface(), protocmp.Transform()), nil
 }
 
 // List represents a repeated field as a starlark.List.

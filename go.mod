@@ -5,22 +5,22 @@ go 1.18
 require (
 	github.com/bazelbuild/buildtools v0.0.0-20220215100907-23e2a9e4721a
 	github.com/containerd/stargz-snapshotter/estargz v0.10.1
-	github.com/emcfarlane/starlarkassert v0.0.0-20220406142958-771296b4bdb6
+	github.com/emcfarlane/starlarkassert v0.0.0-20220816194629-bc820a0f5f7c
 	github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/stdr v1.2.0
 	github.com/go-openapi/spec v0.20.4
-	github.com/google/go-cmp v0.5.7
+	github.com/google/go-cmp v0.5.8
 	github.com/iancoleman/strcase v0.2.0
 	github.com/peterh/liner v1.2.1
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
-	go.starlark.net v0.0.0-20220328144851-d1966c6b9fcd
+	go.starlark.net v0.0.0-20220817180228-f738f5508c12
 	gocloud.dev v0.25.0
 	golang.org/x/net v0.0.0-20220401154927-543a649e0bdd
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/genproto v0.0.0-20220401170504-314d38edb7de
 	google.golang.org/grpc v1.45.0
-	google.golang.org/protobuf v1.28.0
+	google.golang.org/protobuf v1.28.1
 	modernc.org/sqlite v1.13.3
 	nhooyr.io/websocket v1.8.7
 )
@@ -95,7 +95,7 @@ require (
 	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/mod v0.5.1 // indirect
 	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a // indirect
-	golang.org/x/sys v0.0.0-20220405210540-1e041c57c461 // indirect
+	golang.org/x/sys v0.0.0-20220823224334-20c2bfdbfe24 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65 // indirect
 	golang.org/x/tools v0.1.8 // indirect

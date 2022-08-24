@@ -3,9 +3,9 @@ package starlarkproto_test
 import (
 	"testing"
 
-	"larking.io/starlib"
 	_ "github.com/emcfarlane/starlarkproto/testpb"
 	"go.starlark.net/starlark"
+	"larking.io/starlib"
 )
 
 func TestProto(t *testing.T) {
@@ -13,5 +13,5 @@ func TestProto(t *testing.T) {
 		// TODO
 		//"library_bin": starlark.String(b),
 	}
-	starlib.RunTests(t, "testdata/*_test.star", globals)
+	starlib.RunTests(t, "testdata/*.star", globals)
 }
