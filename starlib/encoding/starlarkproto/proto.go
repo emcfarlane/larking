@@ -664,6 +664,11 @@ func (m *Message) checkMutable(verb string) error {
 	return nil
 }
 
+// NewMessage creates a *Message base on a protobuffer Message with the given
+// starlark args and kwargs.
+// If both args and kwargs are nil the message is unmodified.
+// Args or kwargs are exclusive.
+// Only one arg can be set of type *Message, None, IterableMapping or HasAttrs.
 func NewMessage(msg protoreflect.Message, args starlark.Tuple, kwargs []starlark.Tuple) (*Message, error) {
 	hasArgs := len(args) > 0
 	hasKwargs := len(kwargs) > 0
@@ -675,10 +680,6 @@ func NewMessage(msg protoreflect.Message, args starlark.Tuple, kwargs []starlark
 	if hasArgs && hasKwargs {
 		return nil, fmt.Errorf("unxpected args and kwargs")
 	}
-
-	// Reset message.
-	dst := msg.Interface()
-	proto.Reset(dst)
 
 	if hasArgs {
 		switch v := args[0].(type) {
