@@ -2,7 +2,9 @@ package builder
 
 import (
 	"context"
+	"errors"
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -31,6 +33,11 @@ func TestGraph(t *testing.T) {
 
 	svg, err := dotToSvg(dot)
 	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			t.Log("skipping test, dot not available")
+			t.Skip()
+			return
+		}
 		t.Fatal(err)
 	}
 	t.Log(string(svg))
