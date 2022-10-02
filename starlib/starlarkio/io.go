@@ -8,11 +8,10 @@ package starlarkio
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sort"
 
-	"larking.io/starlib/starext"
 	"go.starlark.net/starlark"
+	"larking.io/starlib/starext"
 )
 
 type Reader struct {
@@ -50,7 +49,7 @@ func (v *Reader) AttrNames() []string {
 
 // TODO: check args/kwargs length
 func (v *Reader) readAll(_ *starlark.Thread, _ string, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
-	x, err := ioutil.ReadAll(v.Reader)
+	x, err := io.ReadAll(v.Reader)
 	if err != nil {
 		return nil, err
 	}

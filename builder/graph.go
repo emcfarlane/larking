@@ -10,10 +10,10 @@ import (
 	"os/exec"
 	"strings"
 
+	"go.starlark.net/starlark"
 	"larking.io/starlib"
 	"larking.io/starlib/starlarkrule"
 	"larking.io/starlib/starlarkthread"
-	"go.starlark.net/starlark"
 )
 
 // TODO: build dot-graph
@@ -22,6 +22,9 @@ import (
 
 // https://github.com/google/pprof/blob/83db2b799d1f74c40857232cb5eb4c60379fe6c2/internal/driver/webui.go#L332
 func dotToSvg(dot []byte) ([]byte, error) {
+	if _, err := exec.LookPath("dot"); err != nil {
+		return nil, err // exec.ErrNotFound
+	}
 	cmd := exec.Command("dot", "-Tsvg")
 	out := &bytes.Buffer{}
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = bytes.NewBuffer(dot), out, os.Stderr

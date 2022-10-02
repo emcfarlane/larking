@@ -14,7 +14,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
-	"io/ioutil"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -464,7 +464,7 @@ func TestTLSServer(t *testing.T) {
 			t.Fatal("invalid status code", rsp.StatusCode)
 		}
 		defer rsp.Body.Close()
-		b, err := ioutil.ReadAll(rsp.Body)
+		b, err := io.ReadAll(rsp.Body)
 		if err != nil {
 			t.Fatal(err)
 		}

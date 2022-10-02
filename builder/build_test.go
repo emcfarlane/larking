@@ -2,16 +2,29 @@ package builder
 
 import (
 	"context"
+	"errors"
+	"os/exec"
 	"testing"
 
-	"larking.io/starlib/starlarkrule"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/testr"
 	"go.starlark.net/starlark"
 	_ "gocloud.dev/blob/fileblob"
+	"larking.io/starlib/starlarkrule"
 )
 
 func TestRun(t *testing.T) {
+	// Check local deps are available
+	for _, dep := range []string{"zig"} {
+		if _, err := exec.LookPath("dot"); err != nil {
+			if errors.Is(err, exec.ErrNotFound) {
+				t.Logf("skipping, %q needed", dep)
+				t.Skip()
+				return
+			}
+			t.Fatal(err)
+		}
+	}
 
 	src := "file://./?metadata=skip"
 	makeLabel := func(name string) *starlarkrule.Label {

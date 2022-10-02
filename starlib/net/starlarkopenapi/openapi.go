@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -26,16 +25,16 @@ import (
 	"time"
 	"unicode"
 
-	"larking.io/starlib/net/starlarkhttp"
-	"larking.io/starlib/starext"
-	"larking.io/starlib/starlarkstruct"
-	"larking.io/starlib/starlarkthread"
 	"github.com/go-openapi/spec"
 	"github.com/iancoleman/strcase"
 	starlarkjson "go.starlark.net/lib/json"
 	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
 	"gocloud.dev/runtimevar"
+	"larking.io/starlib/net/starlarkhttp"
+	"larking.io/starlib/starext"
+	"larking.io/starlib/starlarkstruct"
+	"larking.io/starlib/starlarkthread"
 )
 
 func NewModule() *starlarkstruct.Module {
@@ -576,7 +575,7 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 	// Produce struct or array
 	switch typ := producesType; typ {
 	case "application/json":
-		rspBody, err := ioutil.ReadAll(rsp.Body)
+		rspBody, err := io.ReadAll(rsp.Body)
 		if err != nil {
 			return nil, err
 		}

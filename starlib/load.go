@@ -39,9 +39,9 @@ type call struct {
 type Loader struct {
 	starext.Blobs
 
-	mu    sync.Mutex       // protects m
-	m     map[string]*call // lazily initialized
-	cache map[string]starlark.StringDict
+	mu sync.Mutex       // protects m
+	m  map[string]*call // lazily initialized
+	//cache map[string]starlark.StringDict
 
 	// Predeclared globals
 	globals starlark.StringDict
