@@ -669,3 +669,30 @@ func TestMessageServer(t *testing.T) {
 		})
 	}
 }
+
+// TODO: one broken service breaks service descovery on reflection.
+//// TestBrokenServer for error handling.
+//func TestBrokenServer(t *testing.T) {
+//	// Create test server.
+//	bs := &testpb.UnimplementedBrokenServer{}
+//
+//	o := new(overrides)
+//	gs := grpc.NewServer(o.unaryOption(), o.streamOption())
+//
+//	testpb.RegisterBrokenServer(gs, bs)
+//
+//	mux, err := NewMux()
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//
+//	// Call internal method of error handling.
+//	err = mux.registerService(&testpb.Broken_ServiceDesc, &bs)
+//	if err == nil {
+//		t.Fatal("should fail")
+//	}
+//	t.Log(err)
+//	if !strings.Contains(err.Error(), "invalid rule") {
+//		t.Fatalf("unknown err: %v", err)
+//	}
+//}
