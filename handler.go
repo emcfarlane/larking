@@ -25,13 +25,13 @@ type handler struct {
 // TODO: use grpclog?
 //var logger = grpclog.Component("core")
 
-// RegisterService satisfies gprc generated service code.
+// RegisterService satisfies grpc.ServiceRegistrar for generated service code hooks.
 func (m *Mux) RegisterService(sd *grpc.ServiceDesc, ss interface{}) {
 	if ss != nil {
 		ht := reflect.TypeOf(sd.HandlerType).Elem()
 		st := reflect.TypeOf(ss)
 		if !st.Implements(ht) {
-			log.Fatalf("grpc: RegisterService found the handler of type %v that does not satisfy %v", st, ht)
+			log.Fatalf("larking: RegisterService found the handler of type %v that does not satisfy %v", st, ht)
 		}
 	}
 	if err := m.registerService(sd, ss); err != nil {

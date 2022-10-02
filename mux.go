@@ -274,7 +274,7 @@ func (s *state) appendHandler(
 	h *handler,
 ) error {
 	if err := s.path.addRule(rule, desc, h.method); err != nil {
-		return err
+		return fmt.Errorf("[%s] invalid rule %s: %w", desc.FullName(), rule.String(), err)
 	}
 	s.handlers[h.method] = append(s.handlers[h.method], h)
 	return nil
