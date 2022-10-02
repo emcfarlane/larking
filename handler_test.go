@@ -8,18 +8,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"larking.io/testpb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
+	"larking.io/testpb"
 )
 
 func TestHandler(t *testing.T) {
@@ -76,7 +76,7 @@ func TestHandler(t *testing.T) {
 		t.Fatal(r.Status)
 	}
 
-	data, err := ioutil.ReadAll(r.Body)
+	data, err := io.ReadAll(r.Body)
 	if err != nil {
 		t.Fatal(err)
 	}

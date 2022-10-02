@@ -2,7 +2,7 @@ package builder
 
 import (
 	"context"
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -39,7 +39,7 @@ func TestGraph(t *testing.T) {
 		t.Error("missing svg")
 	}
 
-	if err := ioutil.WriteFile("graph.svg", svg, 0666); err != nil {
+	if err := os.WriteFile("graph.svg", svg, 0666); err != nil {
 		t.Fatal(err)
 	}
 }

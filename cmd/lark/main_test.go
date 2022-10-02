@@ -2,14 +2,13 @@ package main
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"testing"
 )
 
 func TestBoot(t *testing.T) {
 	content := []byte("1+1\n")
-	tmpin, err := ioutil.TempFile("", "bootin")
+	tmpin, err := os.CreateTemp("", "bootin")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +27,7 @@ func TestBoot(t *testing.T) {
 	defer func() { os.Stdin = oldStdin }() // Restore original Stdin
 	os.Stdin = tmpin
 
-	tmpout, err := ioutil.TempFile("", "bootout")
+	tmpout, err := os.CreateTemp("", "bootout")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +45,7 @@ func TestBoot(t *testing.T) {
 	if err := run(ctx, opts); err != nil {
 		t.Fatal(err)
 	}
-	b, err := ioutil.ReadFile(tmpout.Name())
+	b, err := os.ReadFile(tmpout.Name())
 	if err != nil {
 		t.Fatal(err)
 	}

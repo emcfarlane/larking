@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -18,11 +17,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"larking.io/starlib"
-	"larking.io/starlib/net/starlarkhttp"
 	"go.starlark.net/starlark"
 	_ "gocloud.dev/blob/fileblob"
 	_ "gocloud.dev/runtimevar/filevar"
+	"larking.io/starlib"
+	"larking.io/starlib/net/starlarkhttp"
 )
 
 var record = flag.Bool("record", false, "perform live requests")
@@ -39,12 +38,12 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.count++
 
 	if !*record {
-		reqBytes, err := ioutil.ReadFile(reqName)
+		reqBytes, err := os.ReadFile(reqName)
 		if err != nil {
 			return nil, err
 		}
 
-		rspBytes, err := ioutil.ReadFile(rspName)
+		rspBytes, err := os.ReadFile(rspName)
 		if err != nil {
 			return nil, err
 		}
@@ -63,7 +62,7 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	if reqBytes, err := httputil.DumpRequest(req, true); err != nil {
 		return nil, err
-	} else if err := ioutil.WriteFile(reqName, reqBytes, 0644); err != nil {
+	} else if err := os.WriteFile(reqName, reqBytes, 0644); err != nil {
 		log.Fatal(err)
 	}
 
@@ -74,7 +73,7 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	if rspBytes, err := httputil.DumpResponse(rsp, true); err != nil {
 		return nil, err
-	} else if err := ioutil.WriteFile(rspName, rspBytes, 0644); err != nil {
+	} else if err := os.WriteFile(rspName, rspBytes, 0644); err != nil {
 		log.Fatal(err)
 	}
 

@@ -7,17 +7,17 @@ package control
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"sync"
 
-	"larking.io/apipb/controlpb"
 	"github.com/pkg/browser"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/encoding/protojson"
+	"larking.io/apipb/controlpb"
 )
 
 // TODO: use OAuth2 libraries directly.
@@ -68,7 +68,7 @@ func (c *Client) OpenRPCCredentials(ctx context.Context) (*PerRPCCredentials, er
 	if err != nil {
 		return nil, err
 	}
-	if err := ioutil.WriteFile(credFile, b, 0644); err != nil {
+	if err := os.WriteFile(credFile, b, 0644); err != nil {
 		return nil, err
 	}
 

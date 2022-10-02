@@ -11,7 +11,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -88,7 +87,7 @@ type muxOptions struct {
 }
 
 func (o *muxOptions) readAll(r io.Reader) ([]byte, error) {
-	b, err := ioutil.ReadAll(io.LimitReader(r, int64(o.maxReceiveMessageSize)+1))
+	b, err := io.ReadAll(io.LimitReader(r, int64(o.maxReceiveMessageSize)+1))
 	if err != nil {
 		return nil, err
 	}

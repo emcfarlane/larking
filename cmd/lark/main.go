@@ -12,7 +12,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -22,12 +21,6 @@ import (
 	"strings"
 	"testing"
 
-	"larking.io/apipb/workerpb"
-	_ "larking.io/cmd/internal/bindings"
-	"larking.io/control"
-	"larking.io/starlib"
-	"larking.io/starlib/starlarkthread"
-	"larking.io/worker"
 	"github.com/emcfarlane/starlarkassert"
 	"github.com/peterh/liner"
 	"go.starlark.net/starlark"
@@ -36,6 +29,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"larking.io/apipb/workerpb"
+	_ "larking.io/cmd/internal/bindings"
+	"larking.io/control"
+	"larking.io/starlib"
+	"larking.io/starlib/starlarkthread"
+	"larking.io/worker"
 )
 
 func env(key, def string) string {
@@ -680,7 +679,7 @@ func main() {
 			filename = arg0
 
 			var err error
-			b, err := ioutil.ReadFile(filename)
+			b, err := os.ReadFile(filename)
 			if err != nil {
 				log.Fatal(err)
 			}

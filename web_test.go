@@ -7,18 +7,18 @@ package larking
 import (
 	"bytes"
 	"encoding/binary"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"larking.io/testpb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
+	"larking.io/testpb"
 )
 
 func TestWeb(t *testing.T) {
@@ -103,7 +103,7 @@ func TestWeb(t *testing.T) {
 
 			t.Log("resp", resp)
 
-			b, err := ioutil.ReadAll(resp.Body)
+			b, err := io.ReadAll(resp.Body)
 			if err != nil {
 				t.Fatal(err)
 			}
