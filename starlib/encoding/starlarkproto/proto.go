@@ -946,6 +946,7 @@ func (it *listIterator) Next(p *starlark.Value) bool {
 	if it.i < it.l.Len() {
 		v := it.l.list.Get(it.i)
 		*p = toStarlark(v, it.l.fd, it.l.frozen)
+		it.i++
 		return true
 	}
 	return false
