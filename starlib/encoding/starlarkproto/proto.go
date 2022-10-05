@@ -752,7 +752,8 @@ func (m *Message) String() string {
 			buf.WriteString(string(fd.Name()))
 			buf.WriteString(" = ")
 			v := m.msg.Get(fd)
-			buf.WriteString(v.String())
+			s := toStarlark(v, fd, nil).String()
+			buf.WriteString(s)
 		}
 	} else {
 		buf.WriteString("None")
@@ -987,7 +988,8 @@ func (l *List) Clear() error {
 	return nil
 }
 
-func (l *List) Type() string         { return l.fd.Kind().String() }
+// Type is a typed list.
+func (l *List) Type() string         { return "list<" + l.fd.Kind().String() + ">" }
 func (l *List) Len() int             { return l.list.Len() }
 func (l *List) Truth() starlark.Bool { return l.Len() > 0 }
 
