@@ -695,7 +695,8 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 		return nil
 	}
 
-	if accept == "" {
+	// Curl accept default header */*
+	if accept == "" || strings.HasPrefix(accept, "*") {
 		accept = "application/json"
 	}
 
