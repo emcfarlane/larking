@@ -311,7 +311,7 @@ func lexPath(l *lexer) error {
 			l.emit(tokenEOF)
 			return nil
 		default:
-			panic(":(")
+			return l.errUnexpected()
 		}
 	}
 }
