@@ -1,5 +1,6 @@
 package starlarkrule
 
+/* TODO: readd.
 import (
 	"fmt"
 	"io"
@@ -390,4 +391,4 @@ func containerPush(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 	}
 	return src, nil
 	//return NewContainerImage(filename, reference), nil
-}
+}*/

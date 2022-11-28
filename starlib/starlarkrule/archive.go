@@ -1,5 +1,6 @@
 package starlarkrule
 
+/* TODO: readd.
 import (
 	"archive/tar"
 	"compress/gzip"
@@ -139,4 +140,4 @@ func makeTar(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs
 	}
 	fmt.Println("makeTar", l)
 	return l, nil
-}
+}*/

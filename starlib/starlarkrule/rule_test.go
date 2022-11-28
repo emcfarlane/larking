@@ -5,14 +5,27 @@ import (
 	"net/url"
 	"testing"
 
-	"larking.io/starlib"
-	"larking.io/starlib/starlarkrule"
+	"go.starlark.net/starlark"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob"
+	"larking.io/starlib"
+	"larking.io/starlib/starlarkrule"
 )
 
 func TestExecFile(t *testing.T) {
-	starlib.RunTests(t, "testdata/*.star", nil)
+	starlib.RunTests(t, "testdata/*.star", nil, func(t testing.TB, thread *starlark.Thread) func() {
+		l, err := starlarkrule.ParseRelativeLabel("file://./?metadata=skip", ".")
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := starlarkrule.NewBuilder(l)
+		if err != nil {
+			t.Fatal(err)
+		}
+		starlarkrule.SetBuilder(thread, b)
+
+		return nil
+	})
 }
 
 func TestLabels(t *testing.T) {

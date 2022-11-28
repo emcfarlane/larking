@@ -3,19 +3,18 @@ package starlib
 import (
 	"testing"
 
-	"larking.io/starlib/starlarkthread"
 	"github.com/emcfarlane/starlarkassert"
 	"go.starlark.net/starlark"
+	"larking.io/starlib/starlarkthread"
 )
 
 // RunTests calls starlarkassert.RunTests with options for larking libraries.
 // To use add it to a Test function:
 //
-// 	func TestStarlark(t *testing.T) {
-// 		starlib.RunTests(b, "testdata/*.star", nil)
-// 	}
-//
-func RunTests(t *testing.T, pattern string, globals starlark.StringDict) {
+//	func TestStarlark(t *testing.T) {
+//		starlib.RunTests(b, "testdata/*.star", nil)
+//	}
+func RunTests(t *testing.T, pattern string, globals starlark.StringDict, opts ...starlarkassert.TestOption) {
 	t.Helper()
 
 	g := NewGlobals()
@@ -26,22 +25,23 @@ func RunTests(t *testing.T, pattern string, globals starlark.StringDict) {
 
 	starlarkassert.RunTests(
 		t, pattern, g,
-		starlarkthread.AssertOption,
-		starlarkassert.WithLoad(loader.Load),
-		func(_ testing.TB, thread *starlark.Thread) func() {
-			thread.Name = "file://./?metadata=skip"
-			return nil
-		},
+		append(opts,
+			starlarkthread.AssertOption,
+			starlarkassert.WithLoad(loader.Load),
+			func(_ testing.TB, thread *starlark.Thread) func() {
+				thread.Name = "file://./?metadata=skip"
+				return nil
+			},
+		)...,
 	)
 }
 
 // RunBenches calls starlarkassert.RunBenches with options for larking libraries.
 // To use add it to a Benchmark function:
 //
-// 	func BenchmarkStarlark(b *testing.B) {
-// 		starlib.RunBenches(b, "testdata/*.star", nil)
-// 	}
-//
+//	func BenchmarkStarlark(b *testing.B) {
+//		starlib.RunBenches(b, "testdata/*.star", nil)
+//	}
 func RunBenches(b *testing.B, pattern string, globals starlark.StringDict) {
 	b.Helper()
 
