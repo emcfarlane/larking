@@ -7,9 +7,9 @@ package control
 import (
 	"context"
 
-	"larking.io/apipb/controlpb"
 	status "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
+	"larking.io/api/controlpb"
 )
 
 type InsecureControlClient struct{}

@@ -4,12 +4,15 @@
 
 syntax = "proto3";
 
-package larking.api.worker;
+package larking.api;
 
 import "google/api/annotations.proto";
+import "google/protobuf/any.proto";
 import "google/rpc/status.proto";
 
-option go_package = "larking.io/apipb/workerpb;workerpb";
+import "api/action.proto";
+
+option go_package = "larking.io/api/workerpb;workerpb";
 
 message Command {
   string name = 1;
@@ -58,4 +61,22 @@ service Worker {
       body : ""
     };
   }
+
+  // Execution API
+  //
+  // rpc Execute(ExecuteActionRequest) returns (stream
+  // google.longrunning.Operation) {
+  rpc Execute(ExecuteActionRequest) returns (ExecuteActionResponse) {
+    option (google.api.http) = {
+      post : "/v1/{name=threads/*}/actions:execute"
+      body : "*"
+    };
+  }
 }
+
+message ExecuteActionRequest {
+  string name = 1;
+  larking.api.Action action = 2;
+}
+
+message ExecuteActionResponse {}

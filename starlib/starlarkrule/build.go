@@ -426,6 +426,74 @@ func actionList(root *Action) []*Action {
 	return all
 }
 
+func (b *Builder) RunAction(thread *starlark.Thread, a *Action) {
+
+	ctx := starlarkthread.GetContext(thread)
+	log := logr.FromContextOrDiscard(ctx)
+
+	handle := func(a *Action) error {
+		// Run job.
+		kwargs, err := a.Target.Kwargs.Resolve(a.Deps)
+		if err != nil {
+			log.Error(err, "failed to resolve kwargs", "key", a.Target.Label.Key())
+			return err
+		}
+		if a.Failed || a.Func == nil {
+			log.Info("ignoring action", "key", a.Target.Label.Key())
+			return nil
+		}
+
+		log.Info("running action", "key", a.Target.Label.Key())
+		thread.Name = a.Target.Label.String()
+		value, err := a.Func(thread, kwargs)
+		thread.Name = ""
+		log.Info("completed action", "key", a.Target.Label.Key())
+		if err == nil {
+			return err
+		}
+
+		switch x := value.(type) {
+		case *starlark.List:
+			n := x.Len()
+			lst := make([]AttrValue, 0, n)
+
+			lookup := make(map[KindType]*Attr)
+			for _, attr := range a.Target.Rule.provides.attrs {
+				lookup[attr.KindType] = attr
+			}
+
+			for i := 0; i < n; i++ {
+				value := x.Index(i)
+				key := toKindType(value)
+
+				attr, ok := lookup[key]
+				if !ok {
+					log.Info("missing attr type")
+				}
+				lst = append(lst, AttrValue{
+					Attr:  attr,
+					Value: value,
+				})
+			}
+
+			a.Values = lst
+			return nil
+
+		case starlark.NoneType:
+			// pass
+			return nil
+		default:
+			return fmt.Errorf("invalid return type: %q", value.Type())
+		}
+	}
+	if err := handle(a); err != nil {
+		log.Error(err, "action failed", "key", a.Target.Label.Key())
+		a.Failed = true
+		a.Error = err
+	}
+	a.TimeDone = time.Now()
+}
+
 func (b *Builder) Run(root *Action, threads ...*starlark.Thread) {
 	if len(threads) == 0 {
 		panic("missing threads")
@@ -461,74 +529,9 @@ func (b *Builder) Run(root *Action, threads ...*starlark.Thread) {
 	workerN := par
 	for i := 0; i < par; i++ {
 		thread := threads[i]
-		ctx := starlarkthread.GetContext(thread)
-		log := logr.FromContextOrDiscard(ctx)
-
-		handle := func(a *Action) error {
-			// Run job.
-			kwargs, err := a.Target.Kwargs.Resolve(a.Deps)
-			if err != nil {
-				log.Error(err, "failed to resolve kwargs", "key", a.Target.Label.Key())
-				return err
-			}
-			if a.Failed || a.Func == nil {
-				log.Info("ignoring action", "key", a.Target.Label.Key())
-				return nil
-			}
-
-			log.Info("running action", "key", a.Target.Label.Key())
-			thread.Name = a.Target.Label.String()
-			value, err := a.Func(thread, kwargs)
-			thread.Name = ""
-			log.Info("completed action", "key", a.Target.Label.Key())
-			if err == nil {
-				return err
-			}
-
-			switch x := value.(type) {
-			case *starlark.List:
-				n := x.Len()
-				lst := make([]AttrValue, 0, n)
-
-				lookup := make(map[KindType]*Attr)
-				for _, attr := range a.Target.Rule.provides.attrs {
-					lookup[attr.KindType] = attr
-				}
-
-				for i := 0; i < n; i++ {
-					value := x.Index(i)
-					key := toKindType(value)
-
-					attr, ok := lookup[key]
-					if !ok {
-						log.Info("missing attr type")
-					}
-					lst = append(lst, AttrValue{
-						Attr:  attr,
-						Value: value,
-					})
-				}
-
-				a.Values = lst
-				return nil
-
-			case starlark.NoneType:
-				// pass
-				return nil
-			default:
-				return fmt.Errorf("invalid return type: %q", value.Type())
-			}
-		}
-
 		go func() {
 			for a := range jobs {
-				if err := handle(a); err != nil {
-					log.Error(err, "action failed", "key", a.Target.Label.Key())
-					a.Failed = true
-					a.Error = err
-				}
-				a.TimeDone = time.Now()
-
+				b.RunAction(thread, a)
 				done <- a
 			}
 		}()

@@ -17,7 +17,7 @@ import (
 	"github.com/pkg/browser"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/encoding/protojson"
-	"larking.io/apipb/controlpb"
+	"larking.io/api/controlpb"
 )
 
 // TODO: use OAuth2 libraries directly.

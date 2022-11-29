@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"larking.io/apipb/controlpb"
 	"gocloud.dev/runtimevar"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"larking.io/api/controlpb"
 )
 
 type PerRPCCredentials struct {

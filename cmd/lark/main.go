@@ -29,7 +29,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	"larking.io/apipb/workerpb"
+	"larking.io/api/workerpb"
 	_ "larking.io/cmd/internal/bindings"
 	"larking.io/control"
 	"larking.io/starlib"
