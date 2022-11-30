@@ -26,9 +26,6 @@ func NewModule() *starlarkstruct.Module {
 			"attrs":    starext.MakeBuiltin("rule.attrs", MakeAttrs),
 			"provides": starext.MakeBuiltin("rule.provides", MakeProvides),
 			"label":    starext.MakeBuiltin("rule.label", MakeLabel),
-
-			//"DefaultInfo":   DefaultInfo,
-			//"ContainerInfo": ContainerInfo,
 		},
 	}
 }
@@ -184,7 +181,8 @@ func AsLabel(v starlark.Value) (*Label, error) {
 }
 
 type Rule struct {
-	impl     *starlark.Function // implementation function
+	//impl     *starlark.Function // implementation function
+	impl     starlark.Callable
 	doc      string
 	attrs    *Attrs    // input attribute types
 	provides *Provides // output attribute types
@@ -264,33 +262,11 @@ func (r *Rule) Hash() (uint32, error) {
 	// TODO: can a rule be hashed?
 	return 0, fmt.Errorf("unhashable type: rule")
 }
-func (r *Rule) Impl() *starlark.Function { return r.impl }
-func (r *Rule) Attrs() *Attrs            { return r.attrs }
-func (r *Rule) Provides() *Provides      { return r.provides }
-
-//*starlark.Set {
-//	s := starlark.NewSet(len(r.provides))
-//	for _, attrs := range r.provides {
-//		if err := s.Insert(attrs); err != nil {
-//			panic(err)
-//		}
-//	}
-//	return s
-//}
-
-//func (r *Rule) Outs() AttrFields         { return AttrFields{r.outs} }
+func (r *Rule) Impl() starlark.Callable { return r.impl }
+func (r *Rule) Attrs() *Attrs           { return r.attrs }
+func (r *Rule) Provides() *Provides     { return r.provides }
 
 const bldKey = "builder"
-
-func SetBuilder(thread *starlark.Thread, builder *Builder) {
-	thread.SetLocal(bldKey, builder)
-}
-func GetBuilder(thread *starlark.Thread) (*Builder, error) {
-	if bld, ok := thread.Local(bldKey).(*Builder); ok {
-		return bld, nil
-	}
-	return nil, fmt.Errorf("missing builder")
-}
 
 // genrule(
 // 	cmd = "protoc ...",
@@ -313,12 +289,12 @@ func (r *Rule) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwargs
 		return nil, fmt.Errorf("unexpected args")
 	}
 
-	source, err := ParseLabel(thread.Name)
+	kws, err := NewKwargs(r.attrs, kwargs)
 	if err != nil {
 		return nil, err
 	}
 
-	kws, err := NewKwargs(source, r.attrs, kwargs)
+	source, err := ParseLabel(thread.Name)
 	if err != nil {
 		return nil, err
 	}

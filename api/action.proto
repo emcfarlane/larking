@@ -49,6 +49,23 @@ message KindType {
   string msg_string = 4; // message
 }
 
+message Value {
+  oneof kind {
+    string label_value = 1;
+    bool bool_value = 2;
+    int64 int_value = 3;
+    double float_value = 4;
+    string string_value = 5;
+    bytes bytes_value = 6;
+    ListValue list_value = 7;
+    DictValue dict_value = 8;
+    google.protobuf.Any message = 9;
+  }
+}
+
+message ListValue { repeated Value values = 1; }
+message DictValue { repeated Value pairs = 2; }
+
 message Attr {
   KindType type = 1;
   // google.protobuf.Any default = 2;
@@ -56,23 +73,30 @@ message Attr {
   string doc = 4;
 }
 
-message Kwarg {
-  string field = 1;
-  google.protobuf.Any value = 2;
-}
+// message Kwarg {
+//   string field = 1;
+//   google.protobuf.Any value = 2;
+// }
 
-message AttrValue {
-  Attr attr = 1;
-  google.protobuf.Any value = 2;
+// message AttrValue {
+//   Attr attr = 1;
+//   google.protobuf.Any value = 2;
+// }
+
+message Target {
+  string name = 1;
+  string rule_name = 2;
+  string rule_module = 3;
+  map<string, Value> kwargs = 4;
+  // repeated Kwarg kwargs = 4;
 }
 
 message Action {
-  string name = 1;
+  Target target = 1;
   repeated Action deps = 2;
-  string rule_module = 3;
-  string rule_name = 4;
 
-  repeated AttrValue values = 5;
+  // repeated AttrValue values = 5;
+  repeated Value values = 5;
   google.rpc.Status status = 6;
   bool failed = 7;
   google.protobuf.Timestamp ready_time = 8;

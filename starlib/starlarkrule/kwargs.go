@@ -12,12 +12,11 @@ import (
 )
 
 type Kwargs struct {
-	Attrs  *Attrs
 	Values []AttrNameValue
 	Deps   []*Label
 }
 
-func NewKwargs(source *Label, attrs *Attrs, kwargs []starlark.Tuple) (*Kwargs, error) {
+func NewKwargs(attrs *Attrs, kwargs []starlark.Tuple) (*Kwargs, error) {
 	attrSeen := make([]bool, len(attrs.nameAttrs))
 	attrIndex := make(map[string]int)
 	for i, v := range attrs.nameAttrs {
@@ -210,7 +209,6 @@ func NewKwargs(source *Label, attrs *Attrs, kwargs []starlark.Tuple) (*Kwargs, e
 	}
 
 	return &Kwargs{
-		Attrs:  attrs,
 		Values: values,
 		Deps:   deps,
 	}, nil
@@ -330,7 +328,6 @@ func (k *Kwargs) Clone() *Kwargs {
 	values := make([]AttrNameValue, len(k.Values))
 	copy(values, k.Values)
 	return &Kwargs{
-		Attrs:  k.Attrs, // immutable
 		Values: values,
 		Deps:   k.Deps, // immutable?
 	}

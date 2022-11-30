@@ -22,10 +22,8 @@ import (
 
 // An Action represents a single action in the action graph.
 type Action struct {
-	//*Label           // Label is the unique key for an action.
 	Target *Target   // Target
 	Deps   []*Action // Actions this action depends on.
-	Func   ImplFunc  // Implementation is run when built.
 
 	triggers []*Action // reverse of deps
 	pending  int       // number of actions pending
@@ -35,8 +33,8 @@ type Action struct {
 	Values    []AttrValue //starlark.Value // caller values
 	Error     error       // caller error
 	Failed    bool        // whether the action failed
-	TimeReady time.Time
-	TimeDone  time.Time
+	ReadyTime time.Time
+	DoneTime  time.Time
 }
 
 func (a *Action) String() string { return "action(...)" } //TODO
@@ -75,7 +73,7 @@ func (q *actionQueue) Pop() interface{} {
 }
 
 func (q *actionQueue) push(a *Action) {
-	a.TimeReady = time.Now()
+	a.ReadyTime = time.Now()
 	heap.Push(q, a)
 }
 
@@ -96,6 +94,16 @@ type Builder struct {
 	targetCache map[string]*Target // a cache of created targets
 	moduleCache map[string]bool    // a cache of modules
 
+}
+
+func SetBuilder(thread *starlark.Thread, builder *Builder) {
+	thread.SetLocal(bldKey, builder)
+}
+func GetBuilder(thread *starlark.Thread) (*Builder, error) {
+	if bld, ok := thread.Local(bldKey).(*Builder); ok {
+		return bld, nil
+	}
+	return nil, fmt.Errorf("missing builder")
 }
 
 func NewBuilder(l *Label) (*Builder, error) {
@@ -137,8 +145,6 @@ func (b *Builder) RegisterTarget(thread *starlark.Thread, target *Target) error 
 	log.Info("registered target", "bkt", bktURL, "key", key)
 	return nil
 }
-
-type ImplFunc func(thread *starlark.Thread, kwargs []starlark.Tuple) (starlark.Value, error)
 
 //func makeDefaultImpl(label *Label) ImplFunc {
 //	return func(thread *starlark.Thread, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -352,9 +358,9 @@ func (b *Builder) createAction(thread *starlark.Thread, label *Label) (*Action, 
 	return b.addAction(&Action{
 		Target: t,
 		Deps:   deps,
-		Func: func(thread *starlark.Thread, kwargs []starlark.Tuple) (starlark.Value, error) {
-			return starlark.Call(thread, t.Rule.impl, nil, kwargs)
-		},
+		//Func: func(thread *starlark.Thread, kwargs []starlark.Tuple) (starlark.Value, error) {
+		//	return starlark.Call(thread, t.Rule.impl, nil, kwargs)
+		//},
 	})
 }
 
@@ -427,7 +433,6 @@ func actionList(root *Action) []*Action {
 }
 
 func (b *Builder) RunAction(thread *starlark.Thread, a *Action) {
-
 	ctx := starlarkthread.GetContext(thread)
 	log := logr.FromContextOrDiscard(ctx)
 
@@ -438,19 +443,22 @@ func (b *Builder) RunAction(thread *starlark.Thread, a *Action) {
 			log.Error(err, "failed to resolve kwargs", "key", a.Target.Label.Key())
 			return err
 		}
-		if a.Failed || a.Func == nil {
+		impl := a.Target.Rule.Impl()
+		if a.Failed || impl == nil {
 			log.Info("ignoring action", "key", a.Target.Label.Key())
 			return nil
 		}
 
 		log.Info("running action", "key", a.Target.Label.Key())
 		thread.Name = a.Target.Label.String()
-		value, err := a.Func(thread, kwargs)
+		value, err := starlark.Call(thread, impl, nil, kwargs)
 		thread.Name = ""
 		log.Info("completed action", "key", a.Target.Label.Key())
-		if err == nil {
+		if err != nil {
 			return err
 		}
+
+		fmt.Println("What values?", value)
 
 		switch x := value.(type) {
 		case *starlark.List:
@@ -491,7 +499,7 @@ func (b *Builder) RunAction(thread *starlark.Thread, a *Action) {
 		a.Failed = true
 		a.Error = err
 	}
-	a.TimeDone = time.Now()
+	a.DoneTime = time.Now()
 }
 
 func (b *Builder) Run(root *Action, threads ...*starlark.Thread) {

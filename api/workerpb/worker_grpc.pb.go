@@ -29,7 +29,7 @@ type WorkerClient interface {
 	//
 	// rpc Execute(ExecuteActionRequest) returns (stream
 	// google.longrunning.Operation) {
-	Execute(ctx context.Context, in *ExecuteActionRequest, opts ...grpc.CallOption) (*ExecuteActionResponse, error)
+	ExecuteAction(ctx context.Context, in *ExecuteActionRequest, opts ...grpc.CallOption) (*ExecuteActionResponse, error)
 }
 
 type workerClient struct {
@@ -89,9 +89,9 @@ func (c *workerClient) TestThread(ctx context.Context, in *TestThreadRequest, op
 	return out, nil
 }
 
-func (c *workerClient) Execute(ctx context.Context, in *ExecuteActionRequest, opts ...grpc.CallOption) (*ExecuteActionResponse, error) {
+func (c *workerClient) ExecuteAction(ctx context.Context, in *ExecuteActionRequest, opts ...grpc.CallOption) (*ExecuteActionResponse, error) {
 	out := new(ExecuteActionResponse)
-	err := c.cc.Invoke(ctx, "/larking.api.Worker/Execute", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/larking.api.Worker/ExecuteAction", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ type WorkerServer interface {
 	//
 	// rpc Execute(ExecuteActionRequest) returns (stream
 	// google.longrunning.Operation) {
-	Execute(context.Context, *ExecuteActionRequest) (*ExecuteActionResponse, error)
+	ExecuteAction(context.Context, *ExecuteActionRequest) (*ExecuteActionResponse, error)
 	mustEmbedUnimplementedWorkerServer()
 }
 
@@ -126,8 +126,8 @@ func (UnimplementedWorkerServer) RunThread(context.Context, *RunThreadRequest) (
 func (UnimplementedWorkerServer) TestThread(context.Context, *TestThreadRequest) (*Output, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TestThread not implemented")
 }
-func (UnimplementedWorkerServer) Execute(context.Context, *ExecuteActionRequest) (*ExecuteActionResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Execute not implemented")
+func (UnimplementedWorkerServer) ExecuteAction(context.Context, *ExecuteActionRequest) (*ExecuteActionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ExecuteAction not implemented")
 }
 func (UnimplementedWorkerServer) mustEmbedUnimplementedWorkerServer() {}
 
@@ -204,20 +204,20 @@ func _Worker_TestThread_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Worker_Execute_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Worker_ExecuteAction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ExecuteActionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(WorkerServer).Execute(ctx, in)
+		return srv.(WorkerServer).ExecuteAction(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/larking.api.Worker/Execute",
+		FullMethod: "/larking.api.Worker/ExecuteAction",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkerServer).Execute(ctx, req.(*ExecuteActionRequest))
+		return srv.(WorkerServer).ExecuteAction(ctx, req.(*ExecuteActionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -238,8 +238,8 @@ var Worker_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Worker_TestThread_Handler,
 		},
 		{
-			MethodName: "Execute",
-			Handler:    _Worker_Execute_Handler,
+			MethodName: "ExecuteAction",
+			Handler:    _Worker_ExecuteAction_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

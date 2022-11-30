@@ -550,21 +550,18 @@ type Attrs struct {
 	frozen    bool
 }
 
-//osd    starext.OrderedStringDict
-
 func (a *Attrs) String() string {
 	buf := new(strings.Builder)
 	buf.WriteString("attrs")
 	buf.WriteByte('(')
 
-	//for i := 0; i < a.osd.Len(); i++ {
 	for i, v := range a.nameAttrs {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
 		buf.WriteString(v.Name)
 		buf.WriteString(" = ")
-		buf.WriteString(v.Attr.String())
+		buf.WriteString(v.String())
 	}
 	buf.WriteByte(')')
 	return buf.String()
@@ -578,7 +575,7 @@ func (a *Attrs) Freeze() {
 	}
 	a.frozen = true
 	for _, v := range a.nameAttrs {
-		v.Attr.Freeze()
+		v.Freeze()
 	}
 }
 

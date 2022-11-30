@@ -19,43 +19,55 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"larking.io/apipb/controlpb"
-	"larking.io/apipb/workerpb"
-	"larking.io/starlib"
-	"larking.io/starlib/starlarkthread"
 	"github.com/emcfarlane/starlarkassert"
+	"larking.io/api/actionpb"
+	"larking.io/api/controlpb"
+	"larking.io/api/workerpb"
+	"larking.io/starlib"
+	"larking.io/starlib/encoding/starlarkproto"
+	"larking.io/starlib/starlarkrule"
+	"larking.io/starlib/starlarkthread"
 )
 
-type loadFunc func(*starlark.Thread, string) (starlark.StringDict, error)
+type LoaderFunc func(*starlark.Thread, string) (starlark.StringDict, error)
+
+func (f LoaderFunc) Load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
+	return f(thread, module)
+}
+
+type Loader interface {
+	Load(thread *starlark.Thread, module string) (starlark.StringDict, error)
+}
 
 type Server struct {
 	workerpb.UnimplementedWorkerServer
-	load    loadFunc
+	loader  Loader
 	control controlpb.ControlClient
 	name    string
 }
 
 func NewServer(
-	load func(thread *starlark.Thread, module string) (starlark.StringDict, error),
+	loader Loader,
 	control controlpb.ControlClient,
 	name string,
 ) *Server {
 	return &Server{
-		load:    load,
+		loader:  loader,
 		control: control,
 		name:    name,
 	}
 }
 
-func (s *Server) Load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
-	if s.load == nil {
+func (s *Server) load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
+	if s.loader == nil {
 		return nil, status.Error(
 			codes.Unavailable,
 			"module loading not avaliable",
 		)
 	}
-	return s.load(thread, module)
+	return s.loader.Load(thread, module)
 }
 
 func (s *Server) authorize(ctx context.Context, op *controlpb.Operation) error {
@@ -81,10 +93,7 @@ var (
 )
 
 func extractCredentials(ctx context.Context) (*controlpb.Credentials, error) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return nil, status.Error(codes.InvalidArgument, "invalid metadata")
-	}
+	md, _ := metadata.FromIncomingContext(ctx)
 
 	for _, hdrKey := range []string{"http-authorization", "authorization"} {
 		keys := md.Get(hdrKey)
@@ -197,12 +206,6 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 
 	globals := starlib.NewGlobals()
 	if name != "" {
-		if s.load == nil {
-			return status.Error(
-				codes.Unavailable,
-				"module loading not avaliable",
-			)
-		}
 		predeclared, err := s.load(thread, name)
 		if err != nil {
 			return err
@@ -329,7 +332,7 @@ func (s *Server) RunThread(ctx context.Context, req *workerpb.RunThreadRequest) 
 			"missing module name",
 		)
 	}
-	if _, err := s.Load(thread, name); err != nil {
+	if _, err := s.load(thread, name); err != nil {
 		return nil, err
 	}
 
@@ -366,7 +369,7 @@ func (s *Server) TestThread(ctx context.Context, req *workerpb.TestThreadRequest
 		},
 		Load: s.load,
 	}
-	values, err := s.Load(thread, name)
+	values, err := s.load(thread, name)
 	if err != nil {
 		return nil, err
 	}
@@ -453,5 +456,268 @@ func (s *Server) TestThread(ctx context.Context, req *workerpb.TestThreadRequest
 	return &workerpb.Output{
 		Output: buf.String(),
 		Status: result.Proto(),
+	}, nil
+}
+
+func toStarlark(source *starlarkrule.Label, val *actionpb.Value) (starlark.Value, error) {
+	switch v := val.Kind.(type) {
+	case *actionpb.Value_LabelValue:
+		l, err := source.Parse(v.LabelValue)
+		if err != nil {
+			return nil, err
+		}
+		return l, nil
+	case *actionpb.Value_BoolValue:
+		return starlark.Bool(v.BoolValue), nil
+	case *actionpb.Value_IntValue:
+		return starlark.MakeInt64(v.IntValue), nil
+	case *actionpb.Value_FloatValue:
+		return starlark.Float(v.FloatValue), nil
+	case *actionpb.Value_StringValue:
+		return starlark.String(v.StringValue), nil
+	case *actionpb.Value_BytesValue:
+		return starlark.Bytes(v.BytesValue), nil
+	case *actionpb.Value_ListValue:
+		elems := make([]starlark.Value, len(v.ListValue.Values))
+		for i, x := range v.ListValue.Values {
+			value, err := toStarlark(source, x)
+			if err != nil {
+				return nil, err
+			}
+			elems[i] = value
+		}
+		return starlark.NewList(elems), nil
+	case *actionpb.Value_DictValue:
+		n := len(v.DictValue.Pairs)
+		dict := starlark.NewDict(n / 2)
+		for i := 0; i < n; i += 2 {
+			key, val := v.DictValue.Pairs[i], v.DictValue.Pairs[i+1]
+			k, err := toStarlark(source, key)
+			if err != nil {
+				return nil, err
+			}
+			v, err := toStarlark(source, val)
+			if err != nil {
+				return nil, err
+			}
+			dict.SetKey(k, v)
+		}
+		return dict, nil
+	case *actionpb.Value_Message:
+		m, err := v.Message.UnmarshalNew()
+		if err != nil {
+			return nil, err
+		}
+		return starlarkproto.NewMessage(m.ProtoReflect(), nil, nil)
+	default:
+		return nil, fmt.Errorf("unknown proto type: %T", v)
+	}
+}
+
+func toValue(value starlark.Value) (*actionpb.Value, error) {
+	switch v := value.(type) {
+	case *starlarkrule.Label:
+		return &actionpb.Value{
+			Kind: &actionpb.Value_LabelValue{LabelValue: v.Key()},
+		}, nil
+	case starlark.Bool:
+		return &actionpb.Value{
+			Kind: &actionpb.Value_BoolValue{BoolValue: bool(v)},
+		}, nil
+	case starlark.Int:
+		x, _ := v.Int64()
+		return &actionpb.Value{
+			Kind: &actionpb.Value_IntValue{IntValue: x},
+		}, nil
+	case starlark.Float:
+		return &actionpb.Value{
+			Kind: &actionpb.Value_FloatValue{FloatValue: float64(v)},
+		}, nil
+	case starlark.String:
+		return &actionpb.Value{
+			Kind: &actionpb.Value_StringValue{StringValue: string(v)},
+		}, nil
+	case starlark.Bytes:
+		return &actionpb.Value{
+			Kind: &actionpb.Value_BytesValue{BytesValue: []byte(v)},
+		}, nil
+	case *starlark.List:
+		n := v.Len()
+		values := make([]*actionpb.Value, n)
+		for i := 0; i < n; i++ {
+			val, err := toValue(v.Index(i))
+			if err != nil {
+				return nil, err
+			}
+			values[i] = val
+		}
+
+		return &actionpb.Value{
+			Kind: &actionpb.Value_ListValue{ListValue: &actionpb.ListValue{
+				Values: values,
+			}},
+		}, nil
+	case *starlark.Dict:
+		items := v.Items()
+		pairs := make([]*actionpb.Value, 0, 2*len(items))
+		for _, kv := range items {
+			key, err := toValue(kv[0])
+			if err != nil {
+				return nil, err
+			}
+			val, err := toValue(kv[1])
+			if err != nil {
+				return nil, err
+			}
+			pairs = append(pairs, key, val)
+		}
+
+		return &actionpb.Value{
+			Kind: &actionpb.Value_DictValue{DictValue: &actionpb.DictValue{
+				Pairs: pairs,
+			}},
+		}, nil
+	default:
+		return nil, fmt.Errorf("unknown starlark type: %q", v.Type())
+	}
+}
+
+func makeKwargs(source *starlarkrule.Label, attrs *starlarkrule.Attrs, kws map[string]*actionpb.Value) (*starlarkrule.Kwargs, error) {
+	kwargs := make([]starlark.Tuple, 0, len(kws))
+	for key, val := range kws {
+		value, err := toStarlark(source, val)
+		if err != nil {
+			return nil, err
+		}
+		kwargs = append(kwargs, starlark.Tuple{
+			starlark.String(key), value,
+		})
+	}
+
+	return starlarkrule.NewKwargs(attrs, kwargs)
+}
+
+func (s *Server) ExecuteAction(ctx context.Context, req *workerpb.ExecuteActionRequest) (*workerpb.ExecuteActionResponse, error) {
+	l := logr.FromContextOrDiscard(ctx)
+	l.Info("testing thread", "thread", req.Name)
+
+	creds, err := extractCredentials(ctx)
+	if err != nil {
+		return nil, err
+	}
+	op := &controlpb.Operation{
+		Name:        req.Name,
+		Credentials: creds,
+	}
+	if err := s.authorize(ctx, op); err != nil {
+		l.Error(err, "failed to authorize request", "name", req.Name)
+		return nil, err
+	}
+
+	name := req.Name
+	label, err := starlarkrule.ParseRelativeLabel("file://./?metadata=skip", name)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	thread := &starlark.Thread{
+		Name: label.String(),
+		Print: func(_ *starlark.Thread, msg string) {
+			buf.WriteString(msg) //nolint
+		},
+		Load: s.load,
+	}
+
+	starlarkthread.SetContext(thread, ctx)
+	cleanup := starlarkthread.WithResourceStore(thread)
+	defer func() {
+		if cerr := cleanup(); err == nil {
+			err = cerr
+		}
+	}()
+
+	b, err := starlarkrule.NewBuilder(label)
+	if err != nil {
+		return nil, err
+	}
+
+	apb := req.Action
+
+	var deps []*starlarkrule.Action
+	for _, dpb := range apb.Deps {
+		var values []starlarkrule.AttrValue
+		for _, vpb := range dpb.Values {
+			fmt.Println("vdp", vpb)
+			values = append(values, starlarkrule.AttrValue{
+				//
+				Value: nil, // TODO: how to translate values???
+			})
+		}
+
+		deps = append(deps, &starlarkrule.Action{
+			Target: nil,
+			Deps:   nil,
+
+			Values:    values,
+			Error:     status.ErrorProto(dpb.Status),
+			Failed:    dpb.Failed,
+			ReadyTime: dpb.ReadyTime.AsTime(),
+			DoneTime:  dpb.DoneTime.AsTime(),
+		})
+	}
+
+	module, err := s.load(thread, apb.Target.RuleModule)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load module %q: %w", apb.Target.RuleModule, err)
+	}
+	ruleValue := module[apb.Target.RuleName]
+	rule, ok := ruleValue.(*starlarkrule.Rule)
+	if !ok {
+		return nil, fmt.Errorf("invalid rulename type: %q", ruleValue)
+	}
+
+	kwargs, err := makeKwargs(label, rule.Attrs(), apb.Target.Kwargs)
+	if err != nil {
+		return nil, err
+	}
+
+	targetLabel, err := label.Parse(apb.Target.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	target := &starlarkrule.Target{
+		Label:  targetLabel,
+		Rule:   rule,
+		Kwargs: kwargs,
+	}
+
+	a := &starlarkrule.Action{
+		Target: target,
+		Deps:   deps,
+	}
+
+	b.RunAction(thread, a)
+
+	apb.Values = make([]*actionpb.Value, len(a.Values))
+	fmt.Println("values", a.Values)
+	for i, v := range a.Values {
+		fmt.Println(v.Value)
+		val, err := toValue(v.Value)
+		if err != nil {
+			return nil, err
+		}
+		apb.Values[i] = val
+	}
+
+	if a.Error != nil {
+		apb.Status = errorStatus(a.Error).Proto()
+	}
+	apb.ReadyTime = timestamppb.New(a.ReadyTime)
+	apb.DoneTime = timestamppb.New(a.DoneTime)
+
+	return &workerpb.ExecuteActionResponse{
+		Action: apb,
 	}, nil
 }

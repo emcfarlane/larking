@@ -45,20 +45,20 @@ message TestThreadRequest { string name = 1; }
 service Worker {
   rpc RunOnThread(stream Command) returns (stream Result) {
     option (google.api.http) = {
-      custom : {kind : "websocket" path : "/v1/{name=threads/*}:run"}
+      custom : {kind : "websocket" path : "/v1/threads:run"}
       body : "*"
     };
   }
   rpc RunThread(RunThreadRequest) returns (Output) {
     option (google.api.http) = {
-      post : "/v1/{name=threads/*}:run"
-      body : ""
+      post : "/v1/threads:run"
+      body : "*"
     };
   }
   rpc TestThread(TestThreadRequest) returns (Output) {
     option (google.api.http) = {
-      post : "/v1/{name=threads/*}:test"
-      body : ""
+      post : "/v1/threads:test"
+      body : "*"
     };
   }
 
@@ -66,9 +66,9 @@ service Worker {
   //
   // rpc Execute(ExecuteActionRequest) returns (stream
   // google.longrunning.Operation) {
-  rpc Execute(ExecuteActionRequest) returns (ExecuteActionResponse) {
+  rpc ExecuteAction(ExecuteActionRequest) returns (ExecuteActionResponse) {
     option (google.api.http) = {
-      post : "/v1/{name=threads/*}/actions:execute"
+      post : "/v1/actions:execute"
       body : "*"
     };
   }
@@ -79,4 +79,4 @@ message ExecuteActionRequest {
   larking.api.Action action = 2;
 }
 
-message ExecuteActionResponse {}
+message ExecuteActionResponse { larking.api.Action action = 1; }

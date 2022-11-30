@@ -10,8 +10,10 @@ import (
 	"os"
 	"testing"
 
-	"larking.io/apipb/workerpb"
+	"larking.io/api/actionpb"
+	"larking.io/api/workerpb"
 	"larking.io/control"
+	"larking.io/starlib"
 	"larking.io/worker"
 
 	"github.com/go-logr/logr"
@@ -19,6 +21,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	starlarkmath "go.starlark.net/lib/math"
 	"go.starlark.net/starlark"
+	_ "gocloud.dev/blob/fileblob"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -34,14 +37,17 @@ func testContext(t *testing.T) context.Context {
 
 func TestAPIServer(t *testing.T) {
 	//log := testing_logr.NewTestLogger(t)
-
-	workerServer := worker.NewServer(
+	ldr := worker.LoaderFunc(
 		func(_ *starlark.Thread, module string) (starlark.StringDict, error) {
 			if module == "math.star" {
 				return starlarkmath.Module.Members, nil
 			}
 			return nil, os.ErrNotExist
 		},
+	)
+
+	workerServer := worker.NewServer(
+		ldr,
 		control.InsecureControlClient{},
 		"worker",
 	)
@@ -176,4 +182,43 @@ func TestAPIServer(t *testing.T) {
 		})
 	}
 	//t.Logf("thread: %v", s.ls.threads["default"])
+}
+
+func TestExecuteAction(t *testing.T) {
+
+	ldr := starlib.NewLoader(nil)
+	wrk := worker.NewServer(ldr, control.InsecureControlClient{}, "worker")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	log := testing_logr.NewTestLogger(t)
+	ctx = logr.NewContext(ctx, log)
+
+	action := &actionpb.Action{
+		Target: &actionpb.Target{
+			Name:       "My action",
+			RuleName:   "hello",
+			RuleModule: "testdata/hello.star",
+			Kwargs: map[string]*actionpb.Value{
+				"name":  {Kind: &actionpb.Value_StringValue{StringValue: "My Action"}},
+				"input": {Kind: &actionpb.Value_StringValue{StringValue: "ed"}},
+			},
+		},
+	}
+	req := &workerpb.ExecuteActionRequest{
+		Name:   "",
+		Action: action,
+	}
+	rsp, err := wrk.ExecuteAction(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rsp.Action.Values) != 1 {
+		t.Error("invalid values", rsp.Action.Values)
+	} else {
+		t.Log(rsp.Action.Values[0].GetStringValue())
+	}
+	t.Log("rsp", rsp)
+
 }
