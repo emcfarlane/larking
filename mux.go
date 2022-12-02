@@ -594,10 +594,18 @@ func (s *state) match(route, verb string) (*method, params, error) {
 
 var (
 	contentTypeCodec = map[string]encoding.Codec{
+		"application/json":         jsonCodec{},
 		"application/protobuf":     protoCodec{},
 		"application/octet-stream": protoCodec{},
-		"application/json":         jsonCodec{},
-		"":                         jsonCodec{}, // default
+	}
+	contentTypeOffers = []string{
+		"application/json",
+		"application/protobuf",
+		"application/octet-stream",
+	}
+	encodingOffers = []string{
+		"gzip",
+		"identity",
 	}
 )
 
@@ -655,8 +663,8 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 	s.sendN += 1
 	reply := m.(proto.Message)
 
-	accept := s.r.Header.Get("Accept")
-	acceptEncoding := s.r.Header.Get("Accept-Encoding")
+	accept := NegotiateContentType(s.r.Header, contentTypeOffers, contentTypeOffers[0])
+	acceptEncoding := NegotiateContentEncoding(s.r.Header, encodingOffers)
 
 	if fRsp, ok := s.w.(http.Flusher); ok {
 		defer fRsp.Flush()
@@ -693,11 +701,6 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 			return err
 		}
 		return nil
-	}
-
-	// Curl accept default header */*
-	if accept == "" || strings.HasPrefix(accept, "*") {
-		accept = "application/json"
 	}
 
 	codec, ok := contentTypeCodec[accept]
