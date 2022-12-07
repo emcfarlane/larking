@@ -242,7 +242,7 @@ func (k *Kwargs) Resolve(deps []*Action) ([]starlark.Tuple, error) {
 		}
 
 		for _, dv := range dep.Values {
-			if dv.Attr.KindType == attr.KindType {
+			if dv.KindType == attr.KindType {
 				return dv.Value, nil
 			}
 		}

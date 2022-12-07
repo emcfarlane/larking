@@ -160,9 +160,16 @@ type Attr struct {
 	Values   starlark.Tuple // Oneof these values
 }
 
-type AttrValue struct {
-	*Attr
+type KindValue struct {
+	KindType
 	Value starlark.Value
+}
+
+func ToKindValue(v starlark.Value) KindValue {
+	return KindValue{
+		KindType: toKindType(v),
+		Value:    v,
+	}
 }
 
 type AttrName struct {
@@ -637,6 +644,7 @@ func (a *Attrs) AttrNames() []string {
 var nameAttr = AttrName{
 	Attr: &Attr{
 		KindType: KindType{Kind: KindString},
+		Doc:      "Name of rule",
 	},
 	Name: "name",
 }
@@ -650,13 +658,17 @@ func MakeAttrs(thread *starlark.Thread, fnname string, args starlark.Tuple, kwar
 	nameAttrs[0] = nameAttr
 
 	for i, kwarg := range kwargs {
-		name, _ := starlark.AsString(kwarg[0])
-		if name == "name" || name == "" {
+		name, ok := starlark.AsString(kwarg[0])
+		if !ok || name == "" {
 			return nil, fmt.Errorf("unexpected attribute name: %q", name)
 		}
+		if name == "name" {
+			return nil, fmt.Errorf("reserved %q keyword", "name")
+		}
+
 		a, ok := kwarg[1].(*Attr)
 		if !ok {
-			return nil, fmt.Errorf("unexpected attribute value type: %T", kwarg[1])
+			return nil, fmt.Errorf("unexpected attribute value type: %q: %T", name, kwarg[1])
 		}
 		nameAttrs[i+1] = AttrName{
 			Attr: a,

@@ -137,7 +137,7 @@ func run(ctx context.Context) (err error) {
 	}
 
 	workerServer := worker.NewServer(
-		loader.Load,
+		loader,
 		controlClient,
 		name,
 	)

@@ -30,7 +30,7 @@ type Action struct {
 	priority int       // relative execution priority
 
 	// Results
-	Values    []AttrValue //starlark.Value // caller values
+	Values    []KindValue // caller values
 	Error     error       // caller error
 	Failed    bool        // whether the action failed
 	ReadyTime time.Time
@@ -463,24 +463,24 @@ func (b *Builder) RunAction(thread *starlark.Thread, a *Action) {
 		switch x := value.(type) {
 		case *starlark.List:
 			n := x.Len()
-			lst := make([]AttrValue, 0, n)
+			lst := make([]KindValue, 0, n)
 
-			lookup := make(map[KindType]*Attr)
-			for _, attr := range a.Target.Rule.provides.attrs {
-				lookup[attr.KindType] = attr
-			}
+			//lookup := make(map[KindType]*Attr)
+			//for _, attr := range a.Target.Rule.provides.attrs {
+			//	lookup[attr.KindType] = attr
+			//}
 
 			for i := 0; i < n; i++ {
 				value := x.Index(i)
 				key := toKindType(value)
 
-				attr, ok := lookup[key]
-				if !ok {
-					log.Info("missing attr type")
-				}
-				lst = append(lst, AttrValue{
-					Attr:  attr,
-					Value: value,
+				//attr, ok := lookup[key]
+				//if !ok {
+				//	log.Info("missing attr type")
+				//}
+				lst = append(lst, KindValue{
+					KindType: key,
+					Value:    value,
 				})
 			}
 

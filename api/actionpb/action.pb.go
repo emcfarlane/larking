@@ -629,10 +629,9 @@ type Attr struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Type *KindType `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	// google.protobuf.Any default = 2;
-	Optional bool   `protobuf:"varint,3,opt,name=optional,proto3" json:"optional,omitempty"`
-	Doc      string `protobuf:"bytes,4,opt,name=doc,proto3" json:"doc,omitempty"`
+	Type     *KindType `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Optional bool      `protobuf:"varint,2,opt,name=optional,proto3" json:"optional,omitempty"`
+	Doc      string    `protobuf:"bytes,3,opt,name=doc,proto3" json:"doc,omitempty"`
 }
 
 func (x *Attr) Reset() {
@@ -688,21 +687,99 @@ func (x *Attr) GetDoc() string {
 	return ""
 }
 
+type Rule struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Name     string           `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Module   string           `protobuf:"bytes,2,opt,name=module,proto3" json:"module,omitempty"`
+	Doc      string           `protobuf:"bytes,3,opt,name=doc,proto3" json:"doc,omitempty"`
+	Attrs    map[string]*Attr `protobuf:"bytes,4,rep,name=attrs,proto3" json:"attrs,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Provides []*Attr          `protobuf:"bytes,5,rep,name=provides,proto3" json:"provides,omitempty"`
+}
+
+func (x *Rule) Reset() {
+	*x = Rule{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_action_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Rule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Rule) ProtoMessage() {}
+
+func (x *Rule) ProtoReflect() protoreflect.Message {
+	mi := &file_api_action_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Rule.ProtoReflect.Descriptor instead.
+func (*Rule) Descriptor() ([]byte, []int) {
+	return file_api_action_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *Rule) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Rule) GetModule() string {
+	if x != nil {
+		return x.Module
+	}
+	return ""
+}
+
+func (x *Rule) GetDoc() string {
+	if x != nil {
+		return x.Doc
+	}
+	return ""
+}
+
+func (x *Rule) GetAttrs() map[string]*Attr {
+	if x != nil {
+		return x.Attrs
+	}
+	return nil
+}
+
+func (x *Rule) GetProvides() []*Attr {
+	if x != nil {
+		return x.Provides
+	}
+	return nil
+}
+
 type Target struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Name       string            `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	RuleName   string            `protobuf:"bytes,2,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`
-	RuleModule string            `protobuf:"bytes,3,opt,name=rule_module,json=ruleModule,proto3" json:"rule_module,omitempty"`
-	Kwargs     map[string]*Value `protobuf:"bytes,4,rep,name=kwargs,proto3" json:"kwargs,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"` // repeated Kwarg kwargs = 4;
+	Name   string            `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Rule   *Rule             `protobuf:"bytes,2,opt,name=rule,proto3" json:"rule,omitempty"`
+	Kwargs map[string]*Value `protobuf:"bytes,3,rep,name=kwargs,proto3" json:"kwargs,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (x *Target) Reset() {
 	*x = Target{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_action_proto_msgTypes[8]
+		mi := &file_api_action_proto_msgTypes[9]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -715,7 +792,7 @@ func (x *Target) String() string {
 func (*Target) ProtoMessage() {}
 
 func (x *Target) ProtoReflect() protoreflect.Message {
-	mi := &file_api_action_proto_msgTypes[8]
+	mi := &file_api_action_proto_msgTypes[9]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -728,7 +805,7 @@ func (x *Target) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Target.ProtoReflect.Descriptor instead.
 func (*Target) Descriptor() ([]byte, []int) {
-	return file_api_action_proto_rawDescGZIP(), []int{8}
+	return file_api_action_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Target) GetName() string {
@@ -738,18 +815,11 @@ func (x *Target) GetName() string {
 	return ""
 }
 
-func (x *Target) GetRuleName() string {
+func (x *Target) GetRule() *Rule {
 	if x != nil {
-		return x.RuleName
+		return x.Rule
 	}
-	return ""
-}
-
-func (x *Target) GetRuleModule() string {
-	if x != nil {
-		return x.RuleModule
-	}
-	return ""
+	return nil
 }
 
 func (x *Target) GetKwargs() map[string]*Value {
@@ -777,7 +847,7 @@ type Action struct {
 func (x *Action) Reset() {
 	*x = Action{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_action_proto_msgTypes[9]
+		mi := &file_api_action_proto_msgTypes[10]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -790,7 +860,7 @@ func (x *Action) String() string {
 func (*Action) ProtoMessage() {}
 
 func (x *Action) ProtoReflect() protoreflect.Message {
-	mi := &file_api_action_proto_msgTypes[9]
+	mi := &file_api_action_proto_msgTypes[10]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -803,7 +873,7 @@ func (x *Action) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Action.ProtoReflect.Descriptor instead.
 func (*Action) Descriptor() ([]byte, []int) {
-	return file_api_action_proto_rawDescGZIP(), []int{9}
+	return file_api_action_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Action) GetTarget() *Target {
@@ -867,7 +937,7 @@ type FilesInfo struct {
 func (x *FilesInfo) Reset() {
 	*x = FilesInfo{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_action_proto_msgTypes[10]
+		mi := &file_api_action_proto_msgTypes[11]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -880,7 +950,7 @@ func (x *FilesInfo) String() string {
 func (*FilesInfo) ProtoMessage() {}
 
 func (x *FilesInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_api_action_proto_msgTypes[10]
+	mi := &file_api_action_proto_msgTypes[11]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -893,7 +963,7 @@ func (x *FilesInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FilesInfo.ProtoReflect.Descriptor instead.
 func (*FilesInfo) Descriptor() ([]byte, []int) {
-	return file_api_action_proto_rawDescGZIP(), []int{10}
+	return file_api_action_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *FilesInfo) GetFiles() []string {
@@ -922,7 +992,7 @@ type ContainerInfo struct {
 func (x *ContainerInfo) Reset() {
 	*x = ContainerInfo{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_action_proto_msgTypes[11]
+		mi := &file_api_action_proto_msgTypes[12]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -935,7 +1005,7 @@ func (x *ContainerInfo) String() string {
 func (*ContainerInfo) ProtoMessage() {}
 
 func (x *ContainerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_api_action_proto_msgTypes[11]
+	mi := &file_api_action_proto_msgTypes[12]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -948,7 +1018,7 @@ func (x *ContainerInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerInfo.ProtoReflect.Descriptor instead.
 func (*ContainerInfo) Descriptor() ([]byte, []int) {
-	return file_api_action_proto_rawDescGZIP(), []int{11}
+	return file_api_action_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ContainerInfo) GetSrc() string {
@@ -1044,16 +1114,30 @@ var file_api_action_proto_rawDesc = []byte{
 	0x0a, 0x04, 0x41, 0x74, 0x74, 0x72, 0x12, 0x29, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01,
 	0x20, 0x01, 0x28, 0x0b, 0x32, 0x15, 0x2e, 0x6c, 0x61, 0x72, 0x6b, 0x69, 0x6e, 0x67, 0x2e, 0x61,
 	0x70, 0x69, 0x2e, 0x4b, 0x69, 0x6e, 0x64, 0x54, 0x79, 0x70, 0x65, 0x52, 0x04, 0x74, 0x79, 0x70,
-	0x65, 0x12, 0x1a, 0x0a, 0x08, 0x6f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x18, 0x03, 0x20,
+	0x65, 0x12, 0x1a, 0x0a, 0x08, 0x6f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x18, 0x02, 0x20,
 	0x01, 0x28, 0x08, 0x52, 0x08, 0x6f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x61, 0x6c, 0x12, 0x10, 0x0a,
-	0x03, 0x64, 0x6f, 0x63, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x64, 0x6f, 0x63, 0x22,
-	0xe2, 0x01, 0x0a, 0x06, 0x54, 0x61, 0x72, 0x67, 0x65, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61,
-	0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x1b,
-	0x0a, 0x09, 0x72, 0x75, 0x6c, 0x65, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x08, 0x72, 0x75, 0x6c, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x72,
-	0x75, 0x6c, 0x65, 0x5f, 0x6d, 0x6f, 0x64, 0x75, 0x6c, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x0a, 0x72, 0x75, 0x6c, 0x65, 0x4d, 0x6f, 0x64, 0x75, 0x6c, 0x65, 0x12, 0x37, 0x0a, 0x06,
-	0x6b, 0x77, 0x61, 0x72, 0x67, 0x73, 0x18, 0x04, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x1f, 0x2e, 0x6c,
+	0x03, 0x64, 0x6f, 0x63, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x64, 0x6f, 0x63, 0x22,
+	0xf4, 0x01, 0x0a, 0x04, 0x52, 0x75, 0x6c, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x16, 0x0a, 0x06,
+	0x6d, 0x6f, 0x64, 0x75, 0x6c, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x06, 0x6d, 0x6f,
+	0x64, 0x75, 0x6c, 0x65, 0x12, 0x10, 0x0a, 0x03, 0x64, 0x6f, 0x63, 0x18, 0x03, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x03, 0x64, 0x6f, 0x63, 0x12, 0x32, 0x0a, 0x05, 0x61, 0x74, 0x74, 0x72, 0x73, 0x18,
+	0x04, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x6c, 0x61, 0x72, 0x6b, 0x69, 0x6e, 0x67, 0x2e,
+	0x61, 0x70, 0x69, 0x2e, 0x52, 0x75, 0x6c, 0x65, 0x2e, 0x41, 0x74, 0x74, 0x72, 0x73, 0x45, 0x6e,
+	0x74, 0x72, 0x79, 0x52, 0x05, 0x61, 0x74, 0x74, 0x72, 0x73, 0x12, 0x2d, 0x0a, 0x08, 0x70, 0x72,
+	0x6f, 0x76, 0x69, 0x64, 0x65, 0x73, 0x18, 0x05, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x6c,
+	0x61, 0x72, 0x6b, 0x69, 0x6e, 0x67, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x41, 0x74, 0x74, 0x72, 0x52,
+	0x08, 0x70, 0x72, 0x6f, 0x76, 0x69, 0x64, 0x65, 0x73, 0x1a, 0x4b, 0x0a, 0x0a, 0x41, 0x74, 0x74,
+	0x72, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x27, 0x0a, 0x05, 0x76, 0x61, 0x6c,
+	0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x6c, 0x61, 0x72, 0x6b, 0x69,
+	0x6e, 0x67, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x41, 0x74, 0x74, 0x72, 0x52, 0x05, 0x76, 0x61, 0x6c,
+	0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0xcb, 0x01, 0x0a, 0x06, 0x54, 0x61, 0x72, 0x67, 0x65,
+	0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x25, 0x0a, 0x04, 0x72, 0x75, 0x6c, 0x65, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x6c, 0x61, 0x72, 0x6b, 0x69, 0x6e, 0x67, 0x2e, 0x61, 0x70,
+	0x69, 0x2e, 0x52, 0x75, 0x6c, 0x65, 0x52, 0x04, 0x72, 0x75, 0x6c, 0x65, 0x12, 0x37, 0x0a, 0x06,
+	0x6b, 0x77, 0x61, 0x72, 0x67, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x1f, 0x2e, 0x6c,
 	0x61, 0x72, 0x6b, 0x69, 0x6e, 0x67, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x54, 0x61, 0x72, 0x67, 0x65,
 	0x74, 0x2e, 0x4b, 0x77, 0x61, 0x72, 0x67, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x06, 0x6b,
 	0x77, 0x61, 0x72, 0x67, 0x73, 0x1a, 0x4d, 0x0a, 0x0b, 0x4b, 0x77, 0x61, 0x72, 0x67, 0x73, 0x45,
@@ -1115,7 +1199,7 @@ func file_api_action_proto_rawDescGZIP() []byte {
 }
 
 var file_api_action_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_api_action_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_api_action_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_api_action_proto_goTypes = []interface{}{
 	(Kind)(0),                     // 0: larking.api.Kind
 	(*LeafDialog)(nil),            // 1: larking.api.LeafDialog
@@ -1126,42 +1210,48 @@ var file_api_action_proto_goTypes = []interface{}{
 	(*ListValue)(nil),             // 6: larking.api.ListValue
 	(*DictValue)(nil),             // 7: larking.api.DictValue
 	(*Attr)(nil),                  // 8: larking.api.Attr
-	(*Target)(nil),                // 9: larking.api.Target
-	(*Action)(nil),                // 10: larking.api.Action
-	(*FilesInfo)(nil),             // 11: larking.api.FilesInfo
-	(*ContainerInfo)(nil),         // 12: larking.api.ContainerInfo
-	nil,                           // 13: larking.api.Target.KwargsEntry
-	(*structpb.Struct)(nil),       // 14: google.protobuf.Struct
-	(*anypb.Any)(nil),             // 15: google.protobuf.Any
-	(*status.Status)(nil),         // 16: google.rpc.Status
-	(*timestamppb.Timestamp)(nil), // 17: google.protobuf.Timestamp
+	(*Rule)(nil),                  // 9: larking.api.Rule
+	(*Target)(nil),                // 10: larking.api.Target
+	(*Action)(nil),                // 11: larking.api.Action
+	(*FilesInfo)(nil),             // 12: larking.api.FilesInfo
+	(*ContainerInfo)(nil),         // 13: larking.api.ContainerInfo
+	nil,                           // 14: larking.api.Rule.AttrsEntry
+	nil,                           // 15: larking.api.Target.KwargsEntry
+	(*structpb.Struct)(nil),       // 16: google.protobuf.Struct
+	(*anypb.Any)(nil),             // 17: google.protobuf.Any
+	(*status.Status)(nil),         // 18: google.rpc.Status
+	(*timestamppb.Timestamp)(nil), // 19: google.protobuf.Timestamp
 }
 var file_api_action_proto_depIdxs = []int32{
-	14, // 0: larking.api.LeafDialog.attributes:type_name -> google.protobuf.Struct
-	14, // 1: larking.api.ContainerDialog.attributes:type_name -> google.protobuf.Struct
+	16, // 0: larking.api.LeafDialog.attributes:type_name -> google.protobuf.Struct
+	16, // 1: larking.api.ContainerDialog.attributes:type_name -> google.protobuf.Struct
 	2,  // 2: larking.api.ContainerDialog.children:type_name -> larking.api.ContainerDialog
 	0,  // 3: larking.api.KindType.kind:type_name -> larking.api.Kind
 	0,  // 4: larking.api.KindType.key_kind:type_name -> larking.api.Kind
 	0,  // 5: larking.api.KindType.val_kind:type_name -> larking.api.Kind
 	6,  // 6: larking.api.Value.list_value:type_name -> larking.api.ListValue
 	7,  // 7: larking.api.Value.dict_value:type_name -> larking.api.DictValue
-	15, // 8: larking.api.Value.message:type_name -> google.protobuf.Any
+	17, // 8: larking.api.Value.message:type_name -> google.protobuf.Any
 	5,  // 9: larking.api.ListValue.values:type_name -> larking.api.Value
 	5,  // 10: larking.api.DictValue.pairs:type_name -> larking.api.Value
 	4,  // 11: larking.api.Attr.type:type_name -> larking.api.KindType
-	13, // 12: larking.api.Target.kwargs:type_name -> larking.api.Target.KwargsEntry
-	9,  // 13: larking.api.Action.target:type_name -> larking.api.Target
-	10, // 14: larking.api.Action.deps:type_name -> larking.api.Action
-	5,  // 15: larking.api.Action.values:type_name -> larking.api.Value
-	16, // 16: larking.api.Action.status:type_name -> google.rpc.Status
-	17, // 17: larking.api.Action.ready_time:type_name -> google.protobuf.Timestamp
-	17, // 18: larking.api.Action.done_time:type_name -> google.protobuf.Timestamp
-	5,  // 19: larking.api.Target.KwargsEntry.value:type_name -> larking.api.Value
-	20, // [20:20] is the sub-list for method output_type
-	20, // [20:20] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	14, // 12: larking.api.Rule.attrs:type_name -> larking.api.Rule.AttrsEntry
+	8,  // 13: larking.api.Rule.provides:type_name -> larking.api.Attr
+	9,  // 14: larking.api.Target.rule:type_name -> larking.api.Rule
+	15, // 15: larking.api.Target.kwargs:type_name -> larking.api.Target.KwargsEntry
+	10, // 16: larking.api.Action.target:type_name -> larking.api.Target
+	11, // 17: larking.api.Action.deps:type_name -> larking.api.Action
+	5,  // 18: larking.api.Action.values:type_name -> larking.api.Value
+	18, // 19: larking.api.Action.status:type_name -> google.rpc.Status
+	19, // 20: larking.api.Action.ready_time:type_name -> google.protobuf.Timestamp
+	19, // 21: larking.api.Action.done_time:type_name -> google.protobuf.Timestamp
+	8,  // 22: larking.api.Rule.AttrsEntry.value:type_name -> larking.api.Attr
+	5,  // 23: larking.api.Target.KwargsEntry.value:type_name -> larking.api.Value
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_api_action_proto_init() }
@@ -1267,7 +1357,7 @@ func file_api_action_proto_init() {
 			}
 		}
 		file_api_action_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Target); i {
+			switch v := v.(*Rule); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1279,7 +1369,7 @@ func file_api_action_proto_init() {
 			}
 		}
 		file_api_action_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Action); i {
+			switch v := v.(*Target); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1291,7 +1381,7 @@ func file_api_action_proto_init() {
 			}
 		}
 		file_api_action_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FilesInfo); i {
+			switch v := v.(*Action); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1303,6 +1393,18 @@ func file_api_action_proto_init() {
 			}
 		}
 		file_api_action_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*FilesInfo); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_action_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ContainerInfo); i {
 			case 0:
 				return &v.state
@@ -1332,7 +1434,7 @@ func file_api_action_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_api_action_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   13,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

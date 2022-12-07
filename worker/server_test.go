@@ -197,14 +197,81 @@ func TestExecuteAction(t *testing.T) {
 
 	action := &actionpb.Action{
 		Target: &actionpb.Target{
-			Name:       "My action",
-			RuleName:   "hello",
-			RuleModule: "testdata/hello.star",
+			Name: "My action",
+			Rule: &actionpb.Rule{
+				Name:   "hello",
+				Module: "testdata/hello.star",
+				Doc:    "Hello world example doc",
+				Attrs: map[string]*actionpb.Attr{
+					"input": {
+						Type: &actionpb.KindType{
+							Kind: actionpb.Kind_STRING,
+						},
+						Optional: false,
+						Doc:      "Hello message.",
+					},
+				},
+			},
 			Kwargs: map[string]*actionpb.Value{
-				"name":  {Kind: &actionpb.Value_StringValue{StringValue: "My Action"}},
 				"input": {Kind: &actionpb.Value_StringValue{StringValue: "ed"}},
 			},
 		},
+	}
+	req := &workerpb.ExecuteActionRequest{
+		Name:   "",
+		Action: action,
+	}
+	rsp, err := wrk.ExecuteAction(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rsp.Action.Values) != 1 {
+		t.Error("invalid values", rsp.Action.Values)
+	} else {
+		t.Log(rsp.Action.Values[0].GetStringValue())
+	}
+	t.Log("rsp", rsp)
+}
+
+func TestExecuteActionDeps(t *testing.T) {
+	ldr := starlib.NewLoader(nil)
+	wrk := worker.NewServer(ldr, control.InsecureControlClient{}, "worker")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	log := testing_logr.NewTestLogger(t)
+	ctx = logr.NewContext(ctx, log)
+
+	action := &actionpb.Action{
+		Target: &actionpb.Target{
+			Name: "Dep action",
+			Rule: &actionpb.Rule{
+				Name:   "hello",
+				Module: "testdata/hello.star",
+				Doc:    "Hello world example doc",
+				Attrs: map[string]*actionpb.Attr{
+					"input": {
+						Type: &actionpb.KindType{
+							Kind: actionpb.Kind_STRING,
+						},
+						Optional: false,
+						Doc:      "Hello message.",
+					},
+				},
+			},
+			Kwargs: map[string]*actionpb.Value{
+				"input": {Kind: &actionpb.Value_LabelValue{LabelValue: "Dep Var"}},
+			},
+		},
+		Deps: []*actionpb.Action{{
+			Target: &actionpb.Target{
+				Name: "Dep Var",
+			},
+			Values: []*actionpb.Value{{
+				Kind: &actionpb.Value_StringValue{StringValue: "dep!"},
+			}},
+		}},
 	}
 	req := &workerpb.ExecuteActionRequest{
 		Name:   "",

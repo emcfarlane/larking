@@ -582,9 +582,12 @@ func toValue(value starlark.Value) (*actionpb.Value, error) {
 	}
 }
 
-func makeKwargs(source *starlarkrule.Label, attrs *starlarkrule.Attrs, kws map[string]*actionpb.Value) (*starlarkrule.Kwargs, error) {
-	kwargs := make([]starlark.Tuple, 0, len(kws))
-	for key, val := range kws {
+func makeKwargs(source *starlarkrule.Label, attrs *starlarkrule.Attrs, target *actionpb.Target) (*starlarkrule.Kwargs, error) {
+	kwargs := make([]starlark.Tuple, 0, len(target.Kwargs)+1)
+	kwargs = append(kwargs, starlark.Tuple{
+		starlark.String("name"), starlark.String(target.Name),
+	})
+	for key, val := range target.Kwargs {
 		value, err := toStarlark(source, val)
 		if err != nil {
 			return nil, err
@@ -593,7 +596,7 @@ func makeKwargs(source *starlarkrule.Label, attrs *starlarkrule.Attrs, kws map[s
 			starlark.String(key), value,
 		})
 	}
-
+	fmt.Println("kwargs", kwargs, source)
 	return starlarkrule.NewKwargs(attrs, kwargs)
 }
 
@@ -646,18 +649,31 @@ func (s *Server) ExecuteAction(ctx context.Context, req *workerpb.ExecuteActionR
 
 	var deps []*starlarkrule.Action
 	for _, dpb := range apb.Deps {
-		var values []starlarkrule.AttrValue
+		var values []starlarkrule.KindValue
 		for _, vpb := range dpb.Values {
-			fmt.Println("vdp", vpb)
-			values = append(values, starlarkrule.AttrValue{
-				//
-				Value: nil, // TODO: how to translate values???
-			})
+
+			v, err := toStarlark(label, vpb)
+			if err != nil {
+				return nil, err
+			}
+			kv := starlarkrule.ToKindValue(v)
+
+			values = append(values, kv)
 		}
 
+		l, err := label.Parse(dpb.GetTarget().GetName())
+		if err != nil {
+			return nil, err
+		}
+
+		fmt.Println("got dep", l)
 		deps = append(deps, &starlarkrule.Action{
-			Target: nil,
-			Deps:   nil,
+			Target: &starlarkrule.Target{
+				Label:  l,
+				Rule:   nil,
+				Kwargs: nil,
+			},
+			Deps: nil,
 
 			Values:    values,
 			Error:     status.ErrorProto(dpb.Status),
@@ -667,17 +683,17 @@ func (s *Server) ExecuteAction(ctx context.Context, req *workerpb.ExecuteActionR
 		})
 	}
 
-	module, err := s.load(thread, apb.Target.RuleModule)
+	module, err := s.load(thread, apb.Target.Rule.Module)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load module %q: %w", apb.Target.RuleModule, err)
+		return nil, fmt.Errorf("failed to load module %q: %w", apb.Target.Rule.Module, err)
 	}
-	ruleValue := module[apb.Target.RuleName]
+	ruleValue := module[apb.Target.Rule.Name]
 	rule, ok := ruleValue.(*starlarkrule.Rule)
 	if !ok {
 		return nil, fmt.Errorf("invalid rulename type: %q", ruleValue)
 	}
 
-	kwargs, err := makeKwargs(label, rule.Attrs(), apb.Target.Kwargs)
+	kwargs, err := makeKwargs(label, rule.Attrs(), apb.Target)
 	if err != nil {
 		return nil, err
 	}
@@ -701,9 +717,7 @@ func (s *Server) ExecuteAction(ctx context.Context, req *workerpb.ExecuteActionR
 	b.RunAction(thread, a)
 
 	apb.Values = make([]*actionpb.Value, len(a.Values))
-	fmt.Println("values", a.Values)
 	for i, v := range a.Values {
-		fmt.Println(v.Value)
 		val, err := toValue(v.Value)
 		if err != nil {
 			return nil, err
