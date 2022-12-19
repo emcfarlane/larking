@@ -463,14 +463,17 @@ func attrList(thread *starlark.Thread, fnname string, args starlark.Tuple, kwarg
 	)
 	if err := starlark.UnpackArgs(
 		fnname, args, kwargs,
-		"val_kind", &valStr, "default?", &def, "doc?", &doc, "optional?", &optional,
+		"val_kind?", &valStr, "default?", &def, "doc?", &doc, "optional?", &optional,
 	); err != nil {
 		return nil, err
 	}
-	valKind := strToKind[valStr]
+	valKind, ok := strToKind[valStr]
+	if !ok {
+		valKind = KindAny
+	}
 
 	switch valKind {
-	case KindBool, KindInt, KindFloat, KindString, KindBytes, KindMessage:
+	case KindAny, KindBool, KindInt, KindFloat, KindString, KindBytes, KindMessage:
 		// scalar or message
 	default:
 		return nil, fmt.Errorf("invalid list value kind: %s", valStr)

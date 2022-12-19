@@ -36,7 +36,6 @@ go install larking.io/cmd/larking@latest
 Compile protobuffers to Go:
 ```
 protoc --go_out=module=larking.io:. --go-grpc_out=module=larking.io:. api/*.proto
-protoc --go_out=paths=source_relative:. --go-grpc_out=paths=source_relative:. apipb/*.proto
 ```
 
 Create a `larking.Mux`:

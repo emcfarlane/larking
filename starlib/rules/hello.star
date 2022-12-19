@@ -17,3 +17,14 @@ hello = rule(
         attr.string(),
     ),
 )
+
+def _comment_impl(name, comment):
+    """Test rule takes comment sting but does nothing."""
+    pass
+
+comment = rule(
+    impl = _hello_impl,
+    attrs = attrs(
+        comment = attr.string(),
+    ),
+)

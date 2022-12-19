@@ -8,12 +8,14 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"go.starlark.net/starlark"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 	"larking.io"
 	"larking.io/api/controlpb"
 	"larking.io/api/healthpb"
@@ -65,22 +67,52 @@ func run(ctx context.Context) (err error) {
 
 	stdr.SetVerbosity(1)
 	log := stdr.NewWithOptions(log.New(os.Stderr, "", log.LstdFlags), stdr.Options{LogCaller: stdr.All})
-	log = log.WithName("Larking")
+	log = log.WithName("larking")
 
 	unary := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		log.Info("unary request", "info", info)
+		now := time.Now()
 		ctx = logr.NewContext(ctx, log)
-		defer log.Info("unary end", info)
-		return handler(ctx, req)
+
+		rsp, err := handler(ctx, req)
+		d := time.Since(now)
+		if err != nil {
+			log.Error(err, "failed",
+				"fullMethod", info.FullMethod,
+				"duration", d,
+				"code", status.Code(err).String(),
+			)
+			return nil, err
+		}
+		log.Info("okay",
+			"fullMethod", info.FullMethod,
+			"duration", d,
+			"code", status.Code(err).String(),
+		)
+		return rsp, nil
 	}
 
 	stream := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		log.Info("stream request", "info", info)
-		defer log.Info("stream end", info)
-		return handler(srv, logStream{
+		now := time.Now()
+
+		err := handler(srv, logStream{
 			ServerStream: ss,
 			log:          log,
 		})
+		d := time.Since(now)
+		if err != nil {
+			log.Error(err, "failed",
+				"fullMethod", info.FullMethod,
+				"duration", d,
+				"code", status.Code(err).String(),
+			)
+			return err
+		}
+		log.Info("okay",
+			"fullMethod", info.FullMethod,
+			"duration", d,
+			"code", status.Code(err).String(),
+		)
+		return nil
 	}
 
 	var muxOpts = []larking.MuxOption{

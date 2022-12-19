@@ -600,6 +600,14 @@ func makeKwargs(source *starlarkrule.Label, attrs *starlarkrule.Attrs, target *a
 	return starlarkrule.NewKwargs(attrs, kwargs)
 }
 
+func parseRuleName(name string) (module, identifier string, ok bool) {
+	i := strings.LastIndex(name, ":")
+	if i < 0 {
+		return "", "", false
+	}
+	return name[:i], name[i+1:], true
+}
+
 func (s *Server) ExecuteAction(ctx context.Context, req *workerpb.ExecuteActionRequest) (*workerpb.ExecuteActionResponse, error) {
 	l := logr.FromContextOrDiscard(ctx)
 	l.Info("testing thread", "thread", req.Name)
@@ -683,14 +691,20 @@ func (s *Server) ExecuteAction(ctx context.Context, req *workerpb.ExecuteActionR
 		})
 	}
 
-	module, err := s.load(thread, apb.Target.Rule.Module)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load module %q: %w", apb.Target.Rule.Module, err)
+	fmt.Println(apb.Target.RuleName)
+	modulePath, identifier, ok := parseRuleName(apb.Target.RuleName)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse rule: %v", apb.Target.RuleName)
 	}
-	ruleValue := module[apb.Target.Rule.Name]
+
+	module, err := s.load(thread, modulePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load module %q: %w", modulePath, err)
+	}
+	ruleValue := module[identifier]
 	rule, ok := ruleValue.(*starlarkrule.Rule)
 	if !ok {
-		return nil, fmt.Errorf("invalid rulename type: %q", ruleValue)
+		return nil, fmt.Errorf("unknown rulename %q for %q", identifier, modulePath)
 	}
 
 	kwargs, err := makeKwargs(label, rule.Attrs(), apb.Target)
@@ -715,6 +729,13 @@ func (s *Server) ExecuteAction(ctx context.Context, req *workerpb.ExecuteActionR
 	}
 
 	b.RunAction(thread, a)
+	fmt.Println("---")
+	fmt.Println(a.Values)
+	fmt.Println(a.Error)
+	fmt.Println(a.Failed)
+	fmt.Println(a.ReadyTime)
+	fmt.Println(a.DoneTime)
+	fmt.Println("---")
 
 	apb.Values = make([]*actionpb.Value, len(a.Values))
 	for i, v := range a.Values {
