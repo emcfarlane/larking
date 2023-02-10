@@ -106,6 +106,9 @@ go = rule(
         #"_zxx": attr.label(allow_files = True, default = "file://rules/go/zxx"),
         #"_zcc": attr.label(allow_files = True, default = "file://rules/go/zcc"),
     ),
+    provides = [
+        attr.string(),
+    ],
     #outs = {
     #    "bin": attr.label(
     #        executable = True,

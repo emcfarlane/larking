@@ -191,7 +191,8 @@ func (s *Server) RunOnThread(stream workerpb.Worker_RunOnThreadServer) (err erro
 	thread := &starlark.Thread{
 		Name: name,
 		Print: func(_ *starlark.Thread, msg string) {
-			buf.WriteString(msg) //nolint
+			//buf.WriteString(msg) //nolint
+			buf.WriteString(msg + "\n") //nolint
 		},
 		Load: s.load,
 	}
@@ -582,7 +583,7 @@ func toValue(value starlark.Value) (*actionpb.Value, error) {
 	}
 }
 
-func makeKwargs(source *starlarkrule.Label, attrs *starlarkrule.Attrs, target *actionpb.Target) (*starlarkrule.Kwargs, error) {
+func makeKwargs(source *starlarkrule.Label, attrs []starlarkrule.AttrName, target *actionpb.Target) (*starlarkrule.Kwargs, error) {
 	kwargs := make([]starlark.Tuple, 0, len(target.Kwargs)+1)
 	kwargs = append(kwargs, starlark.Tuple{
 		starlark.String("name"), starlark.String(target.Name),
@@ -600,6 +601,7 @@ func makeKwargs(source *starlarkrule.Label, attrs *starlarkrule.Attrs, target *a
 	return starlarkrule.NewKwargs(attrs, kwargs)
 }
 
+// rule name is file.ext:<identifier>
 func parseRuleName(name string) (module, identifier string, ok bool) {
 	i := strings.LastIndex(name, ":")
 	if i < 0 {
@@ -635,7 +637,7 @@ func (s *Server) ExecuteAction(ctx context.Context, req *workerpb.ExecuteActionR
 	thread := &starlark.Thread{
 		Name: label.String(),
 		Print: func(_ *starlark.Thread, msg string) {
-			buf.WriteString(msg) //nolint
+			buf.WriteString(msg + "\n") //nolint
 		},
 		Load: s.load,
 	}
@@ -735,6 +737,7 @@ func (s *Server) ExecuteAction(ctx context.Context, req *workerpb.ExecuteActionR
 	fmt.Println(a.Failed)
 	fmt.Println(a.ReadyTime)
 	fmt.Println(a.DoneTime)
+	fmt.Println(buf.String())
 	fmt.Println("---")
 
 	apb.Values = make([]*actionpb.Value, len(a.Values))
@@ -748,6 +751,7 @@ func (s *Server) ExecuteAction(ctx context.Context, req *workerpb.ExecuteActionR
 
 	if a.Error != nil {
 		apb.Status = errorStatus(a.Error).Proto()
+		apb.Failed = true
 	}
 	apb.ReadyTime = timestamppb.New(a.ReadyTime)
 	apb.DoneTime = timestamppb.New(a.DoneTime)

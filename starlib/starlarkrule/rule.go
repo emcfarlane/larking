@@ -10,9 +10,11 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"strings"
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"larking.io/starlib/starext"
 	"larking.io/starlib/starlarkstruct"
 )
@@ -21,11 +23,9 @@ func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
 		Name: "rule",
 		Members: starlark.StringDict{
-			"rule":     starext.MakeBuiltin("rule.rule", MakeRule),
-			"attr":     NewAttrModule(),
-			"attrs":    starext.MakeBuiltin("rule.attrs", MakeAttrs),
-			"provides": starext.MakeBuiltin("rule.provides", MakeProvides),
-			"label":    starext.MakeBuiltin("rule.label", MakeLabel),
+			"rule":  starext.MakeBuiltin("rule.rule", MakeRule),
+			"attr":  NewAttrModule(),
+			"label": starext.MakeBuiltin("rule.label", MakeLabel),
 		},
 	}
 }
@@ -181,22 +181,27 @@ func AsLabel(v starlark.Value) (*Label, error) {
 }
 
 type Rule struct {
-	//impl     *starlark.Function // implementation function
-	impl     starlark.Callable
-	doc      string
-	attrs    *Attrs    // input attribute types
-	provides *Provides // output attribute types
+	impl        starlark.Callable
+	doc         string
+	attrs       []AttrName                      // input attribute types
+	attrsMap    map[string]AttrName             // lookup attributes
+	provides    []*Attr                         // output attribute types
+	providesMap map[protoreflect.FullName]*Attr // lookup provides
 
 	frozen bool
 }
+
+var reIdentifier = regexp.MustCompile(`^[^\d\W]\w*$`)
 
 // MakeRule creates a new rule instance. Accepts the following optional kwargs:
 // "impl", "doc", "attrs" and "provides".
 func MakeRule(_ *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		impl     = new(starlark.Function)
-		attrs    = new(Attrs)
-		provides = new(Provides)
+		impl = new(starlark.Function)
+		//attrs    = new(Attrs)
+		//provides = new(Provides)
+		attrs    = new(starlark.Dict)
+		provides = new(starlark.List)
 		doc      string
 	)
 	if err := starlark.UnpackArgs(
@@ -209,15 +214,44 @@ func MakeRule(_ *starlark.Thread, fnname string, args starlark.Tuple, kwargs []s
 		return nil, err
 	}
 
+	items := attrs.Items()
+	attrNames := make([]AttrName, len(items)+1)
+	attrNames[0] = nameAttr
+	attrsMap := make(map[string]AttrName)
+
+	for i, item := range items {
+		key, val := item[0], item[1]
+
+		name, ok := starlark.AsString(key)
+		if !ok || name == "" {
+			return nil, fmt.Errorf("unexpected attribute name: %q", name)
+		}
+		if name == "name" {
+			return nil, fmt.Errorf("reserved %q keyword", "name")
+		}
+		if !reIdentifier.MatchString(name) {
+			return nil, fmt.Errorf("invalid name: %q", name)
+		}
+
+		a, ok := val.(*Attr)
+		if !ok {
+			return nil, fmt.Errorf("unexpected attribute value type: %q: %T", name, val)
+		}
+
+		attrName := AttrName{
+			Attr: a,
+			Name: name,
+		}
+		attrNames[i+1] = attrName
+		attrsMap[name] = attrName
+	}
+
 	// Params are now kwargs.
 	//// type checks
 	//if impl.NumParams() != 1 {
 	//	return nil, fmt.Errorf("unexpected number of params: %d", impl.NumParams())
 	//}
 
-	if err := attrs.checkMutable("use"); err != nil {
-		return nil, err
-	}
 	//keyName := "name"
 	//if _, ok := attrs.osd.Get(keyName); ok {
 	//	return nil, fmt.Errorf("reserved %q keyword", keyName)
@@ -229,32 +263,73 @@ func MakeRule(_ *starlark.Thread, fnname string, args starlark.Tuple, kwargs []s
 	//	Mandatory: true,
 	//})
 
-	//pvds := make([]*Attrs, provides.Len())
-	//for i, n := 0, provides.Len(); i < n; i++ {
-	//	x := provides.Index(i)
-	//	attr, ok := x.(*Attrs)
-	//	if !ok {
-	//		return nil, fmt.Errorf(
-	//			"invalid provides[%d] %q, expected %q",
-	//			i, x.Type(), (&Attrs{}).Type(),
-	//		)
-	//	}
-	//	pvds[i] = attr
-	//}
+	pvds := make([]*Attr, provides.Len())
+	pvdsMap := make(map[protoreflect.FullName]*Attr)
+	for i, n := 0, provides.Len(); i < n; i++ {
+		x := provides.Index(i)
+		attr, ok := x.(*Attr)
+		if !ok {
+			return nil, fmt.Errorf(
+				"invalid provides[%d] %q, expected %q",
+				i, x.Type(), (&Attr{}).Type(),
+			)
+		}
+		pvds[i] = attr
+		pvdsMap[attr.FullName] = attr
+	}
 
 	// key=dir:target.tar.gz
 	// key=dir/target.tar.gz
 
 	return &Rule{
-		impl:     impl,
-		doc:      doc,
-		attrs:    attrs,
-		provides: provides,
+		impl:        impl,
+		doc:         doc,
+		attrs:       attrNames,
+		attrsMap:    attrsMap,
+		provides:    pvds,
+		providesMap: pvdsMap,
 	}, nil
 
 }
 
-func (r *Rule) String() string       { return "rule()" }
+func (r *Rule) String() string {
+	buf := new(strings.Builder)
+	buf.WriteString("rule")
+	buf.WriteByte('(')
+
+	buf.WriteString("impl = ")
+	buf.WriteString(r.impl.String())
+
+	buf.WriteString(", doc = ")
+	buf.WriteString(r.doc)
+
+	{
+		buf.WriteString("attrs")
+		buf.WriteByte('{')
+		for i, attrName := range r.attrs {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(attrName.Name)
+			buf.WriteString(attrName.String())
+		}
+		buf.WriteByte('}')
+	}
+
+	{
+		buf.WriteString("provides")
+		buf.WriteByte('[')
+		for i, attr := range r.provides {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(attr.String())
+		}
+		buf.WriteByte(']')
+	}
+	buf.WriteByte(')')
+	return buf.String()
+}
 func (r *Rule) Type() string         { return "rule" }
 func (r *Rule) Freeze()              { r.frozen = true }
 func (r *Rule) Truth() starlark.Bool { return starlark.Bool(!r.frozen) }
@@ -263,8 +338,8 @@ func (r *Rule) Hash() (uint32, error) {
 	return 0, fmt.Errorf("unhashable type: rule")
 }
 func (r *Rule) Impl() starlark.Callable { return r.impl }
-func (r *Rule) Attrs() *Attrs           { return r.attrs }
-func (r *Rule) Provides() *Provides     { return r.provides }
+func (r *Rule) Attrs() []AttrName       { return r.attrs }
+func (r *Rule) Provides() []*Attr       { return r.provides }
 
 const bldKey = "builder"
 

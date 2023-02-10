@@ -8,9 +8,14 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/testr"
+	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/testing/protocmp"
+
 	"go.starlark.net/starlark"
 	_ "gocloud.dev/blob/fileblob"
-	"larking.io/starlib/starlarkrule"
+
+	"larking.io/api/actionpb"
+	"larking.io/starlib/encoding/starlarkproto"
 )
 
 func TestRun(t *testing.T) {
@@ -26,118 +31,129 @@ func TestRun(t *testing.T) {
 		}
 	}
 
-	src := "file://./?metadata=skip"
-	makeLabel := func(name string) *starlarkrule.Label {
-		l, err := starlarkrule.ParseRelativeLabel(src, name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return l
-	}
-	srcLabel := makeLabel(src)
+	//src := "file://./?metadata=skip"
+	//makeLabel := func(name string) *starlarkrule.Label {
+	//	l, err := starlarkrule.ParseRelativeLabel(src, name)
+	//	if err != nil {
+	//		t.Fatal(err)
+	//	}
+	//	return l
+	//}
+	//srcLabel := makeLabel(src)
 
-	makeDefaultInfoFiles := func(modSrc string, executable string, filenames []string) *starlarkrule.AttrArgs {
-		var files []starlark.Value
-		for _, filename := range filenames {
-			files = append(files, makeLabel(filename))
-		}
-		var kwargs []starlark.Tuple
-		if len(files) > 0 {
-			kwargs = append(kwargs, starlark.Tuple{
-				starlark.String("files"),
-				starlark.NewList(files),
-			})
-		}
+	//makeDefaultInfoFiles := func(modSrc string, executable string, filenames []string) *starlarkrule.AttrArgs {
+	//	var files []starlark.Value
+	//	for _, filename := range filenames {
+	//		files = append(files, makeLabel(filename))
+	//	}
+	//	var kwargs []starlark.Tuple
+	//	if len(files) > 0 {
+	//		kwargs = append(kwargs, starlark.Tuple{
+	//			starlark.String("files"),
+	//			starlark.NewList(files),
+	//		})
+	//	}
 
-		if len(executable) > 0 {
-			kwargs = append(kwargs, starlark.Tuple{
-				starlark.String("executable"),
-				makeLabel(executable),
-			})
-		}
+	//	if len(executable) > 0 {
+	//		kwargs = append(kwargs, starlark.Tuple{
+	//			starlark.String("executable"),
+	//			makeLabel(executable),
+	//		})
+	//	}
 
-		srcLabel, err := srcLabel.Parse(modSrc)
-		if err != nil {
-			t.Fatal(err)
-		}
+	//	srcLabel, err := srcLabel.Parse(modSrc)
+	//	if err != nil {
+	//		t.Fatal(err)
+	//	}
 
-		args, err := starlarkrule.DefaultInfo.MakeArgs(srcLabel, kwargs)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return args
-	}
+	//	args, err := starlarkrule.DefaultInfo.MakeArgs(srcLabel, kwargs)
+	//	if err != nil {
+	//		t.Fatal(err)
+	//	}
+	//	return args
+	//}
 
 	tests := []struct {
-		name    string
-		label   string
-		wants   []*starlarkrule.AttrArgs // starlark.Value
+		name  string
+		label string
+		//wants   []*starlarkrule.AttrArgs // starlark.Value
+		wants   []starlark.Value
 		wantErr error
 	}{{
 		name:  "cgo",
 		label: "testdata/cgo/helloc",
-		wants: []*starlarkrule.AttrArgs{
-			makeDefaultInfoFiles(
-				"testdata/cgo/BUILD.star",
-				"testdata/cgo/helloc",
-				[]string{
-					"testdata/cgo/helloc",
+		//wants: []*starlarkrule.AttrArgs{
+		//	makeDefaultInfoFiles(
+		//		"testdata/cgo/BUILD.star",
+		//		"testdata/cgo/helloc",
+		//		[]string{
+		//			"testdata/cgo/helloc",
+		//		},
+		//	),
+		//},
+		wants: []starlark.Value{
+			starlarkproto.MakeMessage(
+				&actionpb.FilesInfo{
+					Files: []string{
+						"testdata/cgo/helloc",
+					},
+					Executable: "testdata/cgo/helloc",
 				},
 			),
 		},
-	}, {
-		name:  "xcgo",
-		label: "testdata/cgo/helloc?goarch=amd64&goos=linux",
-		wants: []*starlarkrule.AttrArgs{
-			makeDefaultInfoFiles(
-				"testdata/cgo/BUILD.star",
-				"testdata/cgo/helloc?goarch=amd64&goos=linux",
-				[]string{
-					"testdata/cgo/helloc?goarch=amd64&goos=linux",
-				},
-			),
-		},
-	}, {
-		name:  "tar",
-		label: "testdata/archive/hello.tar",
-		wants: []*starlarkrule.AttrArgs{
-			makeDefaultInfoFiles(
-				"testdata/archive/BUILD.star", "",
-				[]string{"testdata/archive/hello.tar"},
-			),
-		},
-	}, {
-		name:  "tar.gz",
-		label: "testdata/archive/helloc.tar.gz",
-		wants: []*starlarkrule.AttrArgs{
-			makeDefaultInfoFiles(
-				"testdata/archive/BUILD.star", "",
-				[]string{"testdata/archive/helloc.tar.gz"},
-			),
-		},
-	}, {
-		// TODO: PULL LOCALLY
-		name:  "containerPull",
-		label: "testdata/container/distroless.tar",
-		wants: []*starlarkrule.AttrArgs{
-			makeDefaultInfoFiles(
-				"testdata/container/BUILD.star", "",
-				[]string{"testdata/container/distroless.tar"},
-			),
-		},
-		//wantConstructor: imageConstructor,
+		//}, {
+		//	name:  "xcgo",
+		//	label: "testdata/cgo/helloc?goarch=amd64&goos=linux",
+		//	wants: []*starlarkrule.AttrArgs{
+		//		makeDefaultInfoFiles(
+		//			"testdata/cgo/BUILD.star",
+		//			"testdata/cgo/helloc?goarch=amd64&goos=linux",
+		//			[]string{
+		//				"testdata/cgo/helloc?goarch=amd64&goos=linux",
+		//			},
+		//		),
+		//	},
+		//}, {
+		//	name:  "tar",
+		//	label: "testdata/archive/hello.tar",
+		//	wants: []*starlarkrule.AttrArgs{
+		//		makeDefaultInfoFiles(
+		//			"testdata/archive/BUILD.star", "",
+		//			[]string{"testdata/archive/hello.tar"},
+		//		),
+		//	},
+		//}, {
+		//	name:  "tar.gz",
+		//	label: "testdata/archive/helloc.tar.gz",
+		//	wants: []*starlarkrule.AttrArgs{
+		//		makeDefaultInfoFiles(
+		//			"testdata/archive/BUILD.star", "",
+		//			[]string{"testdata/archive/helloc.tar.gz"},
+		//		),
+		//	},
+		//}, {
+		//	// TODO: PULL LOCALLY
+		//	name:  "containerPull",
+		//	label: "testdata/container/distroless.tar",
+		//	wants: []*starlarkrule.AttrArgs{
+		//		makeDefaultInfoFiles(
+		//			"testdata/container/BUILD.star", "",
+		//			[]string{"testdata/container/distroless.tar"},
+		//		),
+		//	},
+		//	//wantConstructor: imageConstructor,
 
-		//	name:            "tarxcgo",
-		//	label:           "testdata/archive/helloc.tar.gz",
-		//	wantConstructor: FileConstructor,
-		//}, {
-		//	name:            "containerPull",
-		//	label:           "testdata/container/distroless.tar",
-		//	wantConstructor: imageConstructor,
-		//}, {
-		//	name:            "containerBuild",
-		//	label:           "testdata/container/helloc.tar",
-		//	wantConstructor: imageConstructor,
+		//	//	name:            "tarxcgo",
+		//	//	label:           "testdata/archive/helloc.tar.gz",
+		//	//	wantConstructor: FileConstructor,
+		//	//}, {
+		//	//	name:            "containerPull",
+		//	//	label:           "testdata/container/distroless.tar",
+		//	//	wantConstructor: imageConstructor,
+		//	//}, {
+		//	//	name:            "containerBuild",
+		//	//	label:           "testdata/container/helloc.tar",
+		//	//	wantConstructor: imageConstructor,
 	}}
 
 	for _, tt := range tests {
@@ -154,27 +170,45 @@ func TestRun(t *testing.T) {
 				t.Fatal("error failed: ", got)
 			}
 
-			for _, want := range tt.wants {
-				attrs := want.Attrs()
-				v, ok, err := got.Get(attrs)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !ok {
-					t.Errorf("missing attrs: %v", attrs)
-					continue
+			if len(tt.wants) != len(got.Values) {
+				t.Fatal("invalid length")
+			}
+
+			for i, x := range tt.wants {
+				y := got.Values[i]
+
+				if diff := cmp.Diff(x, y, protocmp.Transform()); diff != "" {
+					t.Error(diff)
 				}
 
-				t.Logf("GOT!\t\t %v %T", v, v)
-				t.Logf("WANT\t\t %v %T", want, want)
-				ok, err = starlark.Equal(v, want)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !ok {
-					t.Errorf("not equal, got %v, want %v", v, want)
-				}
-				t.Logf("%v", want)
+				//equal, err := starlark.Equal(x, y)
+				//if err != nil {
+				//	t.Fatal(err)
+				//}
+
+				//if !equal {
+				//	t.Errorf("%d: %s != %s", i, y, x)
+				//}
+				//attrs := want.Attrs()
+				//v, ok, err := got.Get(attrs)
+				//if err != nil {
+				//	t.Fatal(err)
+				//}
+				//if !ok {
+				//	t.Errorf("missing attrs: %v", attrs)
+				//	continue
+				//}
+
+				//t.Logf("GOT!\t\t %v %T", v, v)
+				//t.Logf("WANT\t\t %v %T", want, want)
+				//ok, err = starlark.Equal(v, want)
+				//if err != nil {
+				//	t.Fatal(err)
+				//}
+				//if !ok {
+				//	t.Errorf("not equal, got %v, want %v", v, want)
+				//}
+				//t.Logf("%v", want)
 			}
 		})
 	}

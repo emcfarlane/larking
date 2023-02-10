@@ -58,6 +58,6 @@ query = rule(
         args = attr.list(val_kind = "any", optional=True),
     ),
     provides = provides(
-        attr.message("larking.api.SQLQueryInfo"),
+        attr.string(),
     ),
 )

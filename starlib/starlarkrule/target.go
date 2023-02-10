@@ -93,8 +93,8 @@ func (t *Target) SetQuery(values url.Values) error {
 				continue
 			}
 
-			switch attr.KindType {
-			case KindType{Kind: KindString}:
+			switch attr.FullName {
+			case TypeString:
 				if len(vals) > 1 {
 					return fmt.Errorf("error: unexpected number of params: %v", vals)
 				}

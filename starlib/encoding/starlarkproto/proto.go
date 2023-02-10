@@ -398,22 +398,21 @@ func (m *Message) ProtoReflect() protoreflect.Message { return m.msg }
 
 // Type conversions rules:
 //
-//  ═══════════════╤════════════════════════════════════
-//  Starlark type  │ Protobuf Type
-//  ═══════════════╪════════════════════════════════════
-//  NoneType       │ MessageKind, GroupKind
-//  Bool           │ BoolKind
-//  Int            │ Int32Kind, Sint32Kind, Sfixed32Kind,
-//                 │ Int64Kind, Sint64Kind, Sfixed64Kind,
-//                 │ Uint32Kind, Fixed32Kind,
-//                 │ Uint64Kind, Fixed64Kind
-//  Float          │ FloatKind, DoubleKind
-//  String         │ StringKind, BytesKind
-//  *List          │ List<Kind>
-//  Tuple          │ n/a
-//  *Dict          │ Map<Kind><Kind>
-//  *Set           │ n/a
-//
+//	═══════════════╤════════════════════════════════════
+//	Starlark type  │ Protobuf Type
+//	═══════════════╪════════════════════════════════════
+//	NoneType       │ MessageKind, GroupKind
+//	Bool           │ BoolKind
+//	Int            │ Int32Kind, Sint32Kind, Sfixed32Kind,
+//	               │ Int64Kind, Sint64Kind, Sfixed64Kind,
+//	               │ Uint32Kind, Fixed32Kind,
+//	               │ Uint64Kind, Fixed64Kind
+//	Float          │ FloatKind, DoubleKind
+//	String         │ StringKind, BytesKind
+//	*List          │ List<Kind>
+//	Tuple          │ n/a
+//	*Dict          │ Map<Kind><Kind>
+//	*Set           │ n/a
 func toStarlark(v protoreflect.Value, fd protoreflect.FieldDescriptor, frozen *bool) starlark.Value {
 	switch v := v.Interface().(type) {
 	case nil:
@@ -567,6 +566,8 @@ func toProtobuf(v starlark.Value, fd protoreflect.FieldDescriptor, parent protor
 			switch v := v.(type) {
 			case *Message:
 				return protoreflect.ValueOfMessage(v.msg), nil
+			case *List, *starlark.List:
+				return protoreflect.Value{}, fmt.Errorf("list can't be assigned to message of type: %q", fd.Message().FullName())
 			case starlark.NoneType:
 				msg := parent.Message()
 				msg.Clear(fd)
@@ -613,6 +614,7 @@ func (m *Message) encodeField(v starlark.Value, fd protoreflect.FieldDescriptor)
 	// It is equivalent to checking whether Cardinality is Repeated and
 	// that IsMap reports false.
 	if !fd.IsList() {
+		fmt.Println("encodeField", v)
 		return toProtobuf(v, fd, protoreflect.ValueOfMessage(m.msg))
 	}
 
@@ -627,6 +629,10 @@ func (m *Message) encodeField(v starlark.Value, fd protoreflect.FieldDescriptor)
 
 		for i := 0; i < v.Len(); i++ {
 			val, err := toProtobuf(v.Index(i), fd, val)
+			fmt.Println("HERE????", err)
+			fmt.Println("fd", fd)
+			fmt.Println(v.Index(i), v.Len(), v.Type())
+			fmt.Println("val", val)
 			if err != nil {
 				return protoreflect.Value{}, err
 			}
@@ -662,6 +668,10 @@ func (m *Message) checkMutable(verb string) error {
 		return fmt.Errorf("cannot %s non mutable message", verb)
 	}
 	return nil
+}
+
+func MakeMessage(msg proto.Message) *Message {
+	return &Message{msg: msg.ProtoReflect(), frozen: new(bool)}
 }
 
 // NewMessage creates a *Message base on a protobuffer Message with the given
@@ -710,6 +720,7 @@ func NewMessage(msg protoreflect.Message, args starlark.Tuple, kwargs []starlark
 		case starlark.HasAttrs:
 			m := &Message{msg: msg, frozen: new(bool)}
 			for _, name := range v.AttrNames() {
+				fmt.Println("----------hitting this?", name)
 				val, err := v.Attr(name)
 				if err != nil {
 					return nil, err

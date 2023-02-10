@@ -1,17 +1,29 @@
-package starlarkrule
+package starlarkos
 
 import (
 	"bytes"
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
+	"path/filepath"
 
 	"go.starlark.net/starlark"
+	"larking.io/starlib/starext"
+	"larking.io/starlib/starlarkstruct"
 	"larking.io/starlib/starlarkthread"
 )
 
-func run(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func NewModule() *starlarkstruct.Module {
+	return &starlarkstruct.Module{
+		Name: "os",
+		Members: starlark.StringDict{
+			"exec": starext.MakeBuiltin("os.exec", Exec),
+		},
+	}
+}
+
+// Exec runs external commands.
+func Exec(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		name    string
 		dir     string
@@ -54,8 +66,8 @@ func run(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []s
 
 	ctx := starlarkthread.GetContext(thread)
 	cmd := exec.CommandContext(ctx, name, cmdArgs...)
-	cmd.Dir = dir // TODO: filepath.ToSlash?
-	cmd.Env = append(os.Environ(), cmdEnv...)
+	cmd.Dir = filepath.ToSlash(dir)
+	cmd.Env = cmdEnv
 
 	var output bytes.Buffer
 	cmd.Stderr = &output
@@ -66,5 +78,5 @@ func run(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []s
 		log.Printf("Unexpected error: %v\n%v", err, output.String())
 		return nil, err
 	}
-	return starlark.None, nil
+	return starlark.String(output.String()), nil
 }

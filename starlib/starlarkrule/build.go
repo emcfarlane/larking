@@ -12,11 +12,12 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"strings"
 	"time"
 
-	//"larking.io/starlib"
 	"github.com/go-logr/logr"
 	"go.starlark.net/starlark"
+
 	"larking.io/starlib/starlarkthread"
 )
 
@@ -30,15 +31,23 @@ type Action struct {
 	priority int       // relative execution priority
 
 	// Results
-	Values    []KindValue // caller values
-	Error     error       // caller error
-	Failed    bool        // whether the action failed
+	Values    []starlark.Value
+	Error     error // caller error
+	Failed    bool  // whether the action failed
 	ReadyTime time.Time
 	DoneTime  time.Time
 }
 
-func (a *Action) String() string { return "action(...)" } //TODO
-func (a *Action) Type() string   { return "action" }
+func (a *Action) String() string {
+	buf := new(strings.Builder)
+	buf.WriteString(a.Type())
+	buf.WriteByte('(')
+	buf.WriteString(a.Target.String())
+	buf.WriteByte(')')
+	return buf.String()
+
+}
+func (a *Action) Type() string { return "action" }
 
 // FailureErr is a DFS on the failed action, returns nil if not failed.
 func (a *Action) FailureErr() error {
@@ -458,30 +467,29 @@ func (b *Builder) RunAction(thread *starlark.Thread, a *Action) {
 			return err
 		}
 
-		fmt.Println("What values?", value)
-
 		switch x := value.(type) {
 		case *starlark.List:
 			n := x.Len()
-			lst := make([]KindValue, 0, n)
+			lst := make([]starlark.Value, 0, n)
 
-			//lookup := make(map[KindType]*Attr)
-			//for _, attr := range a.Target.Rule.provides.attrs {
-			//	lookup[attr.KindType] = attr
+			//lookup := make(map[protoreflect.FullName]*Attr)
+			//for _, attr := range a.Target.Rule.provides {
+			//	lookup[attr.FullName] = attr
 			//}
+			x.Freeze()
 
 			for i := 0; i < n; i++ {
-				value := x.Index(i)
-				key := toKindType(value)
+				val := x.Index(i)
+				key, err := toType(value)
+				if err != nil {
+					return err
+				}
 
-				//attr, ok := lookup[key]
-				//if !ok {
-				//	log.Info("missing attr type")
-				//}
-				lst = append(lst, KindValue{
-					KindType: key,
-					Value:    value,
-				})
+				if _, ok := a.Target.Rule.providesMap[key]; !ok {
+					log.Info("missing attr type")
+					return fmt.Errorf("no provider for type: %q", key)
+				}
+				lst = append(lst, val)
 			}
 
 			a.Values = lst

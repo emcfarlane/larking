@@ -70,11 +70,11 @@ func generateDot(a *starlarkrule.Action) ([]byte, error) {
 	for n := len(deps); n > 0; n = len(deps) {
 		a, deps = deps[n-1], deps[:n-1] // pop
 
-		p(q, a.Key(), q)
+		p(q, a.Target.String(), q)
 
 		deps = append(deps, a.Deps...)
 		for _, at := range a.Deps {
-			p(q, at.Key(), q, " -> ", q, a.Key(), q)
+			p(q, at.Target.String(), q, " -> ", q, a.Target.String(), q)
 		}
 	}
 

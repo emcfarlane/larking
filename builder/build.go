@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/go-logr/logr"
+	"go.starlark.net/starlark"
 	"larking.io/starlib"
 	"larking.io/starlib/starlarkrule"
 	"larking.io/starlib/starlarkthread"
-	"github.com/go-logr/logr"
-	"go.starlark.net/starlark"
 )
 
 type buildOptions struct {

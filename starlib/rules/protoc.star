@@ -9,6 +9,7 @@ def _protoc_impl(ctx):
 
         # TODO: handle outs
 
+    print("here?")
     args.append()
 
     # Maybe?

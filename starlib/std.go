@@ -15,6 +15,7 @@ import (
 	"larking.io/starlib/starlarkblob"
 	"larking.io/starlib/starlarkdocstore"
 	"larking.io/starlib/starlarkerrors"
+	"larking.io/starlib/starlarkos"
 	"larking.io/starlib/starlarkpubsub"
 	"larking.io/starlib/starlarkrule"
 	"larking.io/starlib/starlarkruntimevar"
@@ -38,6 +39,7 @@ var (
 	modSQL        = starlarksql.NewModule()
 	modThread     = starlarkthread.NewModule()
 	modTime       = starlarktime.Module
+	modOS         = starlarkos.NewModule()
 
 	// content holds our static web server content.
 	//go:embed rules/*
@@ -45,7 +47,7 @@ var (
 
 	stdLibMu sync.Mutex
 	stdLib   = map[string]starlark.StringDict{
-		"lib.star": makeDict(NewModule()),
+		"@std": makeDict(NewModule()),
 
 		// TODO
 		//"archive/container.star":           makeDict(starlarkcontainer.NewModule()),
@@ -66,6 +68,7 @@ var (
 		"time.star":           makeDict(modTime), // starlark
 		"thread.star":         makeDict(modThread),
 		"rule.star":           makeDict(modRule),
+		"os.star":             makeDict(modOS),
 	}
 )
 
@@ -83,7 +86,7 @@ func makeDict(module *starlarkstruct.Module) starlark.StringDict {
 
 func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
-		Name: "lib",
+		Name: "std",
 		Members: starlark.StringDict{
 			"blob":       modBlob,
 			"docstore":   modDocstore,
@@ -92,6 +95,7 @@ func NewModule() *starlarkstruct.Module {
 			"json":       modJSON,
 			"math":       modMath,
 			"openapi":    modOpenAPI,
+			"os":         modOS,
 			"proto":      modProto,
 			"pubsub":     modPubSub,
 			"rule":       modRule,

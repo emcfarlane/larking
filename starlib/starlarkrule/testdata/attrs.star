@@ -1,4 +1,4 @@
-load("rule.star", "rule", "attrs", "attr", "label", "provides")
+load("rule.star", "rule", "attr", "label")
 
 #def test_default_attrs(t):
 #    info = DefaultInfo(
@@ -21,12 +21,12 @@ def test_hello_rule(t):
 
     hello = rule(
         impl = _hello_impl,
-        attrs = attrs(
-            input = attr.string(),
-        ),
-        provides = provides(
+        attrs = {
+            "input": attr.string(),
+        },
+        provides = [
             attr.string(),
-        ),
+        ],
     )
     print("rule", rule)
 
