@@ -16,8 +16,8 @@ require (
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	go.starlark.net v0.0.0-20220817180228-f738f5508c12
 	gocloud.dev v0.25.0
-	golang.org/x/net v0.0.0-20220401154927-543a649e0bdd
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
+	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	google.golang.org/genproto v0.0.0-20220401170504-314d38edb7de
 	google.golang.org/grpc v1.45.0
 	google.golang.org/protobuf v1.28.1
@@ -93,12 +93,12 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
-	golang.org/x/mod v0.5.1 // indirect
+	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/oauth2 v0.0.0-20220309155454-6242fa91716a // indirect
 	golang.org/x/sys v0.0.0-20220823224334-20c2bfdbfe24 // indirect
-	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/text v0.3.8 // indirect
 	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65 // indirect
-	golang.org/x/tools v0.1.8 // indirect
+	golang.org/x/tools v0.1.12 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/api v0.74.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
