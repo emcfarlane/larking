@@ -1,7 +1,7 @@
 load("errors.star", "errors")
 
 def assert_even(x):
-    if x % 2 == 0:
+    if x % 2 != 0:
         fail("odd")
     return x
 
@@ -10,10 +10,22 @@ def test_catch(t):
     # Results will be truthy if valid, and falsy if not.
     # Okay values can be accessed by the .val attribute.
     res = errors.catch(assert_even, 2)
-    if res:
-        print("% is even!", res.val)
+    t.eq(res.val, 2)
 
     # Error values can be accessed by the .err attribute.
     res = errors.catch(assert_even, 3)
-    if not res:
-        print("error: %", res.err)
+    t.eq(res.val, None)
+
+def test_sequence_assigment(t):
+    # try the function, and return the result if it succeeds.
+    # If it fails, return the default value.
+    res, err = errors.catch(assert_even, 2)
+    t.eq(err, None)
+    print("% is even!", res)
+
+    # If the default value is not provided, None will be returned.
+    res, err = errors.catch(assert_even, 3)
+    print("error: %", err)
+    print("res: %", res)
+    t.eq(res, None)
+    err.matches("odd")

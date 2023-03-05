@@ -7,11 +7,11 @@ import (
 	"go.starlark.net/starlark"
 )
 
-type Key interface {
+type DictKey interface {
 	string | int | float64
 }
 
-type Value interface {
+type DictVal interface {
 	string | int | float64 | bool
 }
 
@@ -30,7 +30,7 @@ func toValue(v any) starlark.Value {
 	}
 }
 
-func ToDict[K Key, V Value](v map[K]V) *starlark.Dict {
+func ToDict[K DictKey, V DictVal](v map[K]V) *starlark.Dict {
 	// Sort keys, create dict.
 
 	keys := make([]K, 0, len(v))

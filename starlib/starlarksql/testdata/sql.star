@@ -28,7 +28,7 @@ def test_sql(t):
     # query
     def query(after):
         rows = db.query("SELECT rowid, * FROM projects WHERE release > ? ORDER BY release ASC", after)
-        return [row for row in rows]  # copy values out of rows loop
+        return [row for row in rows]  # copy values out of the iterator
 
     create()
     insert()
@@ -37,10 +37,14 @@ def test_sql(t):
     t.eq(len(query_rows), 2)
     print("projects:", query_rows)
 
-    sel_row = query_rows[0]
-    one_row = db.query_row("SELECT * FROM projects WHERE mascot = ?", sel_row.mascot)
+    sql_row = query_rows[0]
+    print(sql_row)
+    print(dir(sql_row))
+    print(sql_row.columns)
+    print(sql_row.values)
+    one_row = db.query_row("SELECT * FROM projects WHERE mascot = ?", sql_row["mascot"])
     print("row:", one_row)
 
-    t.eq(one_row.mascot, sel_row.mascot)
-    t.eq(one_row.release, sel_row.release)
-    t.eq(one_row.category, sel_row.category)
+    t.eq(one_row.mascot, sql_row.mascot)
+    t.eq(one_row.release, sql_row.release)
+    t.eq(one_row.category, sql_row.category)

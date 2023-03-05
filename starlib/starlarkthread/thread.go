@@ -6,14 +6,15 @@ package starlarkthread
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"runtime"
 	"sync"
 	"testing"
 
-	"larking.io/starlib/starlarkstruct"
 	"go.starlark.net/starlark"
+	"larking.io/starlib/starlarkstruct"
 )
 
 func NewModule() *starlarkstruct.Module {
@@ -53,16 +54,14 @@ const rsckey = "resources"
 // ResourceStore is a thread local storage map for adding resources.
 // It is thread safe.
 type ResourceStore struct {
-	mu sync.Mutex
-	m  map[Resource]bool // resource whether it's living
+	mu   sync.Mutex
+	rscs []Resource
 }
 
 // WithResourceStore returns a cleanup function. It is required for
 // packages that add resources.
 func WithResourceStore(thread *starlark.Thread) func() error {
-	store := &ResourceStore{
-		m: make(map[Resource]bool),
-	}
+	store := &ResourceStore{}
 	SetResourceStore(thread, store)
 	// TODO: runtime.SetFinalizer?
 	return func() error { return CloseResources(thread) }
@@ -85,7 +84,7 @@ func AddResource(thread *starlark.Thread, rsc Resource) error {
 		return err
 	}
 	store.mu.Lock()
-	store.m[rsc] = true
+	store.rscs = append(store.rscs, rsc)
 	store.mu.Unlock()
 	return nil
 }
@@ -94,17 +93,12 @@ func (s *ResourceStore) Close() (firstErr error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for rsc, open := range s.m {
-		if !open {
-			continue
-		}
-		if err := rsc.Close(); err != nil && firstErr == nil {
-			// TODO: chain errors?
-			firstErr = err
-		}
-		delete(s.m, rsc)
+	var errs []error
+	for _, rsc := range s.rscs {
+		errs = append(errs, rsc.Close())
 	}
-	return
+	s.rscs = nil
+	return errors.Join(errs...)
 }
 
 func CloseResources(thread *starlark.Thread) (firstErr error) {
@@ -118,8 +112,7 @@ func CloseResources(thread *starlark.Thread) (firstErr error) {
 // AssertOption implements starlarkassert.TestOption
 // Add like so:
 //
-// 	starlarkassert.RunTests(t, "*.star", globals, starlarkthread.AssertOption)
-//
+//	starlarkassert.RunTests(t, "*.star", globals, starlarkthread.AssertOption)
 func AssertOption(t testing.TB, thread *starlark.Thread) func() {
 	close := WithResourceStore(thread)
 	return func() {

@@ -9,12 +9,12 @@ import (
 	"fmt"
 	"sort"
 
-	"larking.io/starlib/starext"
-	"larking.io/starlib/starlarkthread"
 	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"gocloud.dev/runtimevar"
+	"larking.io/starlib/starext"
+	"larking.io/starlib/starlarkthread"
 )
 
 func NewModule() *starlarkstruct.Module {

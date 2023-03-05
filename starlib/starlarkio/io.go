@@ -9,10 +9,31 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"go.starlark.net/starlark"
 	"larking.io/starlib/starext"
 )
+
+func ToReader(v starlark.Value) (io.Reader, error) {
+	switch x := v.(type) {
+	case starlark.String:
+		return strings.NewReader(string(x)), nil
+	case starlark.Bytes:
+		return strings.NewReader(string(x)), nil
+	case *Reader:
+		return x.Reader, nil
+	case starext.Value:
+		if v, ok := x.Reflect().Interface().(io.Reader); ok {
+			return v, nil
+		}
+		return nil, fmt.Errorf("invalid reader type: %q", v.Type())
+	case io.Reader:
+		return x, nil
+	default:
+		return nil, fmt.Errorf("invalid reader type: %q", v.Type())
+	}
+}
 
 type Reader struct {
 	io.Reader
@@ -30,6 +51,7 @@ type readerAttr func(e *Reader) starlark.Value
 // TODO: optional methods io.Closer, etc.
 var readerAttrs = map[string]readerAttr{
 	"read_all": func(r *Reader) starlark.Value { return starext.MakeMethod(r, "read_all", r.readAll) },
+	//"read":     func(r *Reader) starlark.Value { return starext.MakeMethod(r, "read", r.read) },
 }
 
 func (v *Reader) Attr(name string) (starlark.Value, error) {
@@ -47,8 +69,11 @@ func (v *Reader) AttrNames() []string {
 	return names
 }
 
-// TODO: check args/kwargs length
-func (v *Reader) readAll(_ *starlark.Thread, _ string, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
+func (v *Reader) readAll(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if err := starlark.UnpackPositionalArgs(fnname, args, kwargs, 0); err != nil {
+		return nil, err
+	}
+
 	x, err := io.ReadAll(v.Reader)
 	if err != nil {
 		return nil, err

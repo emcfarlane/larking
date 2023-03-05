@@ -1,7 +1,6 @@
 // Copyright 2021 Edward McFarlane. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-
 // Package errors implements functions to manipulate errors.
 package starlarkerrors
 
@@ -11,9 +10,9 @@ import (
 	"regexp"
 	"sort"
 
-	"larking.io/starlib/starext"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
+	"larking.io/starlib/starext"
 )
 
 func NewModule() *starlarkstruct.Module {
@@ -105,7 +104,7 @@ type Result struct {
 
 func (v Result) String() string        { return fmt.Sprintf("<result %q>", v.value.String()) }
 func (v Result) Type() string          { return "errors.result" }
-func (v Result) Freeze()               {} // immutable
+func (v Result) Freeze()               { v.value.Freeze() }
 func (v Result) Truth() starlark.Bool  { return starlark.Bool(!v.isErr) }
 func (v Result) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %s", v.Type()) }
 
@@ -148,3 +147,37 @@ func (v Result) Attr(name string) (starlark.Value, error) {
 		return nil, nil
 	}
 }
+
+// ResultIterator implements starlark.Iterator for Result.
+// Allows to destruct Result into value and error.
+type ResultIterator struct {
+	result Result
+	index  int
+}
+
+func (i *ResultIterator) Next(p *starlark.Value) bool {
+	switch i.index {
+	case 0: // value
+		if !i.result.isErr {
+			*p = i.result.value
+		} else {
+			*p = starlark.None
+		}
+	case 1: // error
+		if i.result.isErr {
+			*p = i.result.value
+		} else {
+			*p = starlark.None
+		}
+	default:
+		return false
+	}
+	i.index++
+	return true
+}
+func (i *ResultIterator) Done() {}
+
+func (v Result) Iterate() starlark.Iterator {
+	return &ResultIterator{result: v}
+}
+func (v Result) Len() int { return 2 }

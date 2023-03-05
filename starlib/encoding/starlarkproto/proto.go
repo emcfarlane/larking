@@ -1075,6 +1075,8 @@ func (v *List) extend(thread *starlark.Thread, fnname string, args starlark.Tupl
 		return nil, err
 	}
 	iter := iterable.Iterate()
+	defer iter.Done()
+
 	var p starlark.Value
 	for iter.Next(&p) {
 		if err := v.Append(p); err != nil {
