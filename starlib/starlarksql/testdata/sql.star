@@ -1,10 +1,10 @@
 # Tests of Starlark 'sql' extension.
 load("sql.star", "sql")
 
-def test_sql(t):
+def test_sql(assert):
     # db resource is shared, safe for concurrent access.
     db = sql.open("sqlite:file::memory:?cache=shared")
-    t.true(db)  # check database active.
+    assert.true(db)  # check database active.
 
     db.ping()
 
@@ -27,24 +27,21 @@ def test_sql(t):
 
     # query
     def query(after):
-        rows = db.query("SELECT rowid, * FROM projects WHERE release > ? ORDER BY release ASC", after)
+        rows = db.query("SELECT rowid, mascot, release, category FROM projects WHERE release > ? ORDER BY release ASC", after)
         return [row for row in rows]  # copy values out of the iterator
 
     create()
     insert()
 
     query_rows = query(2008)
-    t.eq(len(query_rows), 2)
+    assert.eq(len(query_rows), 2)
     print("projects:", query_rows)
 
-    sql_row = query_rows[0]
-    print(sql_row)
-    print(dir(sql_row))
-    print(sql_row.columns)
-    print(sql_row.values)
-    one_row = db.query_row("SELECT * FROM projects WHERE mascot = ?", sql_row["mascot"])
+    sel_row = query_rows[0]
+    one_row = db.query_row("SELECT * FROM projects WHERE mascot = ?", sel_row[1])
     print("row:", one_row)
 
-    t.eq(one_row.mascot, sql_row.mascot)
-    t.eq(one_row.release, sql_row.release)
-    t.eq(one_row.category, sql_row.category)
+    if assert.eq(len(one_row), 3):
+        assert.eq("gopher", sel_row[1])
+        assert.eq(2009, sel_row[2])
+        assert.eq("open source", sel_row[3])

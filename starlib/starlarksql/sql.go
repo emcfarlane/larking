@@ -256,15 +256,12 @@ func (v *DB) query(thread *starlark.Thread, fnname string, args starlark.Tuple, 
 		return nil, err
 	}
 	columns := make([]starlark.Value, len(cols))
-	mapping := make(map[string]int, len(cols))
 	for i, col := range cols {
 		columns[i] = starlark.String(col.Name())
-		mapping[col.Name()] = i
 	}
 
 	r := &Rows{
 		columns: columns,
-		mapping: mapping,
 		rows:    rows,
 	}
 	if err := starlarkthread.AddResource(thread, r); err != nil {
@@ -303,25 +300,15 @@ func (v *DB) queryRow(thread *starlark.Thread, fnname string, args starlark.Tupl
 		return nil, sql.ErrNoRows
 	}
 
-	columns := make([]starlark.Value, len(cols))
+	values := make(starlark.Tuple, len(cols))
 	dest := make([]any, len(cols))
-	m := make(map[string]int, len(cols))
-	x := &Row{
-		columns: columns,
-		mapping: m,
-		values:  make([]starlark.Value, len(cols)),
+	for i := range cols {
+		dest[i] = ScanValue{&values[i]}
 	}
-	for i, col := range cols {
-		name := col.Name()
-		columns[i] = starlark.String(name)
-		m[name] = i
-		dest[i] = ScanValue{&x.values[i]}
-	}
-
 	if err := rows.Scan(dest...); err != nil {
 		return nil, err
 	}
-	return x, nil
+	return values, nil
 }
 
 func (v *DB) ping(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -345,8 +332,8 @@ func (v *DB) close(_ *starlark.Thread, fnname string, _ starlark.Tuple, _ []star
 
 type Rows struct {
 	columns []starlark.Value
-	mapping map[string]int
-	rows    *sql.Rows
+	//mapping map[string]int
+	rows *sql.Rows
 
 	frozen   bool
 	iterErr  error
@@ -387,66 +374,20 @@ func (v *Rows) Next(p *starlark.Value) bool {
 		return false
 	}
 
-	x := &Row{
-		columns: v.columns,
-		mapping: v.mapping,
-		values:  make([]starlark.Value, len(v.columns)),
-	}
-
+	values := make(starlark.Tuple, len(v.columns))
 	dest := make([]any, len(v.columns))
 	for i := range v.columns {
-		dest[i] = ScanValue{&x.values[i]}
+		dest[i] = ScanValue{&values[i]}
 	}
 
 	v.iterErr = v.rows.Scan(dest...)
-	*p = x
+	*p = values
 	return v.iterErr == nil
 }
 func (v *Rows) Done() {
 	v.closeErr = v.rows.Close()
 	v.frozen = true
 }
-
-type Row struct {
-	columns []starlark.Value
-	mapping map[string]int
-	values  []starlark.Value
-}
-
-func (v *Row) String() string {
-	s := starlark.NewList(v.columns).String()
-	return fmt.Sprintf("<row %s>", s)
-}
-func (v *Row) Type() string          { return "sql.row" }
-func (v *Row) Freeze()               {} // immutable
-func (v *Row) Truth() starlark.Bool  { return len(v.values) > 0 }
-func (v *Row) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %s", v.Type()) }
-
-func (r *Row) Get(k starlark.Value) (v starlark.Value, found bool, err error) {
-	name, ok := starlark.AsString(k)
-	if !ok {
-		return nil, false, nil
-	}
-	if i, ok := r.mapping[name]; ok {
-		return r.values[i], true, nil
-	}
-	return nil, false, nil
-}
-
-func (v *Row) Attr(name string) (starlark.Value, error) {
-	switch name {
-	case "columns":
-		return starlark.NewList(v.columns), nil
-	case "values":
-		return starlark.NewList(v.values), nil
-	default:
-		return nil, nil
-	}
-
-}
-func (v *Row) AttrNames() []string        { return []string{"columns", "values"} }
-func (v *Row) Index(i int) starlark.Value { return v.values[i] }
-func (v *Row) Len() int                   { return len(v.values) }
 
 type ScanValue struct {
 	Value *starlark.Value
