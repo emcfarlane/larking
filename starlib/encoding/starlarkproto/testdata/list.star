@@ -1,6 +1,6 @@
 # Tests of Starlark 'proto' extension.
 
-load("encoding/proto.star", "proto")
+load("std.star", proto = "encoding/proto")
 
 def test_list(t):
     test = proto.file("testpb/star.proto")

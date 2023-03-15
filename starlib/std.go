@@ -25,21 +25,23 @@ import (
 )
 
 var (
-	modBlob       = starlarkblob.NewModule()
-	modDocstore   = starlarkdocstore.NewModule()
-	modErrors     = starlarkerrors.NewModule()
-	modHTTP       = starlarkhttp.NewModule() // net
-	modJSON       = starlarkjson.Module      // encoding
-	modMath       = starlarkmath.Module
-	modOpenAPI    = starlarkopenapi.NewModule() // net
-	modProto      = starlarkproto.NewModule()   // encoding
-	modPubSub     = starlarkpubsub.NewModule()
-	modRule       = starlarkrule.NewModule()
-	modRuntimeVar = starlarkruntimevar.NewModule()
-	modSQL        = starlarksql.NewModule()
-	modThread     = starlarkthread.NewModule()
-	modTime       = starlarktime.Module
-	modOS         = starlarkos.NewModule()
+	modBlob          = starlarkblob.NewModule()
+	modDocstore      = starlarkdocstore.NewModule()
+	modEncodingJSON  = starlarkjson.Module       // encoding
+	modEncodingProto = starlarkproto.NewModule() // encoding
+	modErrors        = starlarkerrors.NewModule()
+	modMath          = starlarkmath.Module
+	modNetHTTP       = starlarkhttp.NewModule()    // net
+	modNetOpenAPI    = starlarkopenapi.NewModule() // net
+	modOS            = starlarkos.NewModule()
+	modPubSub        = starlarkpubsub.NewModule()
+	modRule          = starlarkrule.NewModule()
+	modRuntimeVar    = starlarkruntimevar.NewModule()
+	modSQL           = starlarksql.NewModule()
+	modThread        = starlarkthread.NewModule()
+	modTime          = starlarktime.Module
+
+	modStd = NewModule()
 
 	// content holds our static web server content.
 	//go:embed rules/*
@@ -47,62 +49,29 @@ var (
 
 	stdLibMu sync.Mutex
 	stdLib   = map[string]starlark.StringDict{
-		"@std": makeDict(NewModule()),
-
-		// TODO
-		//"archive/container.star":           makeDict(starlarkcontainer.NewModule()),
-		//"archive/tar.star":           makeDict(starlarktar.NewModule()),
-		//"archive/zip.star":           makeDict(starlarkzip.NewModule()),
-		//"net/grpc.star": makeDict(starlarkgrpc.NewModule()),
-		"blob.star":           makeDict(modBlob),
-		"docstore.star":       makeDict(modDocstore),
-		"encoding/json.star":  makeDict(modJSON), // starlark
-		"encoding/proto.star": makeDict(modProto),
-		"errors.star":         makeDict(modErrors),
-		"math.star":           makeDict(modMath), // starlark
-		"net/http.star":       makeDict(modHTTP),
-		"net/openapi.star":    makeDict(modOpenAPI),
-		"pubsub.star":         makeDict(modPubSub),
-		"runtimevar.star":     makeDict(modRuntimeVar),
-		"sql.star":            makeDict(modSQL),
-		"time.star":           makeDict(modTime), // starlark
-		"thread.star":         makeDict(modThread),
-		"rule.star":           makeDict(modRule),
-		"os.star":             makeDict(modOS),
+		"std.star":  modStd.Members,
+		"rule.star": modRule.Members,
 	}
 )
-
-func makeDict(module *starlarkstruct.Module) starlark.StringDict {
-	dict := make(starlark.StringDict, len(module.Members)+1)
-	for key, val := range module.Members {
-		dict[key] = val
-	}
-	// Add module if no module name.
-	if _, ok := dict[module.Name]; !ok {
-		dict[module.Name] = module
-	}
-	return dict
-}
 
 func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
 		Name: "std",
 		Members: starlark.StringDict{
-			"blob":       modBlob,
-			"docstore":   modDocstore,
-			"errors":     modErrors,
-			"http":       modHTTP,
-			"json":       modJSON,
-			"math":       modMath,
-			"openapi":    modOpenAPI,
-			"os":         modOS,
-			"proto":      modProto,
-			"pubsub":     modPubSub,
-			"rule":       modRule,
-			"runtimevar": modRuntimeVar,
-			"sql":        modSQL,
-			"thread":     modThread,
-			"time":       modTime,
+			"blob":           modBlob,
+			"docstore":       modDocstore,
+			"encoding/json":  modEncodingJSON,
+			"encoding/proto": modEncodingProto,
+			"errors":         modErrors,
+			"math":           modMath,
+			"net/http":       modNetHTTP,
+			"net/openapi":    modNetOpenAPI,
+			"os":             modOS,
+			"pubsub":         modPubSub,
+			"runtimevar":     modRuntimeVar,
+			"sql":            modSQL,
+			"thread":         modThread,
+			"time":           modTime,
 		},
 	}
 }

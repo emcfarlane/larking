@@ -28,7 +28,8 @@ func NewModule() *starlarkstruct.Module {
 	return &starlarkstruct.Module{
 		Name: "sql",
 		Members: starlark.StringDict{
-			"open": starext.MakeBuiltin("sql.open", Open),
+			"open":  starext.MakeBuiltin("sql.open", Open),
+			"named": starext.MakeBuiltin("sql.named", MakeNamed),
 
 			// sql errors
 			"err_conn_done": starlarkerrors.NewError(sql.ErrConnDone),
@@ -166,7 +167,7 @@ func (r *Result) Attr(name string) (starlark.Value, error) {
 	}
 }
 
-func makeArgs(args starlark.Tuple) ([]interface{}, error) {
+func makeArgs(args starlark.Tuple) ([]any, error) {
 	// translate arg types
 	xs := make([]interface{}, len(args))
 	for i, arg := range args {
@@ -195,6 +196,8 @@ func makeArgs(args starlark.Tuple) ([]interface{}, error) {
 				return nil, err
 			}
 			xs[i] = x
+		case NamedArg:
+			xs[i] = sql.NamedArg(arg)
 		default:
 			return nil, fmt.Errorf("invalid arg type: %v", arg.Type())
 		}
@@ -332,8 +335,7 @@ func (v *DB) close(_ *starlark.Thread, fnname string, _ starlark.Tuple, _ []star
 
 type Rows struct {
 	columns []starlark.Value
-	//mapping map[string]int
-	rows *sql.Rows
+	rows    *sql.Rows
 
 	frozen   bool
 	iterErr  error
@@ -415,4 +417,23 @@ func (sv ScanValue) Scan(value interface{}) error {
 	}
 	*sv.Value = v
 	return nil
+}
+
+type NamedArg sql.NamedArg
+
+func (a NamedArg) String() string        { return fmt.Sprintf("<%s @%s:%q>", a.Type(), a.Name, a.Value) }
+func (a NamedArg) Type() string          { return "sql.named_arg" }
+func (a NamedArg) Freeze()               {} // immutable?
+func (a NamedArg) Truth() starlark.Bool  { return true }
+func (a NamedArg) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %s", a.Type()) }
+
+func MakeNamed(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var (
+		name  string
+		value starlark.Value
+	)
+	if err := starlark.UnpackPositionalArgs(fnname, args, kwargs, 2, &name, &value); err != nil {
+		return nil, err
+	}
+	return NamedArg(sql.Named(name, value)), nil
 }

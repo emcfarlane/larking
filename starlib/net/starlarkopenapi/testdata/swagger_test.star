@@ -1,5 +1,4 @@
-load("blob.star", "blob")
-load("net/openapi.star", "openapi")
+load("std.star", "blob", openapi = "net/openapi")
 
 api = openapi.open(spec_var, client = client)
 

@@ -1,4 +1,4 @@
-load("errors.star", "errors")
+load("std.star", "errors")
 
 def assert_even(x):
     if x % 2 != 0:

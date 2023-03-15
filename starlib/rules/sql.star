@@ -1,6 +1,5 @@
 load("rule.star", "rule", "attrs", "attr", "label", "provides")
-#load("sql.star", "sql")
-load("@std", "sql", "proto")
+load("std.star", "sql", "proto")
 
 actionpb = proto.file("larking/api/action.proto")
 

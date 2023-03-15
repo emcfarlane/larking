@@ -1,5 +1,5 @@
 # Tests of Starlark 'nethttp' extension.
-load("net/http.star", "http")
+load("std.star", http = "net/http")
 
 def test_get(t):
     rsp = http.get(addr + "/hello")

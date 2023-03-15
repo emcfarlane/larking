@@ -1,5 +1,5 @@
 # Tests of Starlark 'errors' extension.
-load("errors.star", "errors")
+load("std.star", "errors")
 
 err_msg = "hello"
 err_val = errors.error("custom error [%s]" % (err_msg))

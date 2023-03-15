@@ -1,4 +1,4 @@
-load("rule.star", "rule", "attr", "label")
+load("rule.star", "attr", "label", "rule")
 
 def test_hello_rule(t):
     def _hello_impl(name, input):
@@ -7,7 +7,6 @@ def test_hello_rule(t):
         print("input", input)
         msg = "Hello, %s" % input
         return [msg]
-
 
     hello = rule(
         impl = _hello_impl,
@@ -28,4 +27,3 @@ def test_hello_rule(t):
 
     # TODO: expose builder?
     print(label("HelloInput"))
-

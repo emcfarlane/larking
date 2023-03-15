@@ -88,9 +88,6 @@ func (l *Loader) Load(thread *starlark.Thread, module string) (starlark.StringDi
 	defer log.Info("finished loading", "module", module)
 
 	l.mu.Lock()
-	if l.m == nil {
-		l.m = make(map[string]*call)
-	}
 	key := module // TODO: hash file contents?
 	if c, ok := l.m[key]; ok {
 		if c.callers[thread] {
@@ -104,6 +101,9 @@ func (l *Loader) Load(thread *starlark.Thread, module string) (starlark.StringDi
 	c := new(call)
 	c.wg.Add(1)
 	c.callers = map[*starlark.Thread]bool{thread: true}
+	if l.m == nil {
+		l.m = make(map[string]*call)
+	}
 	l.m[key] = c
 	l.mu.Unlock()
 
