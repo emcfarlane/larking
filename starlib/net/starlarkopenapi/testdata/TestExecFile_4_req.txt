@@ -1,6 +1,0 @@
-DELETE /v2/pet/9223372000001085204 HTTP/1.1
-Host: petstore.swagger.io
-Accepts: application/json
-Api_key: 
-Content-Type: 
-

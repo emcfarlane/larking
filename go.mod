@@ -4,23 +4,22 @@ go 1.20
 
 require (
 	github.com/bazelbuild/buildtools v0.0.0-20220215100907-23e2a9e4721a
-	github.com/containerd/stargz-snapshotter/estargz v0.10.1
-	github.com/emcfarlane/starlarkassert v0.0.0-20220816194629-bc820a0f5f7c
+	github.com/emcfarlane/starlarkassert v0.0.0-20230326225659-0149d04cc906
 	github.com/emcfarlane/starlarkproto v0.0.0-20210611214320-8feef53c0c82
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/stdr v1.2.0
-	github.com/go-openapi/spec v0.20.4
+	github.com/google/gnostic v0.6.9
 	github.com/google/go-cmp v0.5.9
 	github.com/iancoleman/strcase v0.2.0
 	github.com/peterh/liner v1.2.1
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
-	go.starlark.net v0.0.0-20230128213706-3f75dec8e403
+	go.starlark.net v0.0.0-20230302034142-4b1e35fe2254
 	gocloud.dev v0.25.0
-	golang.org/x/net v0.5.0
+	golang.org/x/net v0.6.0
 	golang.org/x/sync v0.1.0
 	google.golang.org/genproto v0.0.0-20230127162408-596548ed4efa
 	google.golang.org/grpc v1.52.3
-	google.golang.org/protobuf v1.28.1
+	google.golang.org/protobuf v1.29.1
 	modernc.org/sqlite v1.13.3
 	nhooyr.io/websocket v1.8.7
 )
@@ -49,6 +48,12 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/vbatts/tar-split v0.11.2 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.2.0 // indirect
+	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/kr/text v0.2.0 // indirect
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 require (
@@ -57,8 +62,6 @@ require (
 	cloud.google.com/go/storage v1.27.0 // indirect
 	contrib.go.opencensus.io/integrations/ocsql v0.1.7 // indirect
 	github.com/GoogleCloudPlatform/cloudsql-proxy v1.29.0 // indirect
-	github.com/PuerkitoBio/purell v1.1.1 // indirect
-	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/aws/aws-sdk-go v1.43.31 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.16.2 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.15.3 // indirect
@@ -72,22 +75,18 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.16.3 // indirect
 	github.com/aws/smithy-go v1.11.2 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
-	github.com/go-openapi/jsonpointer v0.19.5 // indirect
-	github.com/go-openapi/jsonreference v0.19.6 // indirect
-	github.com/go-openapi/swag v0.19.15 // indirect
 	github.com/go-sql-driver/mysql v1.6.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/google/go-containerregistry v0.8.0
+	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/google/go-replayers/httpreplay v1.2.0 // indirect
+	github.com/google/martian/v3 v3.3.2 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/google/wire v0.5.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.7.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/josharian/intern v1.0.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/klauspost/compress v1.15.1 // indirect
 	github.com/lib/pq v1.10.4 // indirect
-	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
@@ -96,16 +95,15 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
+	golang.org/x/mod v0.8.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20221014153046-6fdb5e3db783 // indirect
-	golang.org/x/sys v0.4.0 // indirect
-	golang.org/x/text v0.6.0 // indirect
+	golang.org/x/sys v0.6.0 // indirect
+	golang.org/x/text v0.8.0 // indirect
 	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65 // indirect
-	golang.org/x/tools v0.1.12 // indirect
+	golang.org/x/tools v0.6.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/api v0.103.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	lukechampine.com/uint128 v1.1.1 // indirect
 	modernc.org/cc/v3 v3.35.15 // indirect
 	modernc.org/ccgo/v3 v3.12.49 // indirect
@@ -118,7 +116,3 @@ require (
 )
 
 replace github.com/bazelbuild/buildtools => github.com/emcfarlane/buildtools v0.0.0-20220216022904-2d8ccb57d4be
-
-replace go.starlark.net/starlarkstruct => ./starlarkstruct
-
-//replace github.com/bazelbuild/buildtools => ../../bazelbuild/buildtools

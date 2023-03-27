@@ -10,7 +10,6 @@ package starlarkopenapi
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"hash/crc32"
@@ -18,23 +17,25 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
-	"unicode"
 
-	"github.com/go-openapi/spec"
-	"github.com/iancoleman/strcase"
 	starlarkjson "go.starlark.net/lib/json"
-	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
-	"gocloud.dev/runtimevar"
+	"gocloud.dev/blob"
 	"larking.io/starlib/net/starlarkhttp"
 	"larking.io/starlib/starext"
+	"larking.io/starlib/starlarkrule"
 	"larking.io/starlib/starlarkstruct"
 	"larking.io/starlib/starlarkthread"
+
+	openapiv2 "github.com/google/gnostic/openapiv2"
+	openapiv3 "github.com/google/gnostic/openapiv3"
+	surface "github.com/google/gnostic/surface"
 )
 
 func NewModule() *starlarkstruct.Module {
@@ -48,64 +49,71 @@ func NewModule() *starlarkstruct.Module {
 
 type Client struct {
 	// service encoding...
-	name     string
-	variable *runtimevar.Variable
-	client   *starlarkhttp.Client
+	name   string
+	addr   url.URL
+	client *starlarkhttp.Client
 
-	val  []byte // snapshot.Value
-	doc  *spec.Swagger
-	svcs map[string]*Service //starlark.Value
+	val   []byte
+	docv2 *openapiv2.Document
+	docv3 *openapiv3.Document
+	model *surface.Model
+
+	operationsv2 map[string]*openapiv2.Operation
 }
 
 var defaultClient = starlarkhttp.NewClient(http.DefaultClient)
 
 func Open(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		addr   string
-		name   string
-		client = defaultClient
+		addrStr string
+		specStr string
+		client  = defaultClient
 	)
-	if err := starlark.UnpackArgs(fnname, args, kwargs, "name", &name, "addr?", &addr, "client?", &client); err != nil {
+	if err := starlark.UnpackArgs(fnname, args, kwargs, "addr", &addrStr, "spec?", &specStr, "client?", &client); err != nil {
 		return nil, err
+	}
+
+	addr, err := url.ParseRequestURI(addrStr)
+	if err != nil {
+		return nil, err
+	}
+	if specStr == "" {
+		specStr = addrStr
 	}
 
 	ctx := starlarkthread.GetContext(thread)
 
-	variable, err := runtimevar.OpenVariable(ctx, name)
-	if err != nil {
-		return nil, err
+	var val []byte
+	if u, err := url.ParseRequestURI(specStr); err == nil {
+		rsp, err := http.Get(u.String())
+		if err != nil {
+			return nil, err
+		}
+		defer rsp.Body.Close()
+
+		b, err := io.ReadAll(rsp.Body)
+		if err != nil {
+			return nil, err
+		}
+		val = b
+	} else {
+		b, err := os.ReadFile(specStr)
+		if err != nil {
+			return nil, err
+		}
+		val = b
 	}
 
 	c := &Client{
-		name:     name,
-		variable: variable,
-		client:   client,
+		name:   specStr,
+		addr:   *addr,
+		val:    val,
+		client: client,
 	}
-	if _, err := c.load(ctx); err != nil {
-		variable.Close() //nolint
-		return nil, err
-	}
-	if err := starlarkthread.AddResource(thread, c); err != nil {
-		variable.Close() //nolint
+	if err := c.load(ctx); err != nil {
 		return nil, err
 	}
 	return c, nil
-}
-
-func toSnakeCase(s string) string {
-	s = strings.Map(func(r rune) rune {
-		if unicode.IsLetter(r) || unicode.IsNumber(r) {
-			return r
-		}
-		// ignore variables
-		if r == '{' || r == '}' {
-			return -1
-		}
-		return '_'
-	}, s)
-	s = strcase.ToSnake(s)
-	s = strings.Trim(s, "_")
-	return s
 }
 
 func (c *Client) do(
@@ -116,375 +124,263 @@ func (c *Client) do(
 	return c.client.Do(thread, fnname, req)
 }
 
-func (c *Client) load(ctx context.Context) (*spec.Swagger, error) {
-	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
-	defer cancel()
+func (c *Client) load(ctx context.Context) error {
+	b := c.val
 
-	snap, err := c.variable.Latest(ctx)
-	if err != nil {
-		return nil, err
-	}
+	//var model *surface.Model
+	if docv2, err := openapiv2.ParseDocument(b); err == nil {
+		c.docv2 = docv2
 
-	var b []byte
-	switch v := snap.Value.(type) {
-	case []byte:
-		b = v
-	case string:
-		b = []byte(v)
-	default:
-		return nil, fmt.Errorf("unhandled type: %v", v)
-	}
+		c.addr.Path = path.Join(c.addr.Path, docv2.BasePath)
 
-	var doc spec.Swagger
-	if err := json.Unmarshal(b, &doc); err != nil {
-		return nil, err
-	}
-	c.val = b
-	c.doc = &doc
-
-	if err := spec.ExpandSpec(&doc, &spec.ExpandOptions{}); err != nil {
-		return nil, err
-	}
-
-	// build attrs
-	if doc.Paths == nil {
-		return &doc, nil
-	}
-	//attrs := make(map[string]*Service)
-	//attrNames := make([]string, 0, len(doc.Tags))
-	//tagNames := make(map[string]string)
-	services := make(map[string]*Service)
-
-	for path, item := range doc.Paths.Paths {
-		key := toSnakeCase(path)
-
-		var count int
-		addMethod := func(op *spec.Operation, method string) {
-			count++
-			var svcNames []string
-			for _, tag := range op.Tags {
-				svcNames = append(svcNames, strcase.ToSnake(tag))
-			}
-			if len(svcNames) == 0 {
-				svcNames = append(svcNames, key)
-			}
-
-			mdName := strings.ToLower(method) + "_" + key
-			if id := op.ID; id != "" {
-				mdName = strcase.ToSnake(id)
-			}
-
-			m := &Method{
-				c:    c,
-				name: mdName,
-				path: path,
-				op:   op,
-				//params: item.Parameters,
-				method: method,
-			}
-
-			for _, svcName := range svcNames {
-				svc, ok := services[svcName]
-				if !ok {
-					svc = &Service{
-						name:    svcName,
-						methods: make(map[string]*Method),
-					}
-					services[svcName] = svc
+		c.operationsv2 = make(map[string]*openapiv2.Operation)
+		for _, item := range docv2.Paths.Path {
+			for _, op := range [...]*openapiv2.Operation{
+				item.Value.Get,
+				item.Value.Put,
+				item.Value.Post,
+				item.Value.Delete,
+				item.Value.Options,
+				item.Value.Head,
+				item.Value.Patch,
+			} {
+				if op == nil {
+					continue
 				}
-				svc.methods[mdName] = m
+				c.operationsv2[op.OperationId] = op
 			}
 		}
 
-		if v := item.Get; v != nil {
-			addMethod(v, http.MethodGet)
+		m, err := surface.NewModelFromOpenAPI2(docv2, c.name)
+		if err != nil {
+			return err
 		}
-		if v := item.Put; v != nil {
-			addMethod(v, http.MethodPut)
-		}
-		if v := item.Post; v != nil {
-			addMethod(v, http.MethodPost)
-		}
-		if v := item.Delete; v != nil {
-			addMethod(v, http.MethodDelete)
-		}
-		if v := item.Options; v != nil {
-			addMethod(v, http.MethodOptions)
-		}
-		if v := item.Head; v != nil {
-			addMethod(v, http.MethodHead)
-		}
-		if v := item.Patch; v != nil {
-			addMethod(v, http.MethodPatch)
-		}
+		b, _ := json.MarshalIndent(m, "", "  ")
+		fmt.Println(string(b))
+		c.model = m
 
-		if count == 0 {
-			return nil, fmt.Errorf("missing operations for path: %s", path)
+	} else if docv3, err := openapiv3.ParseDocument(b); err == nil {
+		c.docv3 = docv3
+
+		m, err := surface.NewModelFromOpenAPI3(docv3, c.name)
+		if err != nil {
+			return err
 		}
+		c.model = m
+	} else {
+		return err
 	}
+	//fmt.Println("---")
+	//fmt.Println(c.model.Name)
+	//fmt.Println(c.model)
+	//fmt.Println("mets:")
+	//for _, method := range c.model.Methods {
+	//	fmt.Println(method)
+	//}
+	//fmt.Println("typs:")
+	//for _, typ := range c.model.Types {
+	//	fmt.Println(typ)
+	//}
+	//fmt.Println("refs:")
+	//for _, ref := range c.model.SymbolicReferences {
+	//	fmt.Println(ref)
+	//}
+	//fmt.Println("---")
 
-	c.svcs = services
-	return &doc, nil
+	return nil
 }
 
 func (c *Client) makeURL(urlPath string, urlQuery url.Values) url.URL {
-	scheme := "http"
-	if x := c.doc.Schemes; len(x) > 0 {
-		scheme = x[0]
-	}
-	return url.URL{
-		Scheme:   scheme,
-		Host:     c.doc.Host,
-		Path:     path.Join(c.doc.BasePath, urlPath),
-		RawQuery: urlQuery.Encode(),
-	}
+	addr := c.addr
+	addr.Path = path.Join(c.addr.Path, urlPath)
+	addr.RawQuery = urlQuery.Encode()
+	return addr
 }
 
 func (c *Client) String() string        { return fmt.Sprintf("<client %q>", c.name) }
 func (c *Client) Type() string          { return "openapi.client" }
 func (c *Client) Freeze()               {} // immutable?
-func (c *Client) Truth() starlark.Bool  { return c.variable.CheckHealth() == nil }
+func (c *Client) Truth() starlark.Bool  { return true }
 func (c *Client) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %s", c.Type()) }
-func (c *Client) Close() error {
-	return c.variable.Close()
-}
 
 func (c *Client) Attr(name string) (starlark.Value, error) {
-	if s, ok := c.svcs[name]; ok {
-		return s, nil
+	var method *surface.Method
+	for _, m := range c.model.Methods {
+		if m.Name == name {
+			method = m
+			break
+		}
 	}
-	if name == "schema" {
-		return starlark.String(string(c.val)), nil
+	if method == nil {
+		return nil, nil
 	}
-	return nil, nil
+	m := &Method{c: c, m: method}
+	if c.operationsv2 != nil {
+		m.op2 = c.operationsv2[m.m.Operation]
+		fmt.Println("setting op", m.op2)
+	}
+	return m, nil
 }
 func (c *Client) AttrNames() []string {
-	names := make([]string, 0, len(c.svcs))
-	for name := range c.svcs {
-		names = append(names, name)
+	names := make([]string, 0, len(c.model.Methods))
+	for _, m := range c.model.Methods {
+		names = append(names, m.Name)
 	}
 	sort.Strings(names)
 	return names
 }
 
-type Service struct {
-	name    string
-	methods map[string]*Method
-}
-
-func (s *Service) String() string        { return fmt.Sprintf("<service %q>", s.name) }
-func (s *Service) Type() string          { return "openapi.service" }
-func (s *Service) Freeze()               {} // immutable?
-func (s *Service) Truth() starlark.Bool  { return s.name != "" }
-func (s *Service) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable type: %s", s.Type()) }
-func (s *Service) Attr(name string) (starlark.Value, error) {
-	if m, ok := s.methods[name]; ok {
-		return m, nil
-	}
-	return nil, nil
-}
-func (s *Service) AttrNames() []string {
-	names := make([]string, 0, len(s.methods))
-	for name := range s.methods {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
+// "openapi.v2.Document"
+// "openapi.v3.Document"
 type Method struct {
-	c *Client
-
-	name string
-	path string
-	op   *spec.Operation
-	//params []spec.Parameter
-	method string
+	c   *Client
+	m   *surface.Method
+	op2 *openapiv2.Operation
+	op3 *openapiv3.Operation
 }
 
-func (m *Method) String() string        { return fmt.Sprintf("<method %q>", m.name) }
+func (m *Method) String() string        { return fmt.Sprintf("<method %q>", m.m.Name) }
 func (m *Method) Type() string          { return "openapi.method" }
 func (m *Method) Freeze()               {} // immutable?
-func (m *Method) Truth() starlark.Bool  { return m.name != "" }
-func (m *Method) Hash() (uint32, error) { return starlark.String(m.path).Hash() }
+func (m *Method) Truth() starlark.Bool  { return m.m != nil }
+func (m *Method) Hash() (uint32, error) { return starlark.String(m.m.Name).Hash() }
 
-var (
-	starlarkJSONEncode = starlarkjson.Module.Members["encode"].(*starlark.Builtin)
-	starlarkJSONDecode = starlarkjson.Module.Members["decode"].(*starlark.Builtin)
-)
-
-func (m *Method) Name() string { return m.name }
-func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	ctx := starlarkthread.GetContext(thread)
-	hasArgs := len(args) > 0
-	//hasKwargs := len(kwargs) > 0
-
-	if hasArgs {
-		return nil, fmt.Errorf("unexpected args")
+func (m *Method) getType(name string) (*surface.Type, error) {
+	for _, typ := range m.c.model.Types {
+		if typ.Name == name {
+			return typ, nil
+		}
 	}
+	return nil, fmt.Errorf("unknown type: %s", name)
+}
 
-	var (
-		params        = m.op.Parameters
-		vals          = make([]interface{}, 0, len(params))
-		pairsRequired []interface{}
-		pairsOptional []interface{}
-	)
-	for i, param := range params {
-		kw := param.Name
-		switch typ := param.Type; typ {
-		case "array":
-			vals = append(vals, (*starlark.List)(nil))
-		case "string":
-			vals = append(vals, "")
-		case "integer":
-			vals = append(vals, (int)(0))
-		case "number":
-			vals = append(vals, (float64)(0))
-		case "boolean":
-			vals = append(vals, (bool)(false))
-		case "file":
-			// Tuple of (filename, source) where source
-			// accepts String, Bytes, Reader.
-			// content-type must be form data.
-			vals = append(vals, starlark.Value(nil)) // starlark.Tuple(nil))
-		default:
-			if param.Schema == nil {
-				return nil, fmt.Errorf("unknown type: %s", typ)
+func chooseType(typs []string) string {
+	typ := "application/json"
+	if n := len(typs); n > 0 {
+		typ = typs[0]
+	} else if n > 1 {
+		typ = typs[0]
+		for _, altTyp := range typs[1:] {
+			if altTyp == "application/json" {
+				typ = "application/json"
 			}
-			// ???
-			vals = append(vals, (*starlark.Value)(nil))
-		}
-		if param.Required {
-			pairsRequired = append(pairsRequired, kw, &vals[i])
-		} else {
-			pairsOptional = append(pairsOptional, kw+"?", &vals[i])
 		}
 	}
+	return typ
+}
 
-	pairs := append(pairsRequired, pairsOptional...)
-	if err := starlark.UnpackArgs(m.name, args, kwargs, pairs...); err != nil {
+func (m *Method) Name() string { return m.m.Name }
+func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	hasArgs := len(args) > 0
+	hasKwargs := len(kwargs) > 0
+	ctx := starlarkthread.GetContext(thread)
+	//fmt.Println("METHOD:")
+	//fmt.Println(m.m)
+
+	//fmt.Println("OP:")
+	//fmt.Println(m.c.operationsv2[m.m.Operation])
+
+	if hasArgs && len(args) > 1 {
+		return nil, fmt.Errorf("unexpected number of args")
+	}
+
+	if hasArgs && hasKwargs {
+		return nil, fmt.Errorf("unxpected args and kwargs")
+	}
+
+	//fmt.Println("---")
+	//fmt.Println(m.m)
+	//fmt.Println(m.m.ParametersTypeName)
+	//fmt.Println(m.m.ResponsesTypeName)
+	//fmt.Println("---")
+	paramsType, err := m.getType(m.m.ParametersTypeName)
+	if err != nil {
 		return nil, err
 	}
 
-	chooseType := func(typs []string) string {
-		var typ string
-		if n := len(typs); n > 0 {
-			typ = typs[0]
-		} else if n > 1 {
-			for _, altTyp := range typs[1:] {
-				if altTyp == "application/json" {
-					typ = "application/json"
-				}
-			}
+	fields := make(map[string]*surface.Field, len(paramsType.Fields))
+	//pathFields := make(map[string]*surface.Field)
+	//pathFieldsN := 0
+	for _, fd := range paramsType.Fields {
+		fields[fd.Name] = fd
+
+	}
+
+	if hasArgs {
+		switch v := args[0].(type) {
+		//		case starlark.IterableMapping:
+		//
+		//		case starlark.HasAttrs:
+		//
+		default:
+			return nil, fmt.Errorf("openapi: unknown type conversion %s<%T>", v, v)
 		}
-		return typ
 	}
 
 	var (
-		urlPath      = m.path
-		urlVals      = make(url.Values)
+		urlPath      = m.m.Path
+		urlValues    = make(url.Values)
 		headers      = make(http.Header)
 		body         io.Reader
 		formWriter   *multipart.Writer
-		consumesType = chooseType(m.op.Consumes)
-		producesType = chooseType(m.op.Produces)
+		consumesType = "application/json"
+		producesType = "application/json"
 	)
+	if m.op2 != nil {
+		consumesType = chooseType(m.op2.Consumes)
+		producesType = chooseType(m.op2.Produces)
+	}
 
-	headers.Set("Content-Type", consumesType)
-	headers.Set("Accepts", producesType)
+	for _, kwarg := range kwargs {
+		k := string(kwarg[0].(starlark.String))
+		v := kwarg[1]
 
-	for i, param := range params {
-		arg := vals[i]
-		if arg == nil {
-			continue // optional?
+		fd, ok := fields[k]
+		if !ok {
+			return nil, fmt.Errorf("unknown field: %q", k)
 		}
 
-		switch v := param.In; v {
-		case "body":
-			// create JSON?
-			switch typ := consumesType; typ {
-			case "application/json":
-				v, ok := arg.(starlark.Value)
-				if !ok {
-					return nil, fmt.Errorf("unknown body arg: %T %v", arg, arg)
+		v, err := m.asField(fd, v)
+		if err != nil {
+			return nil, err
+		}
+
+		switch fd.Position {
+		case surface.Position_BODY:
+			rsp, err := starlark.Call(
+				thread, starlarkJSONEncode, starlark.Tuple{v}, nil,
+			)
+			if err != nil {
+				return nil, err
+			}
+			body = strings.NewReader(
+				string(rsp.(starlark.String)),
+			)
+
+		case surface.Position_HEADER:
+			switch v := v.(type) {
+			case starlark.Iterable:
+				iter := v.Iterate()
+				defer iter.Done()
+
+				var p starlark.Value
+				for iter.Next(&p) {
+					headers.Add(fd.Name, fmt.Sprintf("%#v", p))
 				}
-				rsp, err := starlark.Call(
-					thread, starlarkJSONEncode, starlark.Tuple{v}, nil,
-				)
-				if err != nil {
-					return nil, err
-				}
-				body = strings.NewReader(
-					string(rsp.(starlark.String)),
-				)
 
 			default:
-				return nil, fmt.Errorf("unknown consume type: %s", typ)
+				headers.Add(fd.Name, fmt.Sprintf("%#v", v))
 			}
 
-		case "path":
-			key := "{" + param.Name + "}"
-			val := vals[i]
-			if i := strings.Index(urlPath, key); i == -1 {
-				return nil, fmt.Errorf("missing path variable: %s", key)
-			} else {
-				urlPath = fmt.Sprintf(
-					"%s%v%s", urlPath[:i], val, urlPath[i+len(key):],
-				)
-			}
+		case surface.Position_FORMDATA:
 
-		case "query":
-			switch v := arg.(type) {
-			case string:
-				urlVals.Set(param.Name, v)
-			case int:
-				urlVals.Set(param.Name, strconv.Itoa(v))
-			case bool:
-				if v {
-					urlVals.Set(param.Name, "true")
-				}
-			case *starlark.List:
-				for i := 0; i < v.Len(); i++ {
-					switch v := v.Index(i).(type) {
-					case starlark.String:
-						urlVals.Set(param.Name, string(v))
-					case starlark.Int:
-						x, _ := v.Int64()
-						urlVals.Set(param.Name, strconv.Itoa(int(x)))
-					case starlark.Bool:
-						if bool(v) {
-							urlVals.Set(param.Name, "true")
-						}
-					default:
-						return nil, fmt.Errorf("invalid param list type: %T %v", v, v)
-					}
-				}
-			default:
-				return nil, fmt.Errorf("unknown param type: %T %v", v, v)
-			}
-
-		case "header":
-			switch v := arg.(type) {
-			case string:
-				headers.Add(param.Name, v)
-			case int:
-				headers.Add(param.Name, strconv.Itoa(v))
-			case bool:
-				if v {
-					headers.Add(param.Name, "true")
-				}
-			default:
-				return nil, fmt.Errorf("unknown header type: %T %v", v, v)
-			}
-
-		case "formData":
 			switch consumesType {
 			case "multipart/form-data":
 				if body == nil {
 					buf := new(bytes.Buffer)
 					formWriter = multipart.NewWriter(buf)
 					// TODO: check this is okay.
-					x := crc32.ChecksumIEEE([]byte(m.path))
+					x := crc32.ChecksumIEEE([]byte(m.m.Path))
 					if err := formWriter.SetBoundary(
 						fmt.Sprintf("%x%x%x", x, x, x),
 					); err != nil {
@@ -492,46 +388,43 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 					}
 					body = buf
 				}
+				//fmt.Println("HERE", fd.Name, v, m)
+				//fmt.Println(m.op2)
 
-				switch param.Type {
-				case "file":
-					val, ok := arg.(starlark.Tuple)
-					if !ok || len(val) != 2 {
-						// TODO: better typed errors.
-						return nil, fmt.Errorf("expected tuple(filename, source) got %v", arg)
-					}
+				// TODO: handle file encoding
+				s := fmt.Sprintf("%#v", v)
+				filename := filepath.Base(s)
 
-					filename, ok := starlark.AsString(val[0])
-					if !ok {
-						return nil, fmt.Errorf("filename must be a string, got %v", val[0])
-					}
-
-					fw, err := formWriter.CreateFormFile(param.Name, filename)
-					if err != nil {
-						return nil, err
-					}
-
-					var r io.Reader
-					switch v := val[1].(type) {
-					case starlark.String:
-						r = strings.NewReader(string(v))
-					case starlark.Bytes:
-						r = strings.NewReader(string(v))
-					case io.Reader:
-						r = v
-					default:
-						return nil, fmt.Errorf("unknown form type: %T %v", v, v)
-					}
-					if _, err := io.Copy(fw, r); err != nil {
-						return nil, err
-					}
-				default:
-					// TODO: type handling
-					s := fmt.Sprintf("%v", arg)
-					if err := formWriter.WriteField(param.Name, s); err != nil {
-						return nil, err
-					}
+				label, err := starlarkrule.ParseRelativeLabel(thread.Name, s)
+				//fmt.Println("LABEL", thread.Name, label, err)
+				if err != nil {
+					return nil, err
 				}
+				bktURL := label.BucketURL()
+				key := label.Key()
+				bkt, err := blob.OpenBucket(ctx, bktURL)
+				if err != nil {
+					return nil, err
+				}
+				defer bkt.Close()
+
+				r, err := bkt.NewReader(ctx, key, nil)
+				if err != nil {
+					return nil, err
+				}
+				defer r.Close()
+
+				formFile, err := formWriter.CreateFormFile(fd.Name, filename)
+				if err != nil {
+					return nil, err
+				}
+				if _, err := io.Copy(formFile, r); err != nil {
+					return nil, err
+				}
+
+				//if err := formWriter.WriteField(fd.Name, s); err != nil {
+				//	return nil, err
+				//}
 
 			case "application/x-www-form-urlencoded":
 				return nil, fmt.Errorf("unimplemented consume type: %s", consumesType)
@@ -540,28 +433,52 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 				return nil, fmt.Errorf("unexpected consumes type %v for \"formData\"", consumesType)
 			}
 
-		default:
-			return nil, fmt.Errorf("unhandled parameter in: %s", v)
+		case surface.Position_QUERY:
+			switch v := v.(type) {
+			case starlark.Iterable:
+				iter := v.Iterate()
+				defer iter.Done()
+
+				var p starlark.Value
+				for iter.Next(&p) {
+					urlValues.Add(fd.Name, fmt.Sprintf("%#v", p))
+				}
+
+			default:
+				urlValues.Set(fd.Name, fmt.Sprintf("%#v", v))
+			}
+
+		case surface.Position_PATH:
+			key := "{" + fd.Name + "}"
+			val := fmt.Sprintf("%#v", v)
+			urlPath = strings.ReplaceAll(urlPath, key, val)
 		}
 	}
+
 	if formWriter != nil {
 		if err := formWriter.Close(); err != nil {
 			return nil, err
 		}
-		headers.Set("Content-Type", formWriter.FormDataContentType())
+		consumesType = formWriter.FormDataContentType()
 	}
 
-	u := m.c.makeURL(urlPath, urlVals)
+	headers.Set("Accept", producesType)
+	fmt.Println(producesType)
+	if body != nil {
+		headers.Set("Content-Type", consumesType)
+	}
 
+	u := m.c.makeURL(urlPath, urlValues)
 	urlStr := u.String()
 
-	req, err := http.NewRequestWithContext(ctx, m.method, urlStr, body)
+	fmt.Println("ctx", ctx, m.m.Method, urlStr)
+	req, err := http.NewRequestWithContext(ctx, m.m.Method, urlStr, body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header = headers
 
-	rsp, err := m.c.do(thread, m.name, &starlarkhttp.Request{
+	rsp, err := m.c.do(thread, m.m.Name, &starlarkhttp.Request{
 		Request: req,
 	})
 	if err != nil {
@@ -569,11 +486,11 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 	}
 	defer rsp.Body.Close()
 
-	rspTyp, rspOk := m.op.Responses.StatusCodeResponses[rsp.StatusCode]
-	rspDef := m.op.Responses.Default
+	//rspTyp, rspOk := m.op.Responses.StatusCodeResponses[rsp.StatusCode]
+	//rspDef := m.op.Responses.Default
 
 	// Produce struct or array
-	switch typ := producesType; typ {
+	switch typ := "application/json"; typ {
 	case "application/json":
 		rspBody, err := io.ReadAll(rsp.Body)
 		if err != nil {
@@ -590,154 +507,265 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 			return nil, err
 		}
 
+		if m.m.ResponsesTypeName == "" {
+			return starlark.None, nil
+		}
+		responseType, err := m.getType(m.m.ResponsesTypeName)
+		if err != nil {
+			return nil, err
+		}
+
+		rspKey := strconv.Itoa(rsp.StatusCode)
+		var rspField *surface.Field
+		for _, fd := range responseType.Fields {
+			if fd.Name == rspKey {
+				rspField = fd
+				break
+			}
+		}
+
+		if rspField == nil {
+			return val, fmt.Errorf("unknown response type %s: %q", rsp.Status, val)
+		}
 		if rsp.StatusCode/100 != 2 {
-			return nil, fmt.Errorf("%s: %q", rsp.Status, val)
+			return val, fmt.Errorf("%s: %q", rsp.Status, val)
 		}
-		// Try to return a typed response.
-		if rspOk {
-			return toStruct(rspTyp.Schema, val)
-		}
-		if rspDef != nil {
-			return toStruct(rspDef.Schema, val)
-		}
-		// TODO: convert anyway?
-		return val, nil
+		return m.asField(rspField, val)
 
 	default:
 		return nil, fmt.Errorf("%s: unknown produces type: %s", rsp.Status, typ)
 	}
 }
 
-func errKeyValue(schema *spec.Schema, want string, v starlark.Value) error {
-	return fmt.Errorf("invalid type for %s, want %s got %s", schema.ID, want, v.Type())
+func typeError(typ *surface.Type, v starlark.Value) error {
+	return fmt.Errorf("invalid type for %s, want %s got %s", typ.GetName(), typ.GetKind(), v.Type())
 }
 
-func typeStr(schema *spec.Schema) string {
-	return strings.Join([]string(schema.Type), ",")
+var (
+	starlarkJSONEncode = starlarkjson.Module.Members["encode"].(*starlark.Builtin)
+	starlarkJSONDecode = starlarkjson.Module.Members["decode"].(*starlark.Builtin)
+)
+
+func (m *Method) toField(name string) *surface.Field {
+	if _, err := m.getType(name); err == nil {
+		return &surface.Field{Type: name, Kind: surface.FieldKind_REFERENCE}
+	}
+
+	switch name {
+	case "string", "integer", "number", "boolean":
+		return &surface.Field{Type: name, Kind: surface.FieldKind_SCALAR}
+	case "int32", "int64":
+		return &surface.Field{Type: "integer", Format: name, Kind: surface.FieldKind_SCALAR}
+	case "float", "double":
+		return &surface.Field{Type: "number", Format: name, Kind: surface.FieldKind_SCALAR}
+	case "date":
+		// date – full-date notation as defined by RFC 3339, section 5.6, for example, 2017-07-21
+		return &surface.Field{Type: "string", Format: name, Kind: surface.FieldKind_SCALAR}
+	case "date-time":
+		// date-time – the date-time notation as defined by RFC 3339, section 5.6, for example, 2017-07-21T17:32:28Z
+		return &surface.Field{Type: "string", Format: name, Kind: surface.FieldKind_SCALAR}
+	case "password", "byte", "binrary":
+		return &surface.Field{Type: "string", Format: name, Kind: surface.FieldKind_SCALAR}
+	}
+	// ???
+	return &surface.Field{Type: "string", Format: name, Kind: surface.FieldKind_SCALAR}
 }
 
-// TODO: build typed Dict and typed Lists.
-func toStruct(schema *spec.Schema, v starlark.Value) (starlark.Value, error) {
-
-	switch v := v.(type) {
-	case *starlark.Dict:
-		if typ := typeStr(schema); typ != "object" {
-			return nil, errKeyValue(schema, "dict", v)
-		}
-		// TODO: typed structs?
-		//constructor := starlark.String(schema.ID)
-		constructor := starlarkstruct.Default
-		kwargs := v.Items()
-
-		// TODO: validate spec.
-		for _, kwarg := range kwargs {
-			k, ok := starlark.AsString(kwarg[0])
-			if !ok {
-				return nil, fmt.Errorf("invalid key %s", k)
+func (m *Method) asField(fd *surface.Field, v starlark.Value) (starlark.Value, error) {
+	switch fd.Kind {
+	case surface.FieldKind_SCALAR:
+		switch fd.Type {
+		case "string":
+			if x, ok := v.(starlark.String); ok {
+				return x, nil
 			}
-			v := kwarg[1]
-
-			keySchema, ok := schema.Properties[k]
-			if !ok {
-				return nil, fmt.Errorf("unpexpected key %s", k)
+			if v == starlark.None {
+				return starlark.String(""), nil
 			}
-
-			x, err := toStruct(&keySchema, v)
-			if err != nil {
-				return nil, err
+		case "integer":
+			if v == starlark.None {
+				return starlark.MakeInt(0), nil
 			}
-			kwarg[1] = x
-		}
-
-		s := starlarkstruct.FromKeywords(constructor, kwargs)
-		return s, nil
-
-	case *starlark.List:
-		if typeStr(schema) != "array" {
-			return nil, errKeyValue(schema, "list", v)
-		}
-		if items := schema.Items; items == nil || items.Schema == nil {
-			return nil, fmt.Errorf("unepected items schema: %v", items)
-		}
-		keySchema := schema.Items.Schema
-
-		// TODO: validate spec.
-		for i := 0; i < v.Len(); i++ {
-			x, err := toStruct(keySchema, v.Index(i))
-			if err != nil {
-				return nil, err
+			return starlark.NumberToInt(v)
+		case "number":
+			switch x := v.(type) {
+			case starlark.Float:
+				return x, nil
+			case starlark.Int:
+				return x.Float(), nil
+			case starlark.NoneType:
+				return starlark.Float(0), nil
 			}
-			if err := v.SetIndex(i, x); err != nil {
-				return nil, err
+		case "boolean":
+			if b, ok := v.(starlark.Bool); ok {
+				return b, nil
+			}
+			if v == starlark.None {
+				return starlark.Bool(false), nil
 			}
 		}
-		return v, nil
+	case surface.FieldKind_MAP:
+		switch v := v.(type) {
+		case *starlark.Dict:
+			// always "map[string]<something>"
+			name := strings.TrimPrefix(fd.Type, "map[string]")
+			subFd := m.toField(name)
 
-	case starlark.String:
-		switch typeStr(schema) {
-		case "string", "password":
+			for _, key := range v.Keys() {
+				val, _, err := v.Get(key)
+				if err != nil {
+					return nil, err
+				}
+
+				val, err = m.asField(subFd, val)
+				if err != nil {
+					return nil, err
+				}
+
+				v.SetKey(key, val)
+			}
 			return v, nil
-		case "byte", "binary":
-			data, err := base64.StdEncoding.DecodeString(string(v))
-			if err != nil {
-				return nil, err
+
+		case starlark.NoneType:
+			return starlark.NewDict(0), nil
+		}
+	case surface.FieldKind_ARRAY:
+		switch v := v.(type) {
+		case starlark.HasSetIndex:
+			subFd := m.toField(fd.Type)
+
+			n := v.Len()
+			for i := 0; i < n; i++ {
+				val, err := m.asField(subFd, v.Index(i))
+				if err != nil {
+					return nil, err
+				}
+				v.SetIndex(i, val)
 			}
-			return starlark.Bytes(string(data)), nil
-		case "date":
-			t, err := time.Parse("2006-Jan-02", string(v))
-			if err != nil {
-				return nil, err
-			}
-			return starlarktime.Time(t), nil
-		case "date-time":
-			t, err := time.Parse(time.RFC3339, string(v))
-			if err != nil {
-				return nil, err
-			}
-			return starlarktime.Time(t), nil
-		default:
-			return v, nil // TODO: warn?
+			return v, nil
+		case starlark.NoneType:
+			return starlark.NewList(nil), nil
 		}
-
-	case starlark.Int:
-		if typeStr(schema) != "integer" {
-			return nil, errKeyValue(schema, "int", v)
+	case surface.FieldKind_REFERENCE:
+		typ, err := m.getType(fd.Type)
+		if err != nil {
+			return nil, err
 		}
+		return m.asObject(typ, v)
+	case surface.FieldKind_ANY:
 		return v, nil
-
-	case starlark.Float:
-		if typeStr(schema) != "number" {
-			return nil, errKeyValue(schema, "float", v)
-		}
-		return v, nil
-
-	case starlark.Bool:
-		if typeStr(schema) != "boolean" {
-			return nil, errKeyValue(schema, "bool", v)
-		}
-		return v, nil
-
 	default:
-		// TODO: validate spec?
-		return v, nil
+		panic(fmt.Sprintf("unknown kind %q", fd.Kind.String()))
 	}
+	return starlark.None, fmt.Errorf(
+		"openapi: invalid type conversion %s<%T> to %s", v, v, fd.Kind.String(),
+	)
 }
 
-func NewMessage(schema *spec.Schema, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	hasArgs := len(args) > 0
-	hasKwargs := len(kwargs) > 0
+func (m *Method) asObject(typ *surface.Type, arg starlark.Value) (starlark.Value, error) {
+	switch typ.Kind {
+	case surface.TypeKind_STRUCT:
+		switch arg := arg.(type) {
+		case *starlark.Dict:
+			index := make(map[string]starlark.Value)
+			kwargs := arg.Items()
+			for _, kwarg := range kwargs {
+				key, val := kwarg[0], kwarg[1]
 
-	if hasArgs && len(args) > 1 {
-		return nil, fmt.Errorf("unexpected number of args")
+				k, ok := starlark.AsString(key)
+				if !ok {
+					return nil, fmt.Errorf("invalid key %s", k)
+				}
+				index[k] = val
+			}
+
+			items := make([]starlark.Tuple, 0, len(typ.Fields))
+			array := make([]starlark.Value, len(typ.Fields)*2) // allocate a single backing array
+			for _, fd := range typ.Fields {
+				val, ok := index[fd.Name]
+				if !ok {
+					val = starlark.None
+				}
+
+				x, err := m.asField(fd, val)
+				if err != nil {
+					return nil, err
+				}
+
+				pair := starlark.Tuple(array[:2:2])
+				array = array[2:]
+				pair[0] = starlark.String(fd.Name)
+				pair[1] = x
+				items = append(items, pair)
+			}
+
+			constructor := starlarkstruct.Default
+			s := starlarkstruct.FromKeywords(constructor, items)
+			return s, nil
+
+		case *starlarkstruct.Struct:
+			index := make(map[string]starlark.Value)
+			n := arg.Len()
+			for i := 0; i < n; i++ {
+				k, v := arg.KeyIndex(i)
+				index[k] = v
+			}
+			for _, fd := range typ.Fields {
+				val, ok := index[fd.Name]
+				if !ok {
+					continue // skip for now, partial structs
+				}
+
+				x, err := m.asField(fd, val)
+				if err != nil {
+					return nil, err
+				}
+				arg.SetField(fd.Name, x)
+			}
+			return arg, nil
+
+		case starlark.NoneType:
+			return starlark.None, nil // objects can be nil
+
+		default:
+			return nil, typeError(typ, arg)
+		}
+
+	case surface.TypeKind_OBJECT:
+		switch arg := arg.(type) {
+		case *starlark.Dict:
+
+			index := make(map[string]starlark.Value)
+			kwargs := arg.Items()
+			for _, kwarg := range kwargs {
+				key, val := kwarg[0], kwarg[1]
+
+				k, ok := starlark.AsString(key)
+				if !ok {
+					return nil, fmt.Errorf("invalid key %s", k)
+				}
+				index[k] = val
+			}
+
+			for _, fd := range typ.Fields {
+				val, ok := index[fd.Name]
+				if !ok {
+					val = starlark.None
+				}
+
+				x, err := m.asField(fd, val)
+				if err != nil {
+					return nil, err
+				}
+				arg.SetKey(starlark.String(fd.Name), x)
+
+			}
+			return arg, nil
+
+		default:
+			return nil, typeError(typ, arg)
+		}
+	default:
+		panic(fmt.Sprintf("unknown kind: %v", typ.Kind))
 	}
-
-	if hasArgs && hasKwargs {
-		return nil, fmt.Errorf("unxpected args and kwargs")
-	}
-
-	if hasArgs {
-		return toStruct(schema, args[0])
-	}
-
-	return nil, fmt.Errorf("TODO: kwargs")
 }

@@ -12,8 +12,8 @@ import (
 
 	"larking.io/starlib/starext"
 	"larking.io/starlib/starlarkthread"
+	"larking.io/starlib/starlarkstruct"
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkstruct"
 	"gocloud.dev/blob"
 )
 

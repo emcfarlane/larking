@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkstruct"
+	"larking.io/starlib/starlarkstruct"
 )
 
 type testCallableArgs struct {

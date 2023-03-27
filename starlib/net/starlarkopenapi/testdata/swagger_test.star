@@ -1,50 +1,38 @@
-load("std.star", "blob", openapi = "net/openapi")
+load("std.star", "blob", openapi="net/openapi")
 
-api = openapi.open(spec_var, client = client)
+api = openapi.open(addr, spec, client=client)
 
-print(dir(api))
+#print(dir(api))
+#bkt = blob.open("file://./testdata")
 
-bkt = blob.open("file://./testdata")
+def test_get(assert):
+    rsp = client.get("https://petstore.swagger.io/v2/pet/1")
+    print(rsp)
 
-def test_openapi(t):
-    def find_available(t):
-        pets = api.pet.find_pets_by_status(status = ["available"])
-        pets_by_id = {}
-        for pet in pets:
-            pets_by_id[pet.id] = pet
-        return pets_by_id
 
-    pets_available = t.run("find_pets", find_available)
-    ids = pets_available.keys()
-    first_id = ids[0]
-    print("pet", pets_available[first_id])
+def test_openapi(assert):
+    pets = api.FindPetsByStatus(status=["available"])
+    pets_by_id = {pet.id: pet for pet in pets}
 
-    def post_image(t):
-        filename = "pixel.jpg"
-        img = bkt.read_all(filename)
-        print("file", (filename, img))
-        rsp = api.pet.post_pet_pet_id_upload_image(petId = first_id, file = (filename, img))
-        print(rsp)
+    pet = pets[0]
+    id = pet.id
 
-    t.run("post_image", post_image)
+    print("pet", pets_by_id[id])
 
-    def get_pet(t):
-        rsp = api.pet.get_pet_by_id(petId = first_id)
-        print(rsp)
+    # update pet with generated name
+    filename = "pixel.jpg"
+    rsp = api.POST_pet_petId_uploadImage(petId=id, file=filename)
+    assert.eq(rsp.code, 200)
 
-    t.run("get_pet", get_pet)
+    # get pet by id
+    rsp = api.GetPetById(petId=id)
+    assert.eq(rsp.id, id)
 
-    pet = pets_available[first_id]
+    # knight pet with generated name
+    pet.name = "Sir " + pet.name
+    rsp = api.UpdatePet(body=pet)
+    assert.eq(None, rsp)
 
-    def update_pet(t):
-        pet.name = "Sir " + pet.name
-        rsp = api.pet.update_pet(body = pet)
-        print(rsp)
-
-    t.run("update_pet", update_pet)
-
-    def delete_pet(t):
-        rsp = api.pet.delete_pet(petId = first_id)
-        print(rsp)
-
-    t.run("delete_pet", delete_pet)
+    # delete pet
+    rsp = api.DeletePet(petId=id)
+    assert.eq(None, rsp)

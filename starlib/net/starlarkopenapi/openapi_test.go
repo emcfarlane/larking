@@ -5,110 +5,94 @@
 package starlarkopenapi_test
 
 import (
-	"bufio"
-	"bytes"
 	"flag"
-	"fmt"
-	"log"
+	"io"
 	"net/http"
-	"net/http/httptest"
-	"net/http/httputil"
-	"os"
-	"path/filepath"
 	"testing"
 
+	"github.com/google/go-replayers/httpreplay"
 	"go.starlark.net/starlark"
 	_ "gocloud.dev/blob/fileblob"
-	_ "gocloud.dev/runtimevar/filevar"
 	"larking.io/starlib"
 	"larking.io/starlib/net/starlarkhttp"
 )
 
 var record = flag.Bool("record", false, "perform live requests")
 
-type transport struct {
-	prefix string
-	count  int
-	http.RoundTripper
-}
-
-func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	reqName := fmt.Sprintf("%s_%d_req.txt", t.prefix, t.count)
-	rspName := fmt.Sprintf("%s_%d_rsp.txt", t.prefix, t.count)
-	t.count++
-
-	if !*record {
-		reqBytes, err := os.ReadFile(reqName)
+func TestOpenAPIV2(t *testing.T) {
+	var (
+		client   *http.Client
+		filename = "testdata/" + t.Name() + ".replay"
+	)
+	if *record {
+		t.Log("recording...")
+		rec, err := httpreplay.NewRecorder(filename, nil)
 		if err != nil {
-			return nil, err
+			t.Fatal(err)
 		}
-
-		rspBytes, err := os.ReadFile(rspName)
+		t.Cleanup(func() { rec.Close() })
+		client = rec.Client()
+	} else {
+		rpl, err := httpreplay.NewReplayer(filename)
 		if err != nil {
-			return nil, err
+			t.Fatal(err)
 		}
-
-		if wantBytes, err := httputil.DumpRequest(req, true); err != nil {
-			return nil, err
-		} else if cmp := bytes.Compare(reqBytes, wantBytes); cmp != 0 {
-			fmt.Println("reqBytes", len(reqBytes), string(reqBytes))
-			fmt.Println("wantBytes", len(wantBytes), string(wantBytes))
-			return nil, fmt.Errorf("request changed: %d", cmp)
-		}
-
-		br := bufio.NewReader(bytes.NewReader(rspBytes))
-		return http.ReadResponse(br, req)
+		t.Cleanup(func() { rpl.Close() })
+		client = rpl.Client()
 	}
 
-	if reqBytes, err := httputil.DumpRequest(req, true); err != nil {
-		return nil, err
-	} else if err := os.WriteFile(reqName, reqBytes, 0644); err != nil {
-		log.Fatal(err)
-	}
+	c := starlarkhttp.NewClient(client)
+	c.SetDebug(true)
 
-	rsp, err := t.RoundTripper.RoundTrip(req)
-	if err != nil {
-		return nil, err
-	}
+	starlib.RunTests(t, "testdata/swagger_test.star", starlark.StringDict{
+		"addr":   starlark.String("https://petstore.swagger.io/"), //starlark.String(ts.URL),
+		"spec":   starlark.String("testdata/swagger.json"),
+		"client": c,
+	})
 
-	if rspBytes, err := httputil.DumpResponse(rsp, true); err != nil {
-		return nil, err
-	} else if err := os.WriteFile(rspName, rspBytes, 0644); err != nil {
-		log.Fatal(err)
-	}
-
-	return rsp, nil
 }
 
-func wrapClient(t *testing.T, name string, client *http.Client) {
-	client.Transport = &transport{
-		prefix:       name,
-		RoundTripper: client.Transport,
+func TestGet(t *testing.T) {
+
+	var (
+		client   *http.Client
+		filename = "testdata/" + t.Name() + ".replay"
+	)
+	if *record {
+		t.Log("recording...")
+		rec, err := httpreplay.NewRecorder(filename, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rec.Close()
+		client = rec.Client()
+	} else {
+		rpl, err := httpreplay.NewReplayer(filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rpl.Close()
+		client = rpl.Client()
 	}
-}
 
-func TestExecFile(t *testing.T) {
-	mux := http.NewServeMux()
+	// "https://petstore.swagger.io/v2/pet/1"
+	addr := "https://petstore.swagger.io/v2/pet/findByStatus?status=available"
 
-	// Create a test http server.
-	ts := httptest.NewServer(mux)
-	defer ts.Close()
-
-	wd, err := os.Getwd()
+	rsp, err := client.Get(addr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log(wd)
+	defer rsp.Body.Close()
 
-	client := ts.Client()
-	wrapClient(t, filepath.Join("testdata", t.Name()), client)
+	if rsp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", rsp.StatusCode)
+	}
+	t.Logf("status: %s", rsp.Status)
+	t.Logf("headers: %v", rsp.Header)
 
-	starlib.RunTests(t, "testdata/*_test.star", starlark.StringDict{
-		"addr":   starlark.String(ts.URL),
-		"client": starlarkhttp.NewClient(client),
-		"spec_var": starlark.String(
-			"file://" + filepath.Join(wd, "testdata/swagger.json"),
-		),
-	})
-
+	body, err := io.ReadAll(rsp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("body: %s", body)
 }

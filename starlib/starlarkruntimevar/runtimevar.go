@@ -11,9 +11,9 @@ import (
 
 	starlarktime "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkstruct"
 	"gocloud.dev/runtimevar"
 	"larking.io/starlib/starext"
+	"larking.io/starlib/starlarkstruct"
 	"larking.io/starlib/starlarkthread"
 )
 

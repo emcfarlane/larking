@@ -9,16 +9,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"sort"
 	"strings"
 
+	"go.starlark.net/starlark"
 	"larking.io/starlib/starext"
 	"larking.io/starlib/starlarkerrors"
 	"larking.io/starlib/starlarkio"
 	"larking.io/starlib/starlarkstruct"
 	"larking.io/starlib/starlarkthread"
-	"go.starlark.net/starlark"
 )
 
 // NewModule loads the predeclared built-ins for the net/http module.
@@ -56,10 +57,14 @@ func NewModule() *starlarkstruct.Module {
 
 type Client struct {
 	do     func(thread *starlark.Thread, fnname string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error)
+	debug  bool
 	frozen bool
 }
 
+func (v *Client) SetDebug(debug bool) { v.debug = debug }
+
 func NewClient(client *http.Client) *Client {
+	c := &Client{}
 	do := func(
 		thread *starlark.Thread,
 		fnname string,
@@ -73,9 +78,26 @@ func NewClient(client *http.Client) *Client {
 			return nil, err
 		}
 
+		if c.debug {
+			if reqBytes, err := httputil.DumpRequest(req.Request, true); err != nil {
+				return nil, err
+			} else {
+				thread.Print(thread, "http.request: "+string(reqBytes))
+			}
+		}
+
 		response, err := client.Do(req.Request)
+		fmt.Println("CALLING HERE", response, err)
 		if err != nil {
 			return nil, err
+		}
+
+		if c.debug {
+			if rspBytes, err := httputil.DumpResponse(response, true); err != nil {
+				return nil, err
+			} else {
+				thread.Print(thread, "http.response: "+string(rspBytes))
+			}
 		}
 
 		rsp := &Response{
@@ -86,7 +108,8 @@ func NewClient(client *http.Client) *Client {
 		}
 		return rsp, nil
 	}
-	return &Client{do: do}
+	c.do = do
+	return c
 }
 
 func (v *Client) String() string        { return "<client>" }
@@ -198,7 +221,9 @@ func (v *Client) post(thread *starlark.Thread, fnname string, args starlark.Tupl
 }
 
 func MakeClient(_ *starlark.Thread, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var fn starlark.Callable
+	var (
+		fn starlark.Callable
+	)
 	if err := starlark.UnpackPositionalArgs(name, args, kwargs, 1, &fn); err != nil {
 		return nil, err
 	}

@@ -11,8 +11,8 @@ import (
 	"sort"
 
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkstruct"
 	"larking.io/starlib/starext"
+	"larking.io/starlib/starlarkstruct"
 )
 
 func NewModule() *starlarkstruct.Module {

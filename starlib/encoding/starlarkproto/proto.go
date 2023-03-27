@@ -629,10 +629,6 @@ func (m *Message) encodeField(v starlark.Value, fd protoreflect.FieldDescriptor)
 
 		for i := 0; i < v.Len(); i++ {
 			val, err := toProtobuf(v.Index(i), fd, val)
-			fmt.Println("HERE????", err)
-			fmt.Println("fd", fd)
-			fmt.Println(v.Index(i), v.Len(), v.Type())
-			fmt.Println("val", val)
 			if err != nil {
 				return protoreflect.Value{}, err
 			}

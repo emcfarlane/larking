@@ -24,20 +24,19 @@ import (
 	"fmt"
 	"strings"
 
-	"larking.io/starlib/starext"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
+	"larking.io/starlib/starext"
 )
 
 // Make is the implementation of a built-in function that instantiates
-// an immutable struct from the specified keyword arguments.
+// a mutable struct from the specified keyword arguments.
 //
 // An application can add 'struct' to the Starlark environment like so:
 //
-// 	globals := starlark.StringDict{
-// 		"struct":  starlark.NewBuiltin("struct", starlarkstruct.Make),
-// 	}
-//
+//	globals := starlark.StringDict{
+//		"struct":  starlark.NewBuiltin("struct", starlarkstruct.Make),
+//	}
 func Make(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(args) > 0 {
 		return nil, fmt.Errorf("struct: unexpected positional arguments")
@@ -106,14 +105,13 @@ func FromKeyValues(constructor starlark.Value, kvs ...any) *Struct {
 		k, v := kvs[i].(string), kvs[i+1].(starlark.Value)
 		osd.Insert(k, v)
 	}
-	osd.Sort() // sort by key
 	return &Struct{
 		constructor: constructor,
 		osd:         *osd,
 	}
 }
 
-// Struct is an immutable Starlark type that maps field names to values.
+// Struct is a mutable Starlark type that maps field names to values.
 // It is not iterable and does not support len.
 //
 // A struct has a constructor, a distinct value that identifies a class
