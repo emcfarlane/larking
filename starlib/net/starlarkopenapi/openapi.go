@@ -10,7 +10,6 @@ package starlarkopenapi
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -59,6 +58,7 @@ type Client struct {
 	model *surface.Model
 
 	operationsv2 map[string]*openapiv2.Operation
+	operationsv3 map[string]*openapiv3.Operation
 }
 
 var defaultClient = starlarkhttp.NewClient(http.DefaultClient)
@@ -127,7 +127,6 @@ func (c *Client) do(
 func (c *Client) load(ctx context.Context) error {
 	b := c.val
 
-	//var model *surface.Model
 	if docv2, err := openapiv2.ParseDocument(b); err == nil {
 		c.docv2 = docv2
 
@@ -155,38 +154,42 @@ func (c *Client) load(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		b, _ := json.MarshalIndent(m, "", "  ")
-		fmt.Println(string(b))
+		//b, _ := json.MarshalIndent(m, "", "  ")
+		//fmt.Println(string(b))
 		c.model = m
 
 	} else if docv3, err := openapiv3.ParseDocument(b); err == nil {
 		c.docv3 = docv3
 
+		c.operationsv3 = make(map[string]*openapiv3.Operation)
+		for _, item := range docv3.Paths.Path {
+			for _, op := range [...]*openapiv3.Operation{
+				item.Value.Get,
+				item.Value.Put,
+				item.Value.Post,
+				item.Value.Delete,
+				item.Value.Options,
+				item.Value.Head,
+				item.Value.Patch,
+			} {
+				if op == nil {
+					continue
+				}
+				c.operationsv3[op.OperationId] = op
+			}
+		}
+
 		m, err := surface.NewModelFromOpenAPI3(docv3, c.name)
 		if err != nil {
 			return err
 		}
+		//b, _ := json.MarshalIndent(m, "", "  ")
+		//fmt.Println(string(b))
 		c.model = m
+
 	} else {
 		return err
 	}
-	//fmt.Println("---")
-	//fmt.Println(c.model.Name)
-	//fmt.Println(c.model)
-	//fmt.Println("mets:")
-	//for _, method := range c.model.Methods {
-	//	fmt.Println(method)
-	//}
-	//fmt.Println("typs:")
-	//for _, typ := range c.model.Types {
-	//	fmt.Println(typ)
-	//}
-	//fmt.Println("refs:")
-	//for _, ref := range c.model.SymbolicReferences {
-	//	fmt.Println(ref)
-	//}
-	//fmt.Println("---")
-
 	return nil
 }
 
@@ -217,7 +220,8 @@ func (c *Client) Attr(name string) (starlark.Value, error) {
 	m := &Method{c: c, m: method}
 	if c.operationsv2 != nil {
 		m.op2 = c.operationsv2[m.m.Operation]
-		fmt.Println("setting op", m.op2)
+	} else if c.operationsv3 != nil {
+		m.op3 = c.operationsv3[m.m.Operation]
 	}
 	return m, nil
 }
@@ -274,11 +278,6 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 	hasArgs := len(args) > 0
 	hasKwargs := len(kwargs) > 0
 	ctx := starlarkthread.GetContext(thread)
-	//fmt.Println("METHOD:")
-	//fmt.Println(m.m)
-
-	//fmt.Println("OP:")
-	//fmt.Println(m.c.operationsv2[m.m.Operation])
 
 	if hasArgs && len(args) > 1 {
 		return nil, fmt.Errorf("unexpected number of args")
@@ -288,33 +287,14 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 		return nil, fmt.Errorf("unxpected args and kwargs")
 	}
 
-	//fmt.Println("---")
-	//fmt.Println(m.m)
-	//fmt.Println(m.m.ParametersTypeName)
-	//fmt.Println(m.m.ResponsesTypeName)
-	//fmt.Println("---")
 	paramsType, err := m.getType(m.m.ParametersTypeName)
 	if err != nil {
 		return nil, err
 	}
 
 	fields := make(map[string]*surface.Field, len(paramsType.Fields))
-	//pathFields := make(map[string]*surface.Field)
-	//pathFieldsN := 0
 	for _, fd := range paramsType.Fields {
 		fields[fd.Name] = fd
-
-	}
-
-	if hasArgs {
-		switch v := args[0].(type) {
-		//		case starlark.IterableMapping:
-		//
-		//		case starlark.HasAttrs:
-		//
-		default:
-			return nil, fmt.Errorf("openapi: unknown type conversion %s<%T>", v, v)
-		}
 	}
 
 	var (
@@ -330,6 +310,18 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 		consumesType = chooseType(m.op2.Consumes)
 		producesType = chooseType(m.op2.Produces)
 	}
+	//else if m.op3 != nil {
+	// TODO: handle consumes and produces.
+	//}
+
+	if hasArgs {
+		switch v := args[0].(type) {
+		//case starlark.IterableMapping:
+		//case starlark.HasAttrs:
+		default:
+			return nil, fmt.Errorf("openapi: unsupported args conversion %s<%T>", v, v)
+		}
+	}
 
 	for _, kwarg := range kwargs {
 		k := string(kwarg[0].(starlark.String))
@@ -337,12 +329,35 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 
 		fd, ok := fields[k]
 		if !ok {
-			return nil, fmt.Errorf("unknown field: %q", k)
+			// Handle op3 special cases.
+			// body -> request_body and then look for the consumesType field.
+			if m.op3 != nil && k == "body" {
+				fd, ok = fields["request_body"]
+				if !ok {
+					return nil, fmt.Errorf("unknown field: %q", k)
+				}
+				typ, err := m.getType(fd.Type)
+				if err != nil {
+					return nil, err
+				}
+				ok = false
+				for _, f := range typ.Fields {
+					if f.Name == consumesType {
+						ok = true
+						fd = f
+						break
+					}
+				}
+			}
+
+			if !ok {
+				return nil, fmt.Errorf("unknown field: %q", k)
+			}
 		}
 
 		v, err := m.asField(fd, v)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid value for field %q: %w", k, err)
 		}
 
 		switch fd.Position {
@@ -388,15 +403,12 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 					}
 					body = buf
 				}
-				//fmt.Println("HERE", fd.Name, v, m)
-				//fmt.Println(m.op2)
 
 				// TODO: handle file encoding
 				s := fmt.Sprintf("%#v", v)
 				filename := filepath.Base(s)
 
 				label, err := starlarkrule.ParseRelativeLabel(thread.Name, s)
-				//fmt.Println("LABEL", thread.Name, label, err)
 				if err != nil {
 					return nil, err
 				}
@@ -463,7 +475,6 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 	}
 
 	headers.Set("Accept", producesType)
-	fmt.Println(producesType)
 	if body != nil {
 		headers.Set("Content-Type", consumesType)
 	}
@@ -471,7 +482,6 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 	u := m.c.makeURL(urlPath, urlValues)
 	urlStr := u.String()
 
-	fmt.Println("ctx", ctx, m.m.Method, urlStr)
 	req, err := http.NewRequestWithContext(ctx, m.m.Method, urlStr, body)
 	if err != nil {
 		return nil, err
@@ -490,13 +500,16 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 	//rspDef := m.op.Responses.Default
 
 	// Produce struct or array
-	switch typ := "application/json"; typ {
+	switch producesType {
 	case "application/json":
+		if m.m.ResponsesTypeName == "" {
+			return starlark.None, nil
+		}
+
 		rspBody, err := io.ReadAll(rsp.Body)
 		if err != nil {
 			return nil, err
 		}
-
 		bodyStr := starlark.String(rspBody)
 
 		// Load schema
@@ -504,15 +517,12 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 			thread, starlarkJSONDecode, starlark.Tuple{bodyStr}, nil,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to decode response: %w", err)
 		}
 
-		if m.m.ResponsesTypeName == "" {
-			return starlark.None, nil
-		}
 		responseType, err := m.getType(m.m.ResponsesTypeName)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get response type: %w", err)
 		}
 
 		rspKey := strconv.Itoa(rsp.StatusCode)
@@ -520,6 +530,22 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 		for _, fd := range responseType.Fields {
 			if fd.Name == rspKey {
 				rspField = fd
+
+				// TODO: op3 encode content/type in subfields,
+				// find the right one.
+				// TODO: https://github.com/google/gnostic/pull/385
+				if m.op3 != nil {
+					op3Type, err := m.getType(rspField.Type)
+					if err != nil {
+						return nil, fmt.Errorf("failed to get response type: %w", err)
+					}
+					for _, fd := range op3Type.Fields {
+						if fd.Name == producesType {
+							rspField = fd
+							break
+						}
+					}
+				}
 				break
 			}
 		}
@@ -533,7 +559,7 @@ func (m *Method) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwar
 		return m.asField(rspField, val)
 
 	default:
-		return nil, fmt.Errorf("%s: unknown produces type: %s", rsp.Status, typ)
+		return nil, fmt.Errorf("%s: unknown produces type: %s", rsp.Status, producesType)
 	}
 }
 

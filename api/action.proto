@@ -93,7 +93,6 @@ message Action {
   Target target = 1;
   repeated Action deps = 2;
 
-  // repeated AttrValue values = 5;
   repeated google.protobuf.Any values = 5;
   google.rpc.Status status = 6;
   bool failed = 7;

@@ -87,7 +87,6 @@ func NewClient(client *http.Client) *Client {
 		}
 
 		response, err := client.Do(req.Request)
-		fmt.Println("CALLING HERE", response, err)
 		if err != nil {
 			return nil, err
 		}

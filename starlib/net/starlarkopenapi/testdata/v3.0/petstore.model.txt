@@ -1,0 +1,941 @@
+name: "Swagger Petstore - OpenAPI 3.0"
+types: {
+  name: "Order"
+  fields: {
+    name: "id"
+    type: "integer"
+    format: "int64"
+  }
+  fields: {
+    name: "petId"
+    type: "integer"
+    format: "int64"
+  }
+  fields: {
+    name: "quantity"
+    type: "integer"
+    format: "int32"
+  }
+  fields: {
+    name: "shipDate"
+    type: "string"
+    format: "date-time"
+  }
+  fields: {
+    name: "status"
+    type: "string"
+    enum_values: "placed"
+    enum_values: "approved"
+    enum_values: "delivered"
+  }
+  fields: {
+    name: "complete"
+    type: "boolean"
+  }
+}
+types: {
+  name: "Customer"
+  fields: {
+    name: "id"
+    type: "integer"
+    format: "int64"
+  }
+  fields: {
+    name: "username"
+    type: "string"
+  }
+  fields: {
+    name: "address"
+    type: "Address"
+    kind: ARRAY
+  }
+}
+types: {
+  name: "Address"
+  fields: {
+    name: "street"
+    type: "string"
+  }
+  fields: {
+    name: "city"
+    type: "string"
+  }
+  fields: {
+    name: "state"
+    type: "string"
+  }
+  fields: {
+    name: "zip"
+    type: "string"
+  }
+}
+types: {
+  name: "Category"
+  fields: {
+    name: "id"
+    type: "integer"
+    format: "int64"
+  }
+  fields: {
+    name: "name"
+    type: "string"
+  }
+}
+types: {
+  name: "User"
+  fields: {
+    name: "id"
+    type: "integer"
+    format: "int64"
+  }
+  fields: {
+    name: "username"
+    type: "string"
+  }
+  fields: {
+    name: "firstName"
+    type: "string"
+  }
+  fields: {
+    name: "lastName"
+    type: "string"
+  }
+  fields: {
+    name: "email"
+    type: "string"
+  }
+  fields: {
+    name: "password"
+    type: "string"
+  }
+  fields: {
+    name: "phone"
+    type: "string"
+  }
+  fields: {
+    name: "userStatus"
+    type: "integer"
+    format: "int32"
+  }
+}
+types: {
+  name: "Tag"
+  fields: {
+    name: "id"
+    type: "integer"
+    format: "int64"
+  }
+  fields: {
+    name: "name"
+    type: "string"
+  }
+}
+types: {
+  name: "Pet"
+  fields: {
+    name: "id"
+    type: "integer"
+    format: "int64"
+  }
+  fields: {
+    name: "name"
+    type: "string"
+  }
+  fields: {
+    name: "category"
+    type: "Category"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "photoUrls"
+    type: "string"
+    kind: ARRAY
+  }
+  fields: {
+    name: "tags"
+    type: "Tag"
+    kind: ARRAY
+  }
+  fields: {
+    name: "status"
+    type: "string"
+    enum_values: "available"
+    enum_values: "pending"
+    enum_values: "sold"
+  }
+}
+types: {
+  name: "ApiResponse"
+  fields: {
+    name: "code"
+    type: "integer"
+    format: "int32"
+  }
+  fields: {
+    name: "type"
+    type: "string"
+  }
+  fields: {
+    name: "message"
+    type: "string"
+  }
+}
+types: {
+  name: "Pet"
+  fields: {
+    name: "application/json"
+    type: "Pet"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/xml"
+    type: "Pet"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "UserArray"
+  fields: {
+    name: "application/json"
+    type: "User"
+    kind: ARRAY
+  }
+}
+types: {
+  name: "updatePetRequestBody"
+  fields: {
+    name: "application/json"
+    type: "Pet"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/xml"
+    type: "Pet"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/x-www-form-urlencoded"
+    type: "Pet"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "UpdatePetParameters"
+  description: "UpdatePetParameters holds parameters to UpdatePet"
+  fields: {
+    name: "request_body"
+    type: "updatePetRequestBody"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "updatePetOK"
+  fields: {
+    name: "application/xml"
+    type: "Pet"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/json"
+    type: "Pet"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "UpdatePetResponses"
+  description: "UpdatePetResponses holds responses of UpdatePet"
+  fields: {
+    name: "200"
+    type: "updatePetOK"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "addPetRequestBody"
+  fields: {
+    name: "application/json"
+    type: "Pet"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/xml"
+    type: "Pet"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/x-www-form-urlencoded"
+    type: "Pet"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "AddPetParameters"
+  description: "AddPetParameters holds parameters to AddPet"
+  fields: {
+    name: "request_body"
+    type: "addPetRequestBody"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "addPetOK"
+  fields: {
+    name: "application/xml"
+    type: "Pet"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/json"
+    type: "Pet"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "AddPetResponses"
+  description: "AddPetResponses holds responses of AddPet"
+  fields: {
+    name: "200"
+    type: "addPetOK"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "FindPetsByStatusParameters"
+  description: "FindPetsByStatusParameters holds parameters to FindPetsByStatus"
+  fields: {
+    name: "status"
+    type: "string"
+    position: QUERY
+    enum_values: "available"
+    enum_values: "pending"
+    enum_values: "sold"
+  }
+}
+types: {
+  name: "findPetsByStatusOK"
+  fields: {
+    name: "application/xml"
+    type: "Pet"
+    kind: ARRAY
+  }
+  fields: {
+    name: "application/json"
+    type: "Pet"
+    kind: ARRAY
+  }
+}
+types: {
+  name: "FindPetsByStatusResponses"
+  description: "FindPetsByStatusResponses holds responses of FindPetsByStatus"
+  fields: {
+    name: "200"
+    type: "findPetsByStatusOK"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "FindPetsByTagsParameters"
+  description: "FindPetsByTagsParameters holds parameters to FindPetsByTags"
+  fields: {
+    name: "tags"
+    type: "string"
+    kind: ARRAY
+    position: QUERY
+  }
+}
+types: {
+  name: "findPetsByTagsOK"
+  fields: {
+    name: "application/xml"
+    type: "Pet"
+    kind: ARRAY
+  }
+  fields: {
+    name: "application/json"
+    type: "Pet"
+    kind: ARRAY
+  }
+}
+types: {
+  name: "FindPetsByTagsResponses"
+  description: "FindPetsByTagsResponses holds responses of FindPetsByTags"
+  fields: {
+    name: "200"
+    type: "findPetsByTagsOK"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "GetPetByIdParameters"
+  description: "GetPetByIdParameters holds parameters to GetPetById"
+  fields: {
+    name: "petId"
+    type: "integer"
+    format: "int64"
+    position: PATH
+  }
+}
+types: {
+  name: "getPetByIdOK"
+  fields: {
+    name: "application/xml"
+    type: "Pet"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/json"
+    type: "Pet"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "GetPetByIdResponses"
+  description: "GetPetByIdResponses holds responses of GetPetById"
+  fields: {
+    name: "200"
+    type: "getPetByIdOK"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "UpdatePetWithFormParameters"
+  description: "UpdatePetWithFormParameters holds parameters to UpdatePetWithForm"
+  fields: {
+    name: "petId"
+    type: "integer"
+    format: "int64"
+    position: PATH
+  }
+  fields: {
+    name: "name"
+    type: "string"
+    position: QUERY
+  }
+  fields: {
+    name: "status"
+    type: "string"
+    position: QUERY
+  }
+}
+types: {
+  name: "DeletePetParameters"
+  description: "DeletePetParameters holds parameters to DeletePet"
+  fields: {
+    name: "api_key"
+    type: "string"
+    position: HEADER
+  }
+  fields: {
+    name: "petId"
+    type: "integer"
+    format: "int64"
+    position: PATH
+  }
+}
+types: {
+  name: "uploadFileRequestBody"
+  fields: {
+    name: "application/octet-stream"
+    type: "string"
+    format: "binary"
+  }
+}
+types: {
+  name: "UploadFileParameters"
+  description: "UploadFileParameters holds parameters to UploadFile"
+  fields: {
+    name: "petId"
+    type: "integer"
+    format: "int64"
+    position: PATH
+  }
+  fields: {
+    name: "additionalMetadata"
+    type: "string"
+    position: QUERY
+  }
+  fields: {
+    name: "request_body"
+    type: "uploadFileRequestBody"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "uploadFileOK"
+  fields: {
+    name: "application/json"
+    type: "ApiResponse"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "UploadFileResponses"
+  description: "UploadFileResponses holds responses of UploadFile"
+  fields: {
+    name: "200"
+    type: "uploadFileOK"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "getInventoryOKapplication/json"
+  fields: {
+    name: "additional_properties"
+    type: "map[string]int32"
+    kind: MAP
+  }
+}
+types: {
+  name: "getInventoryOK"
+  fields: {
+    name: "application/json"
+    type: "getInventoryOKapplication/json"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "GetInventoryResponses"
+  description: "GetInventoryResponses holds responses of GetInventory"
+  fields: {
+    name: "200"
+    type: "getInventoryOK"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "placeOrderRequestBody"
+  fields: {
+    name: "application/json"
+    type: "Order"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/xml"
+    type: "Order"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/x-www-form-urlencoded"
+    type: "Order"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "PlaceOrderParameters"
+  description: "PlaceOrderParameters holds parameters to PlaceOrder"
+  fields: {
+    name: "request_body"
+    type: "placeOrderRequestBody"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "placeOrderOK"
+  fields: {
+    name: "application/json"
+    type: "Order"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "PlaceOrderResponses"
+  description: "PlaceOrderResponses holds responses of PlaceOrder"
+  fields: {
+    name: "200"
+    type: "placeOrderOK"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "GetOrderByIdParameters"
+  description: "GetOrderByIdParameters holds parameters to GetOrderById"
+  fields: {
+    name: "orderId"
+    type: "integer"
+    format: "int64"
+    position: PATH
+  }
+}
+types: {
+  name: "getOrderByIdOK"
+  fields: {
+    name: "application/xml"
+    type: "Order"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/json"
+    type: "Order"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "GetOrderByIdResponses"
+  description: "GetOrderByIdResponses holds responses of GetOrderById"
+  fields: {
+    name: "200"
+    type: "getOrderByIdOK"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "DeleteOrderParameters"
+  description: "DeleteOrderParameters holds parameters to DeleteOrder"
+  fields: {
+    name: "orderId"
+    type: "integer"
+    format: "int64"
+    position: PATH
+  }
+}
+types: {
+  name: "createUserRequestBody"
+  fields: {
+    name: "application/json"
+    type: "User"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/xml"
+    type: "User"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/x-www-form-urlencoded"
+    type: "User"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "CreateUserParameters"
+  description: "CreateUserParameters holds parameters to CreateUser"
+  fields: {
+    name: "request_body"
+    type: "createUserRequestBody"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "createUserDefault"
+  fields: {
+    name: "application/json"
+    type: "User"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/xml"
+    type: "User"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "CreateUserResponses"
+  description: "CreateUserResponses holds responses of CreateUser"
+  fields: {
+    name: "default"
+    type: "createUserDefault"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "createUsersWithListInputRequestBody"
+  fields: {
+    name: "application/json"
+    type: "User"
+    kind: ARRAY
+  }
+}
+types: {
+  name: "CreateUsersWithListInputParameters"
+  description: "CreateUsersWithListInputParameters holds parameters to CreateUsersWithListInput"
+  fields: {
+    name: "request_body"
+    type: "createUsersWithListInputRequestBody"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "createUsersWithListInputOK"
+  fields: {
+    name: "application/xml"
+    type: "User"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/json"
+    type: "User"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "CreateUsersWithListInputResponses"
+  description: "CreateUsersWithListInputResponses holds responses of CreateUsersWithListInput"
+  fields: {
+    name: "200"
+    type: "createUsersWithListInputOK"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "LoginUserParameters"
+  description: "LoginUserParameters holds parameters to LoginUser"
+  fields: {
+    name: "username"
+    type: "string"
+    position: QUERY
+  }
+  fields: {
+    name: "password"
+    type: "string"
+    position: QUERY
+  }
+}
+types: {
+  name: "loginUserOK"
+  fields: {
+    name: "application/xml"
+    type: "string"
+  }
+  fields: {
+    name: "application/json"
+    type: "string"
+  }
+}
+types: {
+  name: "LoginUserResponses"
+  description: "LoginUserResponses holds responses of LoginUser"
+  fields: {
+    name: "200"
+    type: "loginUserOK"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "GetUserByNameParameters"
+  description: "GetUserByNameParameters holds parameters to GetUserByName"
+  fields: {
+    name: "username"
+    type: "string"
+    position: PATH
+  }
+}
+types: {
+  name: "getUserByNameOK"
+  fields: {
+    name: "application/xml"
+    type: "User"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/json"
+    type: "User"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "GetUserByNameResponses"
+  description: "GetUserByNameResponses holds responses of GetUserByName"
+  fields: {
+    name: "200"
+    type: "getUserByNameOK"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "updateUserRequestBody"
+  fields: {
+    name: "application/json"
+    type: "User"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/xml"
+    type: "User"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "application/x-www-form-urlencoded"
+    type: "User"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "UpdateUserParameters"
+  description: "UpdateUserParameters holds parameters to UpdateUser"
+  fields: {
+    name: "username"
+    type: "string"
+    position: PATH
+  }
+  fields: {
+    name: "request_body"
+    type: "updateUserRequestBody"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "DeleteUserParameters"
+  description: "DeleteUserParameters holds parameters to DeleteUser"
+  fields: {
+    name: "username"
+    type: "string"
+    position: PATH
+  }
+}
+methods: {
+  operation: "updatePet"
+  path: "/pet"
+  method: "PUT"
+  description: "Update an existing pet by Id"
+  name: "UpdatePet"
+  parameters_type_name: "UpdatePetParameters"
+  responses_type_name: "UpdatePetResponses"
+}
+methods: {
+  operation: "addPet"
+  path: "/pet"
+  method: "POST"
+  description: "Add a new pet to the store"
+  name: "AddPet"
+  parameters_type_name: "AddPetParameters"
+  responses_type_name: "AddPetResponses"
+}
+methods: {
+  operation: "findPetsByStatus"
+  path: "/pet/findByStatus"
+  method: "GET"
+  description: "Multiple status values can be provided with comma separated strings"
+  name: "FindPetsByStatus"
+  parameters_type_name: "FindPetsByStatusParameters"
+  responses_type_name: "FindPetsByStatusResponses"
+}
+methods: {
+  operation: "findPetsByTags"
+  path: "/pet/findByTags"
+  method: "GET"
+  description: "Multiple tags can be provided with comma separated strings. Use tag1, tag2, tag3 for testing."
+  name: "FindPetsByTags"
+  parameters_type_name: "FindPetsByTagsParameters"
+  responses_type_name: "FindPetsByTagsResponses"
+}
+methods: {
+  operation: "getPetById"
+  path: "/pet/{petId}"
+  method: "GET"
+  description: "Returns a single pet"
+  name: "GetPetById"
+  parameters_type_name: "GetPetByIdParameters"
+  responses_type_name: "GetPetByIdResponses"
+}
+methods: {
+  operation: "updatePetWithForm"
+  path: "/pet/{petId}"
+  method: "POST"
+  name: "UpdatePetWithForm"
+  parameters_type_name: "UpdatePetWithFormParameters"
+}
+methods: {
+  operation: "deletePet"
+  path: "/pet/{petId}"
+  method: "DELETE"
+  name: "DeletePet"
+  parameters_type_name: "DeletePetParameters"
+}
+methods: {
+  operation: "uploadFile"
+  path: "/pet/{petId}/uploadImage"
+  method: "POST"
+  name: "UploadFile"
+  parameters_type_name: "UploadFileParameters"
+  responses_type_name: "UploadFileResponses"
+}
+methods: {
+  operation: "getInventory"
+  path: "/store/inventory"
+  method: "GET"
+  description: "Returns a map of status codes to quantities"
+  name: "GetInventory"
+  responses_type_name: "GetInventoryResponses"
+}
+methods: {
+  operation: "placeOrder"
+  path: "/store/order"
+  method: "POST"
+  description: "Place a new order in the store"
+  name: "PlaceOrder"
+  parameters_type_name: "PlaceOrderParameters"
+  responses_type_name: "PlaceOrderResponses"
+}
+methods: {
+  operation: "getOrderById"
+  path: "/store/order/{orderId}"
+  method: "GET"
+  description: "For valid response try integer IDs with value <= 5 or > 10. Other values will generate exceptions."
+  name: "GetOrderById"
+  parameters_type_name: "GetOrderByIdParameters"
+  responses_type_name: "GetOrderByIdResponses"
+}
+methods: {
+  operation: "deleteOrder"
+  path: "/store/order/{orderId}"
+  method: "DELETE"
+  description: "For valid response try integer IDs with value < 1000. Anything above 1000 or nonintegers will generate API errors"
+  name: "DeleteOrder"
+  parameters_type_name: "DeleteOrderParameters"
+}
+methods: {
+  operation: "createUser"
+  path: "/user"
+  method: "POST"
+  description: "This can only be done by the logged in user."
+  name: "CreateUser"
+  parameters_type_name: "CreateUserParameters"
+  responses_type_name: "CreateUserResponses"
+}
+methods: {
+  operation: "createUsersWithListInput"
+  path: "/user/createWithList"
+  method: "POST"
+  description: "Creates list of users with given input array"
+  name: "CreateUsersWithListInput"
+  parameters_type_name: "CreateUsersWithListInputParameters"
+  responses_type_name: "CreateUsersWithListInputResponses"
+}
+methods: {
+  operation: "loginUser"
+  path: "/user/login"
+  method: "GET"
+  name: "LoginUser"
+  parameters_type_name: "LoginUserParameters"
+  responses_type_name: "LoginUserResponses"
+}
+methods: {
+  operation: "logoutUser"
+  path: "/user/logout"
+  method: "GET"
+  name: "LogoutUser"
+}
+methods: {
+  operation: "getUserByName"
+  path: "/user/{username}"
+  method: "GET"
+  name: "GetUserByName"
+  parameters_type_name: "GetUserByNameParameters"
+  responses_type_name: "GetUserByNameResponses"
+}
+methods: {
+  operation: "updateUser"
+  path: "/user/{username}"
+  method: "PUT"
+  description: "This can only be done by the logged in user."
+  name: "UpdateUser"
+  parameters_type_name: "UpdateUserParameters"
+}
+methods: {
+  operation: "deleteUser"
+  path: "/user/{username}"
+  method: "DELETE"
+  description: "This can only be done by the logged in user."
+  name: "DeleteUser"
+  parameters_type_name: "DeleteUserParameters"
+}

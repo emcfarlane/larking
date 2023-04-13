@@ -38,9 +38,10 @@ func TestLabels(t *testing.T) {
 	}{{
 		name:   "full",
 		label:  "testdata/go/hello",
-		source: "file:///", // root
-		want: "file:///?" + url.Values{
-			"key": []string{"testdata/go/hello"},
+		source: "file:///?metadata=skip", // root
+		want: "file:///:testdata/go/hello?" + url.Values{
+			//"key":      []string{"testdata/go/hello"},
+			"metadata": []string{"skip"},
 		}.Encode(),
 	}, {
 		name:   "relative",

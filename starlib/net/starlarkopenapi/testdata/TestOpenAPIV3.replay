@@ -1,0 +1,256 @@
+{
+  "Initial": null,
+  "Version": "0.2",
+  "Converter": {
+    "ScrubBody": null,
+    "ClearHeaders": [
+      "^X-Goog-.*Encryption-Key$"
+    ],
+    "RemoveRequestHeaders": [
+      "^Authorization$",
+      "^Proxy-Authorization$",
+      "^Connection$",
+      "^Content-Type$",
+      "^Date$",
+      "^Host$",
+      "^Transfer-Encoding$",
+      "^Via$",
+      "^X-Forwarded-.*$",
+      "^X-Cloud-Trace-Context$",
+      "^X-Goog-Api-Client$",
+      "^X-Google-.*$",
+      "^X-Gfe-.*$"
+    ],
+    "RemoveResponseHeaders": [
+      "^X-Google-.*$",
+      "^X-Gfe-.*$"
+    ],
+    "ClearParams": null,
+    "RemoveParams": null
+  },
+  "Entries": [
+    {
+      "ID": "a502d086a8f3bffc",
+      "Request": {
+        "Method": "GET",
+        "URL": "https://petstore3.swagger.io/api/v3/pet/findByStatus?status=available",
+        "Header": {
+          "Accept": [
+            "application/json"
+          ],
+          "Accept-Encoding": [
+            "gzip"
+          ],
+          "User-Agent": [
+            "Go-http-client/1.1"
+          ]
+        },
+        "MediaType": "",
+        "BodyParts": [
+          ""
+        ]
+      },
+      "Response": {
+        "StatusCode": 200,
+        "Proto": "HTTP/1.1",
+        "ProtoMajor": 1,
+        "ProtoMinor": 1,
+        "Header": {
+          "Access-Control-Allow-Headers": [
+            "Content-Type, api_key, Authorization"
+          ],
+          "Access-Control-Allow-Methods": [
+            "GET, POST, DELETE, PUT"
+          ],
+          "Access-Control-Allow-Origin": [
+            "*"
+          ],
+          "Access-Control-Expose-Headers": [
+            "Content-Disposition"
+          ],
+          "Content-Length": [
+            "1951"
+          ],
+          "Content-Type": [
+            "application/json"
+          ],
+          "Date": [
+            "Wed, 12 Apr 2023 15:28:00 GMT"
+          ],
+          "Server": [
+            "Jetty(9.4.9.v20180320)"
+          ]
+        },
+        "Body": "W3siaWQiOjQsImNhdGVnb3J5Ijp7ImlkIjoxLCJuYW1lIjoiRG9ncyJ9LCJuYW1lIjoiRG9nIDEiLCJwaG90b1VybHMiOlsidXJsMSIsInVybDIiXSwidGFncyI6W3siaWQiOjEsIm5hbWUiOiJ0YWcxIn0seyJpZCI6MiwibmFtZSI6InRhZzIifV0sInN0YXR1cyI6ImF2YWlsYWJsZSJ9LHsiaWQiOjgsImNhdGVnb3J5Ijp7ImlkIjo0LCJuYW1lIjoiTGlvbnMifSwibmFtZSI6Ikxpb24gMiIsInBob3RvVXJscyI6WyJ1cmwxIiwidXJsMiJdLCJ0YWdzIjpbeyJpZCI6MSwibmFtZSI6InRhZzIifSx7ImlkIjoyLCJuYW1lIjoidGFnMyJ9XSwic3RhdHVzIjoiYXZhaWxhYmxlIn0seyJpZCI6NDQ0NCwiY2F0ZWdvcnkiOnsiaWQiOjQ0NDQsIm5hbWUiOiJEb2dzIn0sIm5hbWUiOiJqb2ciLCJwaG90b1VybHMiOlsic3RyaW5nIl0sInRhZ3MiOlt7ImlkIjo0NDQ0LCJuYW1lIjoiSm9nIn1dLCJzdGF0dXMiOiJhdmFpbGFibGUifSx7ImlkIjoxMDIsIm5hbWUiOiJuZXdQZXQxMDAwIiwicGhvdG9VcmxzIjpbInVybDEiLCJ1cmwyIiwidXJsMyJdLCJzdGF0dXMiOiJhdmFpbGFibGUifSx7ImlkIjo5MTAsIm5hbWUiOiJOaWNob2xlIiwicGhvdG9VcmxzIjpbIkM6XFxVc2Vyc1xcTUFOQUFcXERvd25sb2Fkc1xcaW1hZ2UtMjAyMzAyMDgtMDQxNTMyLnBuZyJdLCJ0YWdzIjpbeyJpZCI6MCwibmFtZSI6InN0cmluZyJ9XSwic3RhdHVzIjoiYXZhaWxhYmxlIn0seyJpZCI6MTUsImNhdGVnb3J5Ijp7ImlkIjoxLCJuYW1lIjoiRG9ncyJ9LCJuYW1lIjoiZG9nZ2llIiwicGhvdG9VcmxzIjpbInN0cmluZyJdLCJ0YWdzIjpbeyJpZCI6MCwibmFtZSI6InN0cmluZyJ9XSwic3RhdHVzIjoiYXZhaWxhYmxlIn0seyJpZCI6MTAzLCJuYW1lIjoibmV3UGV0MiIsInBob3RvVXJscyI6WyIge2tleTE9dmFsdWUxfSIsIiB1cmwrMiIsIiB1cmwzIl0sInN0YXR1cyI6ImF2YWlsYWJsZSJ9LHsiaWQiOjAsIm5hbWUiOiJDYXQiLCJwaG90b1VybHMiOlsic3RyaW5nW10iXSwidGFncyI6W10sInN0YXR1cyI6ImF2YWlsYWJsZSJ9LHsiaWQiOjgxMjAsIm5hbWUiOiJTbmFwcHlfb3BlbkFQSSIsInBob3RvVXJscyI6WyJodHRwczovL3BldHN0b3JlMy5zd2FnZ2VyLmlvL3Jlc291cmNlcy9waG90b3MvNjIzMzg5MDk1LmpwZyJdLCJ0YWdzIjpbXSwic3RhdHVzIjoiYXZhaWxhYmxlIn0seyJpZCI6OSwibmFtZSI6IkN1cGNha2UiLCJwaG90b1VybHMiOlsiaHR0cHM6Ly9wZXRzdG9yZTMuc3dhZ2dlci5pby9yZXNvdXJjZXMvcGhvdG9zLzYyMzM4OTA5NS5qcGciXSwidGFncyI6W10sInN0YXR1cyI6ImF2YWlsYWJsZSJ9LHsiaWQiOjIsIm5hbWUiOiJDYXQiLCJwaG90b1VybHMiOlsic3RyaW5nW10iXSwidGFncyI6W10sInN0YXR1cyI6ImF2YWlsYWJsZSJ9LHsiaWQiOjEwMTAxMCwiY2F0ZWdvcnkiOnsiaWQiOjEwLCJuYW1lIjoicG9zdG1hbiJ9LCJuYW1lIjoic3dhZ2dlciIsInBob3RvVXJscyI6WyJzdHJpbmciXSwidGFncyI6W3siaWQiOjAsIm5hbWUiOiJzdHJpbmcifV0sInN0YXR1cyI6ImF2YWlsYWJsZSJ9LHsiaWQiOjMyNSwiY2F0ZWdvcnkiOnsiaWQiOjMyNSwibmFtZSI6Ik9wZW5BUEkzMCJ9LCJuYW1lIjoiT3BlbkFQSTMwIiwicGhvdG9VcmxzIjpbInN0cmluZyJdLCJ0YWdzIjpbeyJpZCI6MzI1LCJuYW1lIjoiT3BlbkFQSTMwIn1dLCJzdGF0dXMiOiJhdmFpbGFibGUifSx7ImlkIjo5OTksImNhdGVnb3J5Ijp7ImlkIjoxLCJuYW1lIjoiRG9ncyJ9LCJuYW1lIjoiUmV4IiwicGhvdG9VcmxzIjpbInN0cmluZyJdLCJ0YWdzIjpbeyJpZCI6MCwibmFtZSI6InN0cmluZyJ9XSwic3RhdHVzIjoiYXZhaWxhYmxlIn0seyJpZCI6NTAxNywiY2F0ZWdvcnkiOnsiaWQiOjUwMTcsIm5hbWUiOiJEb2dzIn0sIm5hbWUiOiJPc2NhciIsInBob3RvVXJscyI6WyJzdHJpbmciXSwidGFncyI6W3siaWQiOjAsIm5hbWUiOiJMT0sifV0sInN0YXR1cyI6ImF2YWlsYWJsZSJ9XQ=="
+      }
+    },
+    {
+      "ID": "9cc2718b031c21ba",
+      "Request": {
+        "Method": "GET",
+        "URL": "https://petstore3.swagger.io/api/v3/pet/4",
+        "Header": {
+          "Accept": [
+            "application/json"
+          ],
+          "Accept-Encoding": [
+            "gzip"
+          ],
+          "User-Agent": [
+            "Go-http-client/1.1"
+          ]
+        },
+        "MediaType": "",
+        "BodyParts": [
+          ""
+        ]
+      },
+      "Response": {
+        "StatusCode": 200,
+        "Proto": "HTTP/1.1",
+        "ProtoMajor": 1,
+        "ProtoMinor": 1,
+        "Header": {
+          "Access-Control-Allow-Headers": [
+            "Content-Type, api_key, Authorization"
+          ],
+          "Access-Control-Allow-Methods": [
+            "GET, POST, DELETE, PUT"
+          ],
+          "Access-Control-Allow-Origin": [
+            "*"
+          ],
+          "Access-Control-Expose-Headers": [
+            "Content-Disposition"
+          ],
+          "Content-Length": [
+            "161"
+          ],
+          "Content-Type": [
+            "application/json"
+          ],
+          "Date": [
+            "Wed, 12 Apr 2023 15:28:00 GMT"
+          ],
+          "Server": [
+            "Jetty(9.4.9.v20180320)"
+          ]
+        },
+        "Body": "eyJpZCI6NCwiY2F0ZWdvcnkiOnsiaWQiOjEsIm5hbWUiOiJEb2dzIn0sIm5hbWUiOiJEb2cgMSIsInBob3RvVXJscyI6WyJ1cmwxIiwidXJsMiJdLCJ0YWdzIjpbeyJpZCI6MSwibmFtZSI6InRhZzEifSx7ImlkIjoyLCJuYW1lIjoidGFnMiJ9XSwic3RhdHVzIjoiYXZhaWxhYmxlIn0="
+      }
+    },
+    {
+      "ID": "0b03d8fcad0d003b",
+      "Request": {
+        "Method": "PUT",
+        "URL": "https://petstore3.swagger.io/api/v3/pet",
+        "Header": {
+          "Accept": [
+            "application/json"
+          ],
+          "Accept-Encoding": [
+            "gzip"
+          ],
+          "Content-Length": [
+            "165"
+          ],
+          "User-Agent": [
+            "Go-http-client/1.1"
+          ]
+        },
+        "MediaType": "application/json",
+        "BodyParts": [
+          "eyJjYXRlZ29yeSI6eyJpZCI6MSwibmFtZSI6IkRvZ3MifSwiaWQiOjQsIm5hbWUiOiJTaXIgRG9nIDEiLCJwaG90b1VybHMiOlsidXJsMSIsInVybDIiXSwic3RhdHVzIjoiYXZhaWxhYmxlIiwidGFncyI6W3siaWQiOjEsIm5hbWUiOiJ0YWcxIn0seyJpZCI6MiwibmFtZSI6InRhZzIifV19"
+        ]
+      },
+      "Response": {
+        "StatusCode": 200,
+        "Proto": "HTTP/1.1",
+        "ProtoMajor": 1,
+        "ProtoMinor": 1,
+        "Header": {
+          "Access-Control-Allow-Headers": [
+            "Content-Type, api_key, Authorization"
+          ],
+          "Access-Control-Allow-Methods": [
+            "GET, POST, DELETE, PUT"
+          ],
+          "Access-Control-Allow-Origin": [
+            "*"
+          ],
+          "Access-Control-Expose-Headers": [
+            "Content-Disposition"
+          ],
+          "Content-Length": [
+            "165"
+          ],
+          "Content-Type": [
+            "application/json"
+          ],
+          "Date": [
+            "Wed, 12 Apr 2023 15:28:00 GMT"
+          ],
+          "Server": [
+            "Jetty(9.4.9.v20180320)"
+          ]
+        },
+        "Body": "eyJpZCI6NCwiY2F0ZWdvcnkiOnsiaWQiOjEsIm5hbWUiOiJEb2dzIn0sIm5hbWUiOiJTaXIgRG9nIDEiLCJwaG90b1VybHMiOlsidXJsMSIsInVybDIiXSwidGFncyI6W3siaWQiOjEsIm5hbWUiOiJ0YWcxIn0seyJpZCI6MiwibmFtZSI6InRhZzIifV0sInN0YXR1cyI6ImF2YWlsYWJsZSJ9"
+      }
+    },
+    {
+      "ID": "df17aa0f7541b04d",
+      "Request": {
+        "Method": "DELETE",
+        "URL": "https://petstore3.swagger.io/api/v3/pet/4",
+        "Header": {
+          "Accept": [
+            "application/json"
+          ],
+          "Accept-Encoding": [
+            "gzip"
+          ],
+          "User-Agent": [
+            "Go-http-client/1.1"
+          ]
+        },
+        "MediaType": "",
+        "BodyParts": [
+          ""
+        ]
+      },
+      "Response": {
+        "StatusCode": 200,
+        "Proto": "HTTP/1.1",
+        "ProtoMajor": 1,
+        "ProtoMinor": 1,
+        "Header": {
+          "Access-Control-Allow-Headers": [
+            "Content-Type, api_key, Authorization"
+          ],
+          "Access-Control-Allow-Methods": [
+            "GET, POST, DELETE, PUT"
+          ],
+          "Access-Control-Allow-Origin": [
+            "*"
+          ],
+          "Access-Control-Expose-Headers": [
+            "Content-Disposition"
+          ],
+          "Content-Length": [
+            "11"
+          ],
+          "Content-Type": [
+            "application/json"
+          ],
+          "Date": [
+            "Wed, 12 Apr 2023 15:28:00 GMT"
+          ],
+          "Server": [
+            "Jetty(9.4.9.v20180320)"
+          ]
+        },
+        "Body": "UGV0IGRlbGV0ZWQ="
+      }
+    }
+  ]
+}

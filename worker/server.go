@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/emcfarlane/starlarkassert"
@@ -26,7 +27,6 @@ import (
 	"larking.io/api/controlpb"
 	"larking.io/api/workerpb"
 	"larking.io/starlib"
-	"larking.io/starlib/encoding/starlarkproto"
 	"larking.io/starlib/starlarkrule"
 	"larking.io/starlib/starlarkthread"
 )
@@ -460,136 +460,13 @@ func (s *Server) TestThread(ctx context.Context, req *workerpb.TestThreadRequest
 	}, nil
 }
 
-func toStarlark(source *starlarkrule.Label, val *actionpb.Value) (starlark.Value, error) {
-	switch v := val.Kind.(type) {
-	case *actionpb.Value_LabelValue:
-		l, err := source.Parse(v.LabelValue)
-		if err != nil {
-			return nil, err
-		}
-		return l, nil
-	case *actionpb.Value_BoolValue:
-		return starlark.Bool(v.BoolValue), nil
-	case *actionpb.Value_IntValue:
-		return starlark.MakeInt64(v.IntValue), nil
-	case *actionpb.Value_FloatValue:
-		return starlark.Float(v.FloatValue), nil
-	case *actionpb.Value_StringValue:
-		return starlark.String(v.StringValue), nil
-	case *actionpb.Value_BytesValue:
-		return starlark.Bytes(v.BytesValue), nil
-	case *actionpb.Value_ListValue:
-		elems := make([]starlark.Value, len(v.ListValue.Values))
-		for i, x := range v.ListValue.Values {
-			value, err := toStarlark(source, x)
-			if err != nil {
-				return nil, err
-			}
-			elems[i] = value
-		}
-		return starlark.NewList(elems), nil
-	case *actionpb.Value_DictValue:
-		n := len(v.DictValue.Pairs)
-		dict := starlark.NewDict(n / 2)
-		for i := 0; i < n; i += 2 {
-			key, val := v.DictValue.Pairs[i], v.DictValue.Pairs[i+1]
-			k, err := toStarlark(source, key)
-			if err != nil {
-				return nil, err
-			}
-			v, err := toStarlark(source, val)
-			if err != nil {
-				return nil, err
-			}
-			dict.SetKey(k, v)
-		}
-		return dict, nil
-	case *actionpb.Value_Message:
-		m, err := v.Message.UnmarshalNew()
-		if err != nil {
-			return nil, err
-		}
-		return starlarkproto.NewMessage(m.ProtoReflect(), nil, nil)
-	default:
-		return nil, fmt.Errorf("unknown proto type: %T", v)
-	}
-}
-
-func toValue(value starlark.Value) (*actionpb.Value, error) {
-	switch v := value.(type) {
-	case *starlarkrule.Label:
-		return &actionpb.Value{
-			Kind: &actionpb.Value_LabelValue{LabelValue: v.Key()},
-		}, nil
-	case starlark.Bool:
-		return &actionpb.Value{
-			Kind: &actionpb.Value_BoolValue{BoolValue: bool(v)},
-		}, nil
-	case starlark.Int:
-		x, _ := v.Int64()
-		return &actionpb.Value{
-			Kind: &actionpb.Value_IntValue{IntValue: x},
-		}, nil
-	case starlark.Float:
-		return &actionpb.Value{
-			Kind: &actionpb.Value_FloatValue{FloatValue: float64(v)},
-		}, nil
-	case starlark.String:
-		return &actionpb.Value{
-			Kind: &actionpb.Value_StringValue{StringValue: string(v)},
-		}, nil
-	case starlark.Bytes:
-		return &actionpb.Value{
-			Kind: &actionpb.Value_BytesValue{BytesValue: []byte(v)},
-		}, nil
-	case *starlark.List:
-		n := v.Len()
-		values := make([]*actionpb.Value, n)
-		for i := 0; i < n; i++ {
-			val, err := toValue(v.Index(i))
-			if err != nil {
-				return nil, err
-			}
-			values[i] = val
-		}
-
-		return &actionpb.Value{
-			Kind: &actionpb.Value_ListValue{ListValue: &actionpb.ListValue{
-				Values: values,
-			}},
-		}, nil
-	case *starlark.Dict:
-		items := v.Items()
-		pairs := make([]*actionpb.Value, 0, 2*len(items))
-		for _, kv := range items {
-			key, err := toValue(kv[0])
-			if err != nil {
-				return nil, err
-			}
-			val, err := toValue(kv[1])
-			if err != nil {
-				return nil, err
-			}
-			pairs = append(pairs, key, val)
-		}
-
-		return &actionpb.Value{
-			Kind: &actionpb.Value_DictValue{DictValue: &actionpb.DictValue{
-				Pairs: pairs,
-			}},
-		}, nil
-	default:
-		return nil, fmt.Errorf("unknown starlark type: %q", v.Type())
-	}
-}
-
 func makeKwargs(source *starlarkrule.Label, attrs []starlarkrule.AttrName, target *actionpb.Target) (*starlarkrule.Kwargs, error) {
 	kwargs := make([]starlark.Tuple, 0, len(target.Kwargs)+1)
 	kwargs = append(kwargs, starlark.Tuple{
 		starlark.String("name"), starlark.String(target.Name),
 	})
 	for key, val := range target.Kwargs {
-		value, err := toStarlark(source, val)
+		value, err := starlarkrule.ToStar(val)
 		if err != nil {
 			return nil, err
 		}
@@ -659,16 +536,14 @@ func (s *Server) ExecuteAction(ctx context.Context, req *workerpb.ExecuteActionR
 
 	var deps []*starlarkrule.Action
 	for _, dpb := range apb.Deps {
-		var values []starlarkrule.KindValue
+		var values []starlark.Value
 		for _, vpb := range dpb.Values {
 
-			v, err := toStarlark(label, vpb)
+			v, err := starlarkrule.ToStar(vpb)
 			if err != nil {
 				return nil, err
 			}
-			kv := starlarkrule.ToKindValue(v)
-
-			values = append(values, kv)
+			values = append(values, v)
 		}
 
 		l, err := label.Parse(dpb.GetTarget().GetName())
@@ -740,13 +615,17 @@ func (s *Server) ExecuteAction(ctx context.Context, req *workerpb.ExecuteActionR
 	fmt.Println(buf.String())
 	fmt.Println("---")
 
-	apb.Values = make([]*actionpb.Value, len(a.Values))
+	apb.Values = make([]*anypb.Any, len(a.Values))
 	for i, v := range a.Values {
-		val, err := toValue(v.Value)
+		val, err := starlarkrule.ToProto(v)
 		if err != nil {
 			return nil, err
 		}
-		apb.Values[i] = val
+		anyVal, err := anypb.New(val)
+		if err != nil {
+			return nil, err
+		}
+		apb.Values[i] = anyVal
 	}
 
 	if a.Error != nil {

@@ -36,8 +36,6 @@ func NewAttrModule() *starlarkstruct.Module {
 	}
 }
 
-//type Kind int
-
 var (
 	TypeLabel  = (&actionpb.LabelValue{}).ProtoReflect().Descriptor().FullName()
 	TypeBool   = (&wrapperspb.BoolValue{}).ProtoReflect().Descriptor().FullName()
@@ -49,8 +47,8 @@ var (
 	TypeDict   = (&actionpb.DictValue{}).ProtoReflect().Descriptor().FullName()
 )
 
-// toStar promotes known types back to starlark.
-func toStar(msg proto.Message) (starlark.Value, error) {
+// ToStar promotes known types back to starlark.
+func ToStar(msg proto.Message) (starlark.Value, error) {
 	switch x := (msg).(type) {
 	case *actionpb.LabelValue:
 		return ParseLabel(x.Value)
@@ -73,7 +71,7 @@ func toStar(msg proto.Message) (starlark.Value, error) {
 				return nil, err
 			}
 
-			v, err := toStar(y)
+			v, err := ToStar(y)
 			if err != nil {
 				return nil, err
 			}
@@ -84,11 +82,11 @@ func toStar(msg proto.Message) (starlark.Value, error) {
 		d := starlark.NewDict(len(x.Entries))
 
 		for _, entry := range x.Entries {
-			key, err := toStar(entry.Key)
+			key, err := ToStar(entry.Key)
 			if err != nil {
 				return nil, err
 			}
-			val, err := toStar(entry.Value)
+			val, err := ToStar(entry.Value)
 			if err != nil {
 				return nil, err
 			}
@@ -103,7 +101,7 @@ func toStar(msg proto.Message) (starlark.Value, error) {
 	}
 }
 
-func toProto(value starlark.Value) (proto.Message, error) {
+func ToProto(value starlark.Value) (proto.Message, error) {
 	switch x := (value).(type) {
 	case *Label:
 		return &actionpb.LabelValue{Value: x.String()}, nil
@@ -127,7 +125,7 @@ func toProto(value starlark.Value) (proto.Message, error) {
 		iter := x.Iterate()
 		var p starlark.Value
 		for iter.Next(&p) {
-			y, err := toProto(p)
+			y, err := ToProto(p)
 			if err != nil {
 				return nil, err
 			}
@@ -147,11 +145,11 @@ func toProto(value starlark.Value) (proto.Message, error) {
 		for _, item := range x.Items() {
 			key, val := item[0], item[1]
 
-			keyProto, err := toProto(key)
+			keyProto, err := ToProto(key)
 			if err != nil {
 				return nil, err
 			}
-			valProto, err := toProto(val)
+			valProto, err := ToProto(val)
 			if err != nil {
 				return nil, err
 			}

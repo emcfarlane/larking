@@ -1,0 +1,588 @@
+name: "Swagger Petstore"
+types: {
+  name: "ApiResponse"
+  fields: {
+    name: "code"
+    type: "integer"
+    format: "int32"
+  }
+  fields: {
+    name: "type"
+    type: "string"
+  }
+  fields: {
+    name: "message"
+    type: "string"
+  }
+}
+types: {
+  name: "Category"
+  fields: {
+    name: "id"
+    type: "integer"
+    format: "int64"
+  }
+  fields: {
+    name: "name"
+    type: "string"
+  }
+}
+types: {
+  name: "Pet"
+  fields: {
+    name: "id"
+    type: "integer"
+    format: "int64"
+  }
+  fields: {
+    name: "category"
+    type: "Category"
+    kind: REFERENCE
+  }
+  fields: {
+    name: "name"
+    type: "string"
+  }
+  fields: {
+    name: "photoUrls"
+    type: "string"
+    kind: ARRAY
+  }
+  fields: {
+    name: "tags"
+    type: "Tag"
+    kind: ARRAY
+  }
+  fields: {
+    name: "status"
+    type: "string"
+  }
+}
+types: {
+  name: "Tag"
+  fields: {
+    name: "id"
+    type: "integer"
+    format: "int64"
+  }
+  fields: {
+    name: "name"
+    type: "string"
+  }
+}
+types: {
+  name: "Order"
+  fields: {
+    name: "id"
+    type: "integer"
+    format: "int64"
+  }
+  fields: {
+    name: "petId"
+    type: "integer"
+    format: "int64"
+  }
+  fields: {
+    name: "quantity"
+    type: "integer"
+    format: "int32"
+  }
+  fields: {
+    name: "shipDate"
+    type: "string"
+    format: "date-time"
+  }
+  fields: {
+    name: "status"
+    type: "string"
+  }
+  fields: {
+    name: "complete"
+    type: "boolean"
+  }
+}
+types: {
+  name: "User"
+  fields: {
+    name: "id"
+    type: "integer"
+    format: "int64"
+  }
+  fields: {
+    name: "username"
+    type: "string"
+  }
+  fields: {
+    name: "firstName"
+    type: "string"
+  }
+  fields: {
+    name: "lastName"
+    type: "string"
+  }
+  fields: {
+    name: "email"
+    type: "string"
+  }
+  fields: {
+    name: "password"
+    type: "string"
+  }
+  fields: {
+    name: "phone"
+    type: "string"
+  }
+  fields: {
+    name: "userStatus"
+    type: "integer"
+    format: "int32"
+  }
+}
+types: {
+  name: "POST_pet_petId_uploadImageParameters"
+  description: "POST_pet_petId_uploadImageParameters holds parameters to POST_pet_petId_uploadImage"
+  fields: {
+    name: "petId"
+    type: "integer"
+    format: "int64"
+    position: PATH
+  }
+  fields: {
+    name: "additionalMetadata"
+    type: "string"
+    position: FORMDATA
+  }
+  fields: {
+    name: "file"
+    type: "string"
+    position: FORMDATA
+  }
+}
+types: {
+  name: "POST_pet_petId_uploadImageResponses"
+  description: "POST_pet_petId_uploadImageResponses holds responses of POST_pet_petId_uploadImage"
+  fields: {
+    name: "200"
+    type: "ApiResponse"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "UpdatePetParameters"
+  description: "UpdatePetParameters holds parameters to UpdatePet"
+  fields: {
+    name: "body"
+    type: "Pet"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "AddPetParameters"
+  description: "AddPetParameters holds parameters to AddPet"
+  fields: {
+    name: "body"
+    type: "Pet"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "FindPetsByStatusParameters"
+  description: "FindPetsByStatusParameters holds parameters to FindPetsByStatus"
+  fields: {
+    name: "status"
+    type: "string"
+    kind: ARRAY
+    position: QUERY
+  }
+}
+types: {
+  name: "FindPetsByStatusResponses"
+  description: "FindPetsByStatusResponses holds responses of FindPetsByStatus"
+  fields: {
+    name: "200"
+    type: "Pet"
+    kind: ARRAY
+  }
+}
+types: {
+  name: "FindPetsByTagsParameters"
+  description: "FindPetsByTagsParameters holds parameters to FindPetsByTags"
+  fields: {
+    name: "tags"
+    type: "string"
+    kind: ARRAY
+    position: QUERY
+  }
+}
+types: {
+  name: "FindPetsByTagsResponses"
+  description: "FindPetsByTagsResponses holds responses of FindPetsByTags"
+  fields: {
+    name: "200"
+    type: "Pet"
+    kind: ARRAY
+  }
+}
+types: {
+  name: "GetPetByIdParameters"
+  description: "GetPetByIdParameters holds parameters to GetPetById"
+  fields: {
+    name: "petId"
+    type: "integer"
+    format: "int64"
+    position: PATH
+  }
+}
+types: {
+  name: "GetPetByIdResponses"
+  description: "GetPetByIdResponses holds responses of GetPetById"
+  fields: {
+    name: "200"
+    type: "Pet"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "UpdatePetWithFormParameters"
+  description: "UpdatePetWithFormParameters holds parameters to UpdatePetWithForm"
+  fields: {
+    name: "petId"
+    type: "integer"
+    format: "int64"
+    position: PATH
+  }
+  fields: {
+    name: "name"
+    type: "string"
+    position: FORMDATA
+  }
+  fields: {
+    name: "status"
+    type: "string"
+    position: FORMDATA
+  }
+}
+types: {
+  name: "DeletePetParameters"
+  description: "DeletePetParameters holds parameters to DeletePet"
+  fields: {
+    name: "api_key"
+    type: "string"
+    position: HEADER
+  }
+  fields: {
+    name: "petId"
+    type: "integer"
+    format: "int64"
+    position: PATH
+  }
+}
+types: {
+  name: "PlaceOrderParameters"
+  description: "PlaceOrderParameters holds parameters to PlaceOrder"
+  fields: {
+    name: "body"
+    type: "Order"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "PlaceOrderResponses"
+  description: "PlaceOrderResponses holds responses of PlaceOrder"
+  fields: {
+    name: "200"
+    type: "Order"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "GetOrderByIdParameters"
+  description: "GetOrderByIdParameters holds parameters to GetOrderById"
+  fields: {
+    name: "orderId"
+    type: "integer"
+    format: "int64"
+    position: PATH
+  }
+}
+types: {
+  name: "GetOrderByIdResponses"
+  description: "GetOrderByIdResponses holds responses of GetOrderById"
+  fields: {
+    name: "200"
+    type: "Order"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "DeleteOrderParameters"
+  description: "DeleteOrderParameters holds parameters to DeleteOrder"
+  fields: {
+    name: "orderId"
+    type: "integer"
+    format: "int64"
+    position: PATH
+  }
+}
+types: {
+  name: "getInventoryOK"
+  fields: {
+    name: "additional_properties"
+    type: "map[string]int32"
+    kind: MAP
+  }
+}
+types: {
+  name: "GetInventoryResponses"
+  description: "GetInventoryResponses holds responses of GetInventory"
+  fields: {
+    name: "200"
+    type: "getInventoryOK"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "CreateUsersWithArrayInputParameters"
+  description: "CreateUsersWithArrayInputParameters holds parameters to CreateUsersWithArrayInput"
+  fields: {
+    name: "body"
+    type: "User"
+    kind: ARRAY
+  }
+}
+types: {
+  name: "CreateUsersWithListInputParameters"
+  description: "CreateUsersWithListInputParameters holds parameters to CreateUsersWithListInput"
+  fields: {
+    name: "body"
+    type: "User"
+    kind: ARRAY
+  }
+}
+types: {
+  name: "GetUserByNameParameters"
+  description: "GetUserByNameParameters holds parameters to GetUserByName"
+  fields: {
+    name: "username"
+    type: "string"
+    position: PATH
+  }
+}
+types: {
+  name: "GetUserByNameResponses"
+  description: "GetUserByNameResponses holds responses of GetUserByName"
+  fields: {
+    name: "200"
+    type: "User"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "UpdateUserParameters"
+  description: "UpdateUserParameters holds parameters to UpdateUser"
+  fields: {
+    name: "username"
+    type: "string"
+    position: PATH
+  }
+  fields: {
+    name: "body"
+    type: "User"
+    kind: REFERENCE
+  }
+}
+types: {
+  name: "DeleteUserParameters"
+  description: "DeleteUserParameters holds parameters to DeleteUser"
+  fields: {
+    name: "username"
+    type: "string"
+    position: PATH
+  }
+}
+types: {
+  name: "LoginUserParameters"
+  description: "LoginUserParameters holds parameters to LoginUser"
+  fields: {
+    name: "username"
+    type: "string"
+    position: QUERY
+  }
+  fields: {
+    name: "password"
+    type: "string"
+    position: QUERY
+  }
+}
+types: {
+  name: "LoginUserResponses"
+  description: "LoginUserResponses holds responses of LoginUser"
+  fields: {
+    name: "200"
+    type: "string"
+  }
+}
+types: {
+  name: "CreateUserParameters"
+  description: "CreateUserParameters holds parameters to CreateUser"
+  fields: {
+    name: "body"
+    type: "User"
+    kind: REFERENCE
+  }
+}
+methods: {
+  path: "/pet/{petId}/uploadImage"
+  method: "POST"
+  name: "POST_pet_petId_uploadImage"
+  parameters_type_name: "POST_pet_petId_uploadImageParameters"
+  responses_type_name: "POST_pet_petId_uploadImageResponses"
+}
+methods: {
+  operation: "updatePet"
+  path: "/pet"
+  method: "PUT"
+  name: "UpdatePet"
+  parameters_type_name: "UpdatePetParameters"
+}
+methods: {
+  operation: "addPet"
+  path: "/pet"
+  method: "POST"
+  name: "AddPet"
+  parameters_type_name: "AddPetParameters"
+}
+methods: {
+  operation: "findPetsByStatus"
+  path: "/pet/findByStatus"
+  method: "GET"
+  description: "Multiple status values can be provided with comma separated strings"
+  name: "FindPetsByStatus"
+  parameters_type_name: "FindPetsByStatusParameters"
+  responses_type_name: "FindPetsByStatusResponses"
+}
+methods: {
+  operation: "findPetsByTags"
+  path: "/pet/findByTags"
+  method: "GET"
+  description: "Multiple tags can be provided with comma separated strings. Use tag1, tag2, tag3 for testing."
+  name: "FindPetsByTags"
+  parameters_type_name: "FindPetsByTagsParameters"
+  responses_type_name: "FindPetsByTagsResponses"
+}
+methods: {
+  operation: "getPetById"
+  path: "/pet/{petId}"
+  method: "GET"
+  description: "Returns a single pet"
+  name: "GetPetById"
+  parameters_type_name: "GetPetByIdParameters"
+  responses_type_name: "GetPetByIdResponses"
+}
+methods: {
+  operation: "updatePetWithForm"
+  path: "/pet/{petId}"
+  method: "POST"
+  name: "UpdatePetWithForm"
+  parameters_type_name: "UpdatePetWithFormParameters"
+}
+methods: {
+  operation: "deletePet"
+  path: "/pet/{petId}"
+  method: "DELETE"
+  name: "DeletePet"
+  parameters_type_name: "DeletePetParameters"
+}
+methods: {
+  operation: "placeOrder"
+  path: "/store/order"
+  method: "POST"
+  name: "PlaceOrder"
+  parameters_type_name: "PlaceOrderParameters"
+  responses_type_name: "PlaceOrderResponses"
+}
+methods: {
+  operation: "getOrderById"
+  path: "/store/order/{orderId}"
+  method: "GET"
+  description: "For valid response try integer IDs with value >= 1 and <= 10. Other values will generated exceptions"
+  name: "GetOrderById"
+  parameters_type_name: "GetOrderByIdParameters"
+  responses_type_name: "GetOrderByIdResponses"
+}
+methods: {
+  operation: "deleteOrder"
+  path: "/store/order/{orderId}"
+  method: "DELETE"
+  description: "For valid response try integer IDs with positive integer value. Negative or non-integer values will generate API errors"
+  name: "DeleteOrder"
+  parameters_type_name: "DeleteOrderParameters"
+}
+methods: {
+  operation: "getInventory"
+  path: "/store/inventory"
+  method: "GET"
+  description: "Returns a map of status codes to quantities"
+  name: "GetInventory"
+  responses_type_name: "GetInventoryResponses"
+}
+methods: {
+  operation: "createUsersWithArrayInput"
+  path: "/user/createWithArray"
+  method: "POST"
+  name: "CreateUsersWithArrayInput"
+  parameters_type_name: "CreateUsersWithArrayInputParameters"
+}
+methods: {
+  operation: "createUsersWithListInput"
+  path: "/user/createWithList"
+  method: "POST"
+  name: "CreateUsersWithListInput"
+  parameters_type_name: "CreateUsersWithListInputParameters"
+}
+methods: {
+  operation: "getUserByName"
+  path: "/user/{username}"
+  method: "GET"
+  name: "GetUserByName"
+  parameters_type_name: "GetUserByNameParameters"
+  responses_type_name: "GetUserByNameResponses"
+}
+methods: {
+  operation: "updateUser"
+  path: "/user/{username}"
+  method: "PUT"
+  description: "This can only be done by the logged in user."
+  name: "UpdateUser"
+  parameters_type_name: "UpdateUserParameters"
+}
+methods: {
+  operation: "deleteUser"
+  path: "/user/{username}"
+  method: "DELETE"
+  description: "This can only be done by the logged in user."
+  name: "DeleteUser"
+  parameters_type_name: "DeleteUserParameters"
+}
+methods: {
+  operation: "loginUser"
+  path: "/user/login"
+  method: "GET"
+  name: "LoginUser"
+  parameters_type_name: "LoginUserParameters"
+  responses_type_name: "LoginUserResponses"
+}
+methods: {
+  operation: "logoutUser"
+  path: "/user/logout"
+  method: "GET"
+  name: "LogoutUser"
+}
+methods: {
+  operation: "createUser"
+  path: "/user"
+  method: "POST"
+  description: "This can only be done by the logged in user."
+  name: "CreateUser"
+  parameters_type_name: "CreateUserParameters"
+}

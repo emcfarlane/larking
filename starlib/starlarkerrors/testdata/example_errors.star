@@ -1,9 +1,11 @@
 load("std.star", "errors")
 
+
 def assert_even(x):
     if x % 2 != 0:
         fail("odd")
     return x
+
 
 def test_catch(t):
     # catch the error and check the result.
@@ -14,7 +16,8 @@ def test_catch(t):
 
     # Error values can be accessed by the .err attribute.
     res = errors.catch(assert_even, 3)
-    t.eq(res.val, None)
+    t.true(res.err.matches("odd"))
+
 
 def test_sequence_assigment(t):
     # try the function, and return the result if it succeeds.
