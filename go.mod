@@ -19,7 +19,7 @@ require (
 )
 
 require (
-	github.com/gin-gonic/gin v1.7.3 // indirect
+	github.com/gin-gonic/gin v1.7.7 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/klauspost/compress v1.16.0 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
