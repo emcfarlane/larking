@@ -7,31 +7,40 @@ package larking
 import (
 	"context"
 
-	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 )
 
 type logStream struct {
 	grpc.ServerStream
-	log logr.Logger
+	info  *grpc.StreamServerInfo
+	ctxFn NewContextFunc
 }
 
 func (s logStream) Context() context.Context {
-	return logr.NewContext(s.ServerStream.Context(), s.log)
+	return s.ctxFn(s.ServerStream.Context(), s.info.FullMethod, s.info.IsClientStream, s.info.IsServerStream)
 }
 
-func NewUnaryContextLogr(log logr.Logger) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		ctx = logr.NewContext(ctx, log)
+// NewContextFunc is a function that creates a new context for a request.
+// The returned context is used for the duration of the request.
+type NewContextFunc func(ctx context.Context, fullMethod string, isClientStream, isServerStream bool) context.Context
+
+// NewUnaryContext returns a UnaryServerInterceptor that calls ctxFn to
+// create a new context for each request.
+func NewUnaryContext(ctxFn NewContextFunc) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		ctx = ctxFn(ctx, info.FullMethod, false, false)
 		return handler(ctx, req)
 	}
 }
 
-func NewStreamContextLogr(log logr.Logger) grpc.StreamServerInterceptor {
-	return func(srv interface{}, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+// NewStreamContext returns a StreamServerInterceptor that calls ctxFn to
+// create a new context for each request.
+func NewStreamContext(ctxFn NewContextFunc) grpc.StreamServerInterceptor {
+	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		return handler(srv, logStream{
 			ServerStream: ss,
-			log:          log,
+			info:         info,
+			ctxFn:        ctxFn,
 		})
 	}
 }

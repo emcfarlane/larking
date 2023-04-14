@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"golang.org/x/net/trace"
@@ -180,7 +179,6 @@ const (
 type serverOptions struct {
 	tlsConfig *tls.Config
 	insecure  bool
-	log       logr.Logger
 
 	muxPatterns []string
 	serveMux    *http.ServeMux
@@ -210,13 +208,6 @@ func InsecureServerOption() ServerOption {
 //		return nil
 //	}
 //}
-
-func LogOption(log logr.Logger) ServerOption {
-	return func(opts *serverOptions) error {
-		opts.log = log
-		return nil
-	}
-}
 
 func MuxHandleOption(patterns ...string) ServerOption {
 	return func(opts *serverOptions) error {

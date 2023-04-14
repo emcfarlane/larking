@@ -21,8 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-logr/logr"
-	testing_logr "github.com/go-logr/logr/testing"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -41,8 +39,6 @@ import (
 
 func testContext(t *testing.T) context.Context {
 	ctx := context.Background()
-	log := testing_logr.NewTestLogger(t)
-	ctx = logr.NewContext(ctx, log)
 	return ctx
 }
 
