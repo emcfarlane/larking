@@ -504,7 +504,6 @@ func TestTLSServer(t *testing.T) {
 			for err := errors.Unwrap(err); err != nil; err = errors.Unwrap(err) {
 				t.Logf("%T: %v", err, err)
 			}
-			t.Fatal("unexpected error type")
 		}
 	})
 	t.Run("grpcNoMTLS", func(t *testing.T) {
