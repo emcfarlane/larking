@@ -4,7 +4,7 @@
  / ) )
  /|^^
 ```
-[Go Reference](https://pkg.go.dev/badge/larking.io.svg)](https://pkg.go.dev/larking.io/larking)
+[![Go Reference](https://pkg.go.dev/badge/larking.io.svg)](https://pkg.go.dev/larking.io/larking)
 
 Larking is a reflective gRPC transcoding handler. Easily serve REST api's from gRPC services. Proxy other language servers using gRPC reflection. See the examples for details!
 
