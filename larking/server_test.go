@@ -35,8 +35,8 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 
 	"larking.io/api/healthpb"
+	"larking.io/api/testpb"
 	"larking.io/health"
-	"larking.io/testpb"
 )
 
 func testContext(t *testing.T) context.Context {

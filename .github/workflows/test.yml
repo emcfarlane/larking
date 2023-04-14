@@ -22,4 +22,4 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
     - name: Test
-      run: go test -race ./...
+      run: go test -race ./larking

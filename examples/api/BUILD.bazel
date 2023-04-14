@@ -1,3 +1,5 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
 #load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
@@ -7,7 +9,8 @@ load("@io_grpc_grpc_java//:java_grpc_library.bzl", "java_grpc_library")
 proto_library(
     name = "helloworld_proto",
     srcs = ["helloworld.proto"],
-    deps = ["@googleapis//google/api:annotations_proto"],
+    visibility = ["//visibility:public"],
+    deps = ["@go_googleapis//google/api:annotations_proto"],
 )
 
 cc_proto_library(
@@ -40,7 +43,8 @@ java_grpc_library(
 proto_library(
     name = "hellostream_proto",
     srcs = ["hellostream.proto"],
-    deps = ["@googleapis//google/api:annotations_proto"],
+    visibility = ["//visibility:public"],
+    deps = ["@go_googleapis//google/api:annotations_proto"],
 )
 
 cc_proto_library(
@@ -117,3 +121,26 @@ go_proto_library(
 #        "@org_golang_google_protobuf//runtime/protoimpl:go_default_library",
 #    ],
 #)
+
+go_proto_library(
+    name = "proto_go_proto",
+    compilers = ["@io_bazel_rules_go//proto:go_grpc"],
+    importpath = "larking.io/example/proto/hellostream",
+    proto = ":hellostream_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@go_googleapis//google/api:annotations_go_proto"],
+)
+
+go_library(
+    name = "helloworld",
+    embed = [":proto_go_proto"],
+    importpath = "larking.io/example/proto/helloworld",
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "hellostream",
+    embed = [":proto_go_proto"],
+    importpath = "larking.io/example/proto/hellostream",
+    visibility = ["//visibility:public"],
+)

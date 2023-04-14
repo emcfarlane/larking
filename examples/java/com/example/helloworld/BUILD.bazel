@@ -8,8 +8,8 @@ java_library(
         "@io_grpc_grpc_java//netty",
     ],
     deps = [
-        "//examples/proto:helloworld_java_grpc",
-        "//examples/proto:helloworld_java_proto",
+        "//examples/api:helloworld_java_grpc",
+        "//examples/api:helloworld_java_proto",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
         "@io_grpc_grpc_java//api",

@@ -16,6 +16,18 @@ go_library(
 
 go_binary(
     name = "helloworld",
-    embed = [":go_default_library"],
+    embed = [":helloworld_lib"],
     visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "helloworld_lib",
+    srcs = ["main.go"],
+    importpath = "larking.io/examples/go/helloworld",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_soheilhy_cmux//:cmux",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//reflection",
+    ],
 )

@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"larking.io/testpb"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
+	"larking.io/api/testpb"
 	"nhooyr.io/websocket"
 )
 

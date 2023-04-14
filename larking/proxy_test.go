@@ -18,8 +18,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"larking.io/testpb"
 	"golang.org/x/sync/errgroup"
+	"larking.io/api/testpb"
 )
 
 func TestGRPCProxy(t *testing.T) {

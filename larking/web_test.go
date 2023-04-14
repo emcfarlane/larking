@@ -18,7 +18,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
-	"larking.io/testpb"
+	"larking.io/api/testpb"
 )
 
 func TestWeb(t *testing.T) {

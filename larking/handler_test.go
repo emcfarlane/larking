@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
-	"larking.io/testpb"
+	"larking.io/api/testpb"
 )
 
 func TestHandler(t *testing.T) {
