@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -457,18 +458,20 @@ func TestMessageServer(t *testing.T) {
 		req: httptest.NewRequest(
 			http.MethodGet,
 			"/v1/wellknown?"+
-				"timestamp=\"2017-01-15T01:30:15.01Z\"&"+
-				"duration=\"3.000001s\"&"+
-				"bool_value=true&"+
-				"int32_value=1&"+
-				"int64_value=2&"+
-				"uint32_value=3&"+
-				"uint64_value=4&"+
-				"float_value=5.5&"+
-				"double_value=6.6&"+
-				"bytes_value=aGVsbG8&"+ // base64URL
-				"string_value=hello&"+
-				"field_mask=\"user.displayName,photo\"",
+				url.Values{
+					"timestamp":    []string{"2017-01-15T01:30:15.01Z"},
+					"duration":     []string{"3.000001s"},
+					"bool_value":   []string{"true"},
+					"int32_value":  []string{"1"},
+					"int64_value":  []string{"2"},
+					"uint32_value": []string{"3"},
+					"uint64_value": []string{"4"},
+					"float_value":  []string{"5.5"},
+					"double_value": []string{"6.6"},
+					"bytes_value":  []string{"aGVsbG8"}, // base64URL
+					"string_value": []string{"hello"},
+					"field_mask":   []string{"user.displayName,photo"},
+				}.Encode(),
 			nil,
 		),
 		in: in{

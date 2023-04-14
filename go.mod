@@ -28,5 +28,3 @@ require (
 	golang.org/x/text v0.9.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
-
-replace github.com/bazelbuild/buildtools => github.com/emcfarlane/buildtools v0.0.0-20220216022904-2d8ccb57d4be

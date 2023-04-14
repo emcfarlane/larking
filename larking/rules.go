@@ -407,6 +407,13 @@ func (p *path) addRule(
 	return nil
 }
 
+func quote(raw []byte) []byte {
+	if n := len(raw); n > 0 && (raw[0] != '"' || raw[n-1] != '"') {
+		raw = strconv.AppendQuote(raw[:0], string(raw))
+	}
+	return raw
+}
+
 type param struct {
 	fds []protoreflect.FieldDescriptor
 	val protoreflect.Value
@@ -510,13 +517,13 @@ func parseParam(fds []protoreflect.FieldDescriptor, raw []byte) (param, error) {
 		switch md.FullName() {
 		case "google.protobuf.Timestamp":
 			var msg timestamppb.Timestamp
-			if err := protojson.Unmarshal(raw, &msg); err != nil {
+			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
 				return param{}, err
 			}
 			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		case "google.protobuf.Duration":
 			var msg durationpb.Duration
-			if err := protojson.Unmarshal(raw, &msg); err != nil {
+			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
 				return param{}, err
 			}
 			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
@@ -563,27 +570,21 @@ func parseParam(fds []protoreflect.FieldDescriptor, raw []byte) (param, error) {
 			}
 			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		case "google.protobuf.BytesValue":
-			if n := len(raw); n > 0 && (raw[0] != '"' || raw[n-1] != '"') {
-				raw = []byte(strconv.Quote(string(raw)))
-			}
 			var msg wrapperspb.BytesValue
-			if err := protojson.Unmarshal(raw, &msg); err != nil {
+			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
 				return param{}, err
 			}
 			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		case "google.protobuf.StringValue":
-			if n := len(raw); n > 0 && (raw[0] != '"' || raw[n-1] != '"') {
-				raw = []byte(strconv.Quote(string(raw)))
-			}
 			var msg wrapperspb.StringValue
-			if err := protojson.Unmarshal(raw, &msg); err != nil {
+			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
 				return param{}, err
 			}
 			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 
 		case "google.protobuf.FieldMask":
 			var msg fieldmaskpb.FieldMask
-			if err := protojson.Unmarshal(raw, &msg); err != nil {
+			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
 				return param{}, err
 			}
 			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
@@ -692,7 +693,8 @@ func (v *variable) index(toks tokens) int {
 
 // Depth first search preferring path segments over variables.
 // Variables split the search tree:
-//     /path/{variable/*}/to/{end/**} ?:VERB
+//
+//	/path/{variable/*}/to/{end/**} ?:VERB
 func (p *path) search(toks tokens, verb string) (*method, params, error) {
 	if n := len(toks); n <= 1 {
 		if m, ok := p.methods[verb]; ok {
@@ -706,10 +708,6 @@ func (p *path) search(toks tokens, verb string) (*method, params, error) {
 
 	tt, tv := toks[0], toks[1]
 	segment := tt.val + tv.val
-
-	//fmt.Println("------------------")
-	//fmt.Println("~", segment, "~")
-	//defer fmt.Println("search end")
 
 	if next, ok := p.segments[segment]; ok {
 		if m, ps, err := next.search(toks[2:], verb); err == nil {
