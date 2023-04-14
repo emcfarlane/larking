@@ -501,12 +501,11 @@ func TestTLSServer(t *testing.T) {
 		if errors.As(err, &nerr) {
 			t.Log("nerr", nerr)
 		} else {
-			t.Fatal("unknown error:", err)
+			for err := errors.Unwrap(err); err != nil; err = errors.Unwrap(err) {
+				t.Logf("%T: %v", err, err)
+			}
+			t.Fatal("unexpected error type")
 		}
-		//for err != nil {
-		//	t.Logf("%T", err)
-		//	err = errors.Unwrap(err)
-		//}
 	})
 	t.Run("grpcNoMTLS", func(t *testing.T) {
 		creds := credentials.NewTLS(tlsInsecure)
