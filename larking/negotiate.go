@@ -72,16 +72,6 @@ func skipSpace(s string) (rest string) {
 	return s[i:]
 }
 
-func expectToken(s string) (token, rest string) {
-	i := 0
-	for ; i < len(s); i++ {
-		if octetTypes[s[i]]&isToken == 0 {
-			break
-		}
-	}
-	return s[:i], s[i:]
-}
-
 func expectTokenSlash(s string) (token, rest string) {
 	i := 0
 	for ; i < len(s); i++ {

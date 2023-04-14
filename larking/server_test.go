@@ -246,7 +246,7 @@ func createCertificateAuthority() ([]byte, []byte, error) {
 		Subject: pkix.Name{
 			Organization: []string{"Acme Co"},
 		},
-		NotBefore:             time.Now(),
+		NotBefore:             time.Now().AddDate(-1, 0, 0),
 		NotAfter:              time.Now().AddDate(10, 0, 0),
 		IsCA:                  true,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
@@ -305,7 +305,7 @@ func createCertificate(caCertPEM, caKeyPEM []byte, commonName string) ([]byte, [
 			net.IPv4(0, 0, 0, 0),
 			net.IPv6zero,
 		},
-		NotBefore:    time.Now(),
+		NotBefore:    time.Now().AddDate(-1, 0, 0),
 		NotAfter:     time.Now().AddDate(10, 0, 0),
 		SubjectKeyId: []byte{1, 2, 3, 4, 6},
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
