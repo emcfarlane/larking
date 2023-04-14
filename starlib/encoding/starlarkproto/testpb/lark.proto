@@ -1,7 +1,0 @@
-syntax = "proto3";
-
-option go_package = "larking.io/starlarkproto/testpb";
-
-package starlarkproto.test;
-
-message Another {}

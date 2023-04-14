@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.examples.hellostream";
+option java_outer_classname = "HelloStreamProto";
+option objc_class_prefix = "HLWS";
+option go_package = "larking.io/examples/proto/hellostream;proto";
+
+package hellostream;
+
+import "google/api/annotations.proto";
+
+// The greeting service definition.
+service StreamingGreeter {
+  // Streams a many greetings
+  rpc SayHelloStreaming(stream HelloRequest) returns (stream HelloReply) {
+    option (google.api.http) = {
+      post : "/hello"
+    };
+  }
+}
+
+// The request message containing the user's name.
+message HelloRequest { string name = 1; }
+
+// The response message containing the greetings
+message HelloReply { string message = 1; }
