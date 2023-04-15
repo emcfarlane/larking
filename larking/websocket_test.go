@@ -1,12 +1,16 @@
 package larking
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -14,8 +18,17 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 	"larking.io/api/testpb"
-	"nhooyr.io/websocket"
 )
+
+type wsHeader http.Header
+
+func (h wsHeader) WriteTo(w io.Writer) (int64, error) {
+	var buf bytes.Buffer
+	if err := http.Header(h).Write(&buf); err != nil {
+		return 0, err
+	}
+	return io.Copy(w, &buf)
+}
 
 func TestWebsocket(t *testing.T) {
 	// Create test server.
@@ -112,15 +125,20 @@ func TestWebsocket(t *testing.T) {
 			ctx, cancel := context.WithTimeout(testContext(t), time.Minute)
 			defer cancel()
 
-			c, _, err := websocket.Dial(ctx, "ws://"+lis.Addr().String()+tt.path, &websocket.DialOptions{
-				HTTPHeader: map[string][]string{
-					"test": {tt.method},
-				},
-			})
+			urlStr := "ws://" + lis.Addr().String() + tt.path
+
+			// TODO: protocols and headers.
+			conn, _, _, err := ws.Dialer{
+				Header: wsHeader(
+					map[string][]string{
+						"test": {tt.method},
+					},
+				),
+			}.Dial(ctx, urlStr)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer c.Close(websocket.StatusNormalClosure, "the sky is falling")
+			defer conn.Close()
 
 			for i := 0; i < len(tt.client); i++ {
 				switch typ := tt.client[i].(type) {
@@ -129,16 +147,17 @@ func TestWebsocket(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if err := c.Write(ctx, websocket.MessageText, b); err != nil {
+					if err := wsutil.WriteClientMessage(conn, ws.OpText, b); err != nil {
 						t.Fatal(err)
 					}
+					t.Log("write", string(b))
 
 				case out:
-					mt, b, err := c.Read(ctx)
+					b, op, err := wsutil.ReadServerData(conn)
 					if err != nil {
-						t.Fatal(mt, err)
+						t.Fatal(op, err)
 					}
-					t.Log("b", string(b))
+					t.Log("read", string(b))
 
 					out := proto.Clone(typ.msg)
 					if err := protojson.Unmarshal(b, out); err != nil {
@@ -150,7 +169,6 @@ func TestWebsocket(t *testing.T) {
 					}
 				}
 			}
-			c.Close(websocket.StatusNormalClosure, "normal")
 		})
 	}
 }

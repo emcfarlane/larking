@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gobwas/ws"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc"
@@ -34,7 +35,6 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
-	"nhooyr.io/websocket"
 )
 
 // RO
@@ -875,14 +875,15 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if isWebsocket {
-		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{})
+		conn, _, _, err := ws.UpgradeHTTP(r, w)
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
 
 		stream := &streamWS{
 			ctx:    ctx,
-			conn:   c,
+			conn:   conn,
 			method: method,
 			params: params,
 		}
@@ -891,9 +892,16 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		if herr != nil {
 			s, _ := status.FromError(herr)
 			// TODO: limit message size.
-			c.Close(WSStatusCode(s.Code()), s.Message()) // TODO
+
+			code := WSStatusCode(s.Code())
+			f := ws.NewCloseFrame(ws.NewCloseFrameBody(code, s.Message()))
+			b, err := ws.CompileFrame(f)
+			if err != nil {
+				return err
+			}
+			conn.Write(b)
 		} else {
-			c.Close(websocket.StatusNormalClosure, "OK") // TODO
+			conn.Write(ws.CompiledClose)
 		}
 
 		// Handle stats.

@@ -2,20 +2,21 @@ package larking
 
 import (
 	"context"
-	"fmt"
+	"net"
 
+	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"nhooyr.io/websocket"
 )
 
 const kindWebsocket = "WEBSOCKET"
 
 type streamWS struct {
 	ctx  context.Context
-	conn *websocket.Conn
+	conn net.Conn
 
 	method *method
 	params params
@@ -56,7 +57,7 @@ func (s *streamWS) Context() context.Context {
 func (s *streamWS) SendMsg(v interface{}) error {
 	s.sendN += 1
 	reply := v.(proto.Message)
-	ctx := s.ctx
+	//ctx := s.ctx
 
 	cur := reply.ProtoReflect()
 	for _, fd := range s.method.resp {
@@ -70,7 +71,10 @@ func (s *streamWS) SendMsg(v interface{}) error {
 		return err
 	}
 
-	return s.conn.Write(ctx, websocket.MessageText, b)
+	if err := wsutil.WriteServerMessage(s.conn, ws.OpText, b); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *streamWS) RecvMsg(m interface{}) error {
@@ -85,12 +89,9 @@ func (s *streamWS) RecvMsg(m interface{}) error {
 
 		msg := cur.Interface()
 
-		mt, b, err := s.conn.Read(s.ctx)
+		b, _, err := wsutil.ReadClientData(s.conn)
 		if err != nil {
 			return err
-		}
-		if mt != websocket.MessageText {
-			return fmt.Errorf("invalid message type: %v", mt)
 		}
 
 		// TODO: contentType check?
