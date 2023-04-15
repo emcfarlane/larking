@@ -7,8 +7,8 @@ package larking
 import (
 	"net/http"
 
+	"github.com/gobwas/ws"
 	"google.golang.org/grpc/codes"
-	"nhooyr.io/websocket"
 )
 
 var codeToHTTPStatus = [...]int{
@@ -39,29 +39,29 @@ func HTTPStatusCode(c codes.Code) int {
 }
 
 // TODO: validate error codes.
-var codeToWSStatus = [...]websocket.StatusCode{
-	websocket.StatusNormalClosure,   // 0
-	websocket.StatusGoingAway,       // 1
-	websocket.StatusInternalError,   // 2
-	websocket.StatusUnsupportedData, // 3
-	websocket.StatusGoingAway,       // 4
-	websocket.StatusInternalError,   // 5
-	websocket.StatusInternalError,   // 6
-	websocket.StatusInternalError,   // 7
-	websocket.StatusInternalError,   // 8
-	websocket.StatusInternalError,   // 9
-	websocket.StatusInternalError,   // 10
-	websocket.StatusInternalError,   // 11
-	websocket.StatusUnsupportedData, // 12
-	websocket.StatusInternalError,   // 13
-	websocket.StatusInternalError,   // 14
-	websocket.StatusInternalError,   // 15
-	websocket.StatusPolicyViolation, // 16
+var codeToWSStatus = [...]ws.StatusCode{
+	ws.StatusNormalClosure,       // 0
+	ws.StatusGoingAway,           // 1
+	ws.StatusInternalServerError, // 2
+	ws.StatusUnsupportedData,     // 3
+	ws.StatusGoingAway,           // 4
+	ws.StatusInternalServerError, // 5
+	ws.StatusGoingAway,           // 6
+	ws.StatusInternalServerError, // 7
+	ws.StatusInternalServerError, // 8
+	ws.StatusInternalServerError, // 9
+	ws.StatusInternalServerError, // 10
+	ws.StatusInternalServerError, // 11
+	ws.StatusUnsupportedData,     // 12
+	ws.StatusInternalServerError, // 13
+	ws.StatusInternalServerError, // 14
+	ws.StatusInternalServerError, // 15
+	ws.StatusPolicyViolation,     // 16
 }
 
-func WSStatusCode(c codes.Code) websocket.StatusCode {
+func WSStatusCode(c codes.Code) ws.StatusCode {
 	if int(c) > len(codeToHTTPStatus) {
-		return websocket.StatusInternalError
+		return ws.StatusInternalServerError
 	}
 	return codeToWSStatus[c]
 }
