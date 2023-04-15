@@ -899,9 +899,13 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return err
 			}
-			conn.Write(b)
+			if _, err := conn.Write(b); err != nil {
+				return err
+			}
 		} else {
-			conn.Write(ws.CompiledClose)
+			if _, err := conn.Write(ws.CompiledClose); err != nil {
+				return err
+			}
 		}
 
 		// Handle stats.
