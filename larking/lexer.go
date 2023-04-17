@@ -20,30 +20,26 @@ import (
 //     FieldPath = IDENT { "." IDENT } ;
 //     Verb     = ":" LITERAL ;
 
-type tokenType int
+type tokenType uint16
 
 const (
-	tokenError         = iota
-	tokenSlash         // /
-	tokenStar          // *
-	tokenStarStar      // **
-	tokenVariableStart // {
-	tokenVariableEnd   // }
-	tokenEqual         // =
-	tokenValue         // a-z A-Z 0-9 - _
-	tokenDot           // .
-	tokenVerb          // :
-	tokenPath          // a-z A-Z 0-9 . - _ ~ ! $ & ' ( ) * + , ; = @
+	tokenError         tokenType = 0
+	tokenSlash         tokenType = 1 << iota // /
+	tokenStar                                // *
+	tokenStarStar                            // **
+	tokenVariableStart                       // {
+	tokenVariableEnd                         // }
+	tokenEqual                               // =
+	tokenValue                               // a-z A-Z 0-9 - _
+	tokenDot                                 // .
+	tokenVerb                                // :
+	tokenPath                                // a-z A-Z 0-9 . - _ ~ ! $ & ' ( ) * + , ; = @
 	tokenEOF
 )
 
 type token struct {
+	val []byte
 	typ tokenType
-	val string
-}
-
-func (t token) String() string {
-	return fmt.Sprintf("(%d) %s", t.typ, t.val)
 }
 
 type tokens []token
@@ -51,7 +47,7 @@ type tokens []token
 func (toks tokens) String() string {
 	var b strings.Builder
 	for _, tok := range toks {
-		b.WriteString(tok.val)
+		b.Write(tok.val)
 	}
 	return b.String()
 }
@@ -65,9 +61,9 @@ func (toks tokens) index(typ tokenType) int {
 	return -1
 }
 
-func (toks tokens) indexAny(set tokenSet) int {
+func (toks tokens) indexAny(s tokenType) int {
 	for i, tok := range toks {
-		if set.has(tok.typ) {
+		if s&tok.typ != 0 {
 			return i
 		}
 	}
@@ -75,23 +71,12 @@ func (toks tokens) indexAny(set tokenSet) int {
 }
 
 type lexer struct {
-	input string
+	input []byte
 	start int
 	pos   int
 	width int
 
 	toks tokens
-}
-
-type tokenSet uint64
-
-func (s tokenSet) has(typ tokenType) bool { return s&(1<<uint64(typ)) != 0 }
-
-func newTokenSet(typs ...tokenType) (s tokenSet) {
-	for _, typ := range typs {
-		s |= 1 << uint(typ)
-	}
-	return s
 }
 
 const eof = -1
@@ -101,7 +86,12 @@ func (l *lexer) next() (r rune) {
 		l.width = 0
 		return eof
 	}
-	r, l.width = utf8.DecodeRuneInString(l.input[l.pos:])
+	if c := l.input[l.pos]; c < utf8.RuneSelf {
+		l.width = 1
+		r = rune(c)
+	} else {
+		r, l.width = utf8.DecodeRune(l.input[l.pos:])
+	}
 	l.pos += l.width
 	return r
 }
@@ -110,9 +100,9 @@ func (l *lexer) current() (r rune) {
 	if l.width == 0 {
 		return 0
 	} else if l.pos > l.width {
-		r, _ = utf8.DecodeRuneInString(l.input[l.pos-l.width:])
+		r, _ = utf8.DecodeRune(l.input[l.pos-l.width:])
 	} else {
-		r, _ = utf8.DecodeRuneInString(l.input)
+		r, _ = utf8.DecodeRune(l.input)
 	}
 	return r
 }
@@ -151,16 +141,10 @@ func isValue(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsNumber(r) || r == '_' || r == '-'
 }
 
-var isPathRune = func() map[rune]bool {
-	m := make(map[rune]bool)
-	for _, r := range ".-_~!$&'()*+,;=@" {
-		m[r] = true
-	}
-	return m
-}()
-
 func isPath(r rune) bool {
-	return isValue(r) || isPathRune[r]
+	return isValue(r) || r == '.' || r == '~' || r == '!' || r == '$' ||
+		r == '&' || r == '\'' || r == '(' || r == ')' || r == '*' ||
+		r == '+' || r == ',' || r == ';' || r == '=' || r == '@'
 }
 
 func lexValue(l *lexer) error {

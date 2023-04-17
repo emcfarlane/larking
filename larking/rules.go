@@ -113,7 +113,7 @@ func (p *path) addVariable(toks tokens) *variable {
 }
 
 func (p *path) addPath(parent, value token) *path {
-	val := parent.val + value.val
+	val := tokens{parent, value}.String()
 	if next, ok := p.segments[val]; ok {
 		return next
 	}
@@ -266,7 +266,7 @@ func (p *path) addRule(
 	fieldDescs := msgDesc.Fields()
 
 	// Hold state for the lexer.
-	l := &lexer{input: tmpl}
+	l := &lexer{input: []byte(tmpl)}
 	if err := lexTemplate(l); err != nil {
 		return err
 	}
@@ -299,11 +299,11 @@ func (p *path) addRule(
 		case tokenVariableStart:
 			// FieldPath
 			tok := next()
-			keys := []string{tok.val}
+			keys := []string{string(tok.val)}
 
 			nxt := next()
 			for nxt.typ == tokenDot {
-				keys = append(keys, next().val)
+				keys = append(keys, string(next().val))
 				nxt = next()
 			}
 
@@ -318,7 +318,7 @@ func (p *path) addRule(
 				// default
 				vars = append(vars, token{
 					typ: tokenStar,
-					val: "*",
+					val: []byte("*"),
 				})
 
 			default:
@@ -663,8 +663,7 @@ func (v *variable) index(toks tokens) int {
 			i += 1
 
 		case tokenStar:
-			set := newTokenSet(tokenSlash, tokenVerb)
-			if j := toks.indexAny(set); j != -1 {
+			if j := toks.indexAny(tokenSlash | tokenVerb); j != -1 {
 				i += j
 			} else {
 				i = n // EOL
@@ -679,7 +678,7 @@ func (v *variable) index(toks tokens) int {
 
 		case tokenValue:
 			// TODO: tokenPath != tokenValue
-			if toks[i].typ != tokenPath || tok.val != toks[i].val {
+			if toks[i].typ != tokenPath || !bytes.Equal(tok.val, toks[i].val) {
 				return -1
 			}
 			i += 1
@@ -706,8 +705,8 @@ func (p *path) search(toks tokens, verb string) (*method, params, error) {
 		return nil, nil, status.Error(codes.NotFound, "not found")
 	}
 
-	tt, tv := toks[0], toks[1]
-	segment := tt.val + tv.val
+	// caputre path segment
+	segment := toks[0:2].String()
 
 	if next, ok := p.segments[segment]; ok {
 		if m, ps, err := next.search(toks[2:], verb); err == nil {
@@ -741,7 +740,7 @@ func (p *path) search(toks tokens, verb string) (*method, params, error) {
 
 // match the route to a method.
 func (p *path) match(route, verb string) (*method, params, error) {
-	l := &lexer{input: route}
+	l := &lexer{input: []byte(route)}
 	if err := lexPath(l); err != nil {
 		return nil, nil, status.Errorf(codes.NotFound, "not found: %v", err)
 	}
