@@ -63,3 +63,14 @@ func TestLexer(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkLexer(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		l := &lexer{
+			input: "/v1/books/1/shevles/1:read",
+		}
+		lexPath(l)
+	}
+}
