@@ -1,14 +1,13 @@
 goos: darwin
-goarch: amd64
+goarch: arm64
 pkg: larking.io/benchmarks
-cpu: VirtualApple @ 2.50GHz
-BenchmarkLarking/GRPC_GetBook-8         	   13950	     86876 ns/op	   25540 B/op	     230 allocs/op
-BenchmarkLarking/HTTP_GetBook-8         	   21180	     55613 ns/op	   10200 B/op	     159 allocs/op
-BenchmarkLarking/HTTP_UpdateBook-8      	   21268	     56071 ns/op	   12284 B/op	     185 allocs/op
-BenchmarkLarking/HTTP_DeleteBook-8      	   27181	     44100 ns/op	    8474 B/op	     105 allocs/op
-BenchmarkGRPCGateway/GRPC_GetBook-8     	   25746	     45852 ns/op	    9498 B/op	     178 allocs/op
-BenchmarkGRPCGateway/HTTP_GetBook-8     	   22064	     53991 ns/op	   10750 B/op	     173 allocs/op
-BenchmarkGRPCGateway/HTTP_UpdateBook-8  	   19294	     62441 ns/op	   16180 B/op	     223 allocs/op
-BenchmarkGRPCGateway/HTTP_DeleteBook-8  	   28308	     42072 ns/op	    8683 B/op	     112 allocs/op
+BenchmarkLarking/GRPC_GetBook-8         	   16232	     72074 ns/op	   25544 B/op	     230 allocs/op
+BenchmarkLarking/HTTP_GetBook-8         	   26217	     45169 ns/op	    9338 B/op	     154 allocs/op
+BenchmarkLarking/HTTP_UpdateBook-8      	   25369	     47217 ns/op	   11418 B/op	     180 allocs/op
+BenchmarkLarking/HTTP_DeleteBook-8      	   32587	     36809 ns/op	    7615 B/op	     100 allocs/op
+BenchmarkGRPCGateway/GRPC_GetBook-8     	   32892	     36122 ns/op	    9496 B/op	     178 allocs/op
+BenchmarkGRPCGateway/HTTP_GetBook-8     	   25860	     46307 ns/op	   10714 B/op	     173 allocs/op
+BenchmarkGRPCGateway/HTTP_UpdateBook-8  	   23271	     51380 ns/op	   16195 B/op	     223 allocs/op
+BenchmarkGRPCGateway/HTTP_DeleteBook-8  	   32416	     37014 ns/op	    8653 B/op	     112 allocs/op
 PASS
-ok  	larking.io/benchmarks	14.523s
+ok  	larking.io/benchmarks	13.337s
