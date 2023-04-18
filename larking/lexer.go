@@ -74,13 +74,11 @@ func (toks tokens) indexAny(s tokenType) int {
 
 type lexer struct {
 	input string
+	toks  [64]token
+	len   int
 	start int
 	pos   int
 	width int
-
-	// tokens are limited to 64
-	toks [64]token
-	len  int
 }
 
 func (l *lexer) tokens() tokens { return l.toks[:l.len] }

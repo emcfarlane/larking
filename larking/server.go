@@ -177,11 +177,10 @@ const (
 )
 
 type serverOptions struct {
-	tlsConfig *tls.Config
-	insecure  bool
-
-	muxPatterns []string
+	tlsConfig   *tls.Config
 	serveMux    *http.ServeMux
+	muxPatterns []string
+	insecure    bool
 }
 
 // ServerOption is similar to grpc.ServerOption.

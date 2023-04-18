@@ -15,17 +15,15 @@ import (
 const kindWebsocket = "WEBSOCKET"
 
 type streamWS struct {
-	ctx  context.Context
-	conn net.Conn
-
-	method *method
-	params params
-	recvN  int
-	sendN  int
-
-	sentHeader bool
+	ctx        context.Context
+	conn       net.Conn
+	method     *method
 	header     metadata.MD
 	trailer    metadata.MD
+	params     params
+	recvN      int
+	sendN      int
+	sentHeader bool
 }
 
 func (s *streamWS) SetHeader(md metadata.MD) error {

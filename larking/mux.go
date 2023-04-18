@@ -76,14 +76,14 @@ func (s *state) clone() *state {
 }
 
 type muxOptions struct {
+	types                 protoregistry.MessageTypeResolver
+	statsHandler          stats.Handler
+	files                 *protoregistry.Files
+	unaryInterceptor      grpc.UnaryServerInterceptor
+	streamInterceptor     grpc.StreamServerInterceptor
 	maxReceiveMessageSize int
 	maxSendMessageSize    int
 	connectionTimeout     time.Duration
-	files                 *protoregistry.Files
-	types                 protoregistry.MessageTypeResolver
-	unaryInterceptor      grpc.UnaryServerInterceptor
-	streamInterceptor     grpc.StreamServerInterceptor
-	statsHandler          stats.Handler
 }
 
 func (o *muxOptions) readAll(r io.Reader) ([]byte, error) {
@@ -144,13 +144,10 @@ func StatsOption(h stats.Handler) MuxOption {
 }
 
 type Mux struct {
-	opts muxOptions
-	//events trace.EventLog TODO
-	mu    sync.Mutex   // Lock to sync writers
-	state atomic.Value // Value of *state
-
-	// services is a list of registered services
+	opts     muxOptions
+	state    atomic.Value
 	services map[*grpc.ServiceDesc]interface{}
+	mu       sync.Mutex
 }
 
 func NewMux(opts ...MuxOption) (*Mux, error) {
@@ -200,8 +197,8 @@ func (m *Mux) DropConn(ctx context.Context, cc *grpc.ClientConn) bool {
 
 // resolver implements protodesc.Resolver.
 type resolver struct {
-	files  protoregistry.Files
 	stream rpb.ServerReflection_ServerReflectionInfoClient
+	files  protoregistry.Files
 }
 
 func newResolver(stream rpb.ServerReflection_ServerReflectionInfoClient) (*resolver, error) {
@@ -610,19 +607,17 @@ var (
 )
 
 type streamHTTP struct {
-	ctx    context.Context
-	w      http.ResponseWriter
-	r      *http.Request
-	method *method
-	params params
-	recvN  int
-	sendN  int
-
-	sentHeader bool
+	opts       muxOptions
+	ctx        context.Context
+	w          http.ResponseWriter
+	r          *http.Request
+	method     *method
 	header     metadata.MD
 	trailer    metadata.MD
-
-	opts muxOptions
+	params     params
+	recvN      int
+	sendN      int
+	sentHeader bool
 }
 
 func (s *streamHTTP) SetHeader(md metadata.MD) error {

@@ -33,10 +33,8 @@ func TestWeb(t *testing.T) {
 	h := createGRPCWebHandler(gs)
 
 	type want struct {
+		msg        proto.Message
 		statusCode int
-		//body       []byte // either
-		msg proto.Message // or
-		// TODO: headers, trailers
 	}
 
 	frame := func(b []byte, msb uint8) []byte {
@@ -56,11 +54,11 @@ func TestWeb(t *testing.T) {
 
 	// TODO: compare http.Response output
 	tests := []struct {
-		name string
-		req  *http.Request
 		in   in
 		out  out
 		want want
+		req  *http.Request
+		name string
 	}{{
 		name: "unary proto request",
 		req: func() *http.Request {
