@@ -7,6 +7,7 @@ package larking
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 )
@@ -38,7 +39,7 @@ const (
 )
 
 type token struct {
-	val []byte
+	val string
 	typ tokenType
 }
 
@@ -47,7 +48,7 @@ type tokens []token
 func (toks tokens) String() string {
 	var b strings.Builder
 	for _, tok := range toks {
-		b.Write(tok.val)
+		b.WriteString(tok.val)
 	}
 	return b.String()
 }
@@ -70,8 +71,24 @@ func (toks tokens) indexAny(s tokenType) int {
 	return -1
 }
 
+var lexPool = sync.Pool{
+	New: func() any {
+		return &lexer{
+			toks: make(tokens, 0, 8),
+		}
+	},
+}
+
+func (l *lexer) init(input string) {
+	l.input = input
+	l.start = 0
+	l.pos = 0
+	l.width = 0
+	l.toks = l.toks[:0]
+}
+
 type lexer struct {
-	input []byte
+	input string
 	start int
 	pos   int
 	width int
@@ -90,7 +107,7 @@ func (l *lexer) next() (r rune) {
 		l.width = 1
 		r = rune(c)
 	} else {
-		r, l.width = utf8.DecodeRune(l.input[l.pos:])
+		r, l.width = utf8.DecodeRuneInString(l.input[l.pos:])
 	}
 	l.pos += l.width
 	return r
@@ -100,9 +117,9 @@ func (l *lexer) current() (r rune) {
 	if l.width == 0 {
 		return 0
 	} else if l.pos > l.width {
-		r, _ = utf8.DecodeRune(l.input[l.pos-l.width:])
+		r, _ = utf8.DecodeRuneInString(l.input[l.pos-l.width:])
 	} else {
-		r, _ = utf8.DecodeRune(l.input)
+		r, _ = utf8.DecodeRuneInString(l.input)
 	}
 	return r
 }

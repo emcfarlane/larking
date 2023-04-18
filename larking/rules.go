@@ -266,7 +266,7 @@ func (p *path) addRule(
 	fieldDescs := msgDesc.Fields()
 
 	// Hold state for the lexer.
-	l := &lexer{input: []byte(tmpl)}
+	l := &lexer{input: tmpl}
 	if err := lexTemplate(l); err != nil {
 		return err
 	}
@@ -318,7 +318,7 @@ func (p *path) addRule(
 				// default
 				vars = append(vars, token{
 					typ: tokenStar,
-					val: []byte("*"),
+					val: "*",
 				})
 
 			default:
@@ -678,7 +678,7 @@ func (v *variable) index(toks tokens) int {
 
 		case tokenValue:
 			// TODO: tokenPath != tokenValue
-			if toks[i].typ != tokenPath || !bytes.Equal(tok.val, toks[i].val) {
+			if toks[i].typ != tokenPath || tok.val != toks[i].val {
 				return -1
 			}
 			i += 1
@@ -740,7 +740,10 @@ func (p *path) search(toks tokens, verb string) (*method, params, error) {
 
 // match the route to a method.
 func (p *path) match(route, verb string) (*method, params, error) {
-	l := &lexer{input: []byte(route)}
+	l := lexPool.Get().(*lexer)
+	l.init(route)
+	defer lexPool.Put(l)
+
 	if err := lexPath(l); err != nil {
 		return nil, nil, status.Errorf(codes.NotFound, "not found: %v", err)
 	}
@@ -752,7 +755,7 @@ const httpHeaderPrefix = "http-"
 func newIncomingContext(ctx context.Context, header http.Header) (context.Context, metadata.MD) {
 	md := make(metadata.MD, len(header))
 	for k, vs := range header {
-		md.Set(httpHeaderPrefix+k, vs...)
+		md[httpHeaderPrefix+strings.ToLower(k)] = vs
 	}
 	return metadata.NewIncomingContext(ctx, md), md
 }

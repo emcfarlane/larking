@@ -1,0 +1,7 @@
+goos: darwin
+goarch: amd64
+pkg: larking.io/larking
+cpu: VirtualApple @ 2.50GHz
+BenchmarkLexer-8   	 5162886	       232.7 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	larking.io/larking	1.953s

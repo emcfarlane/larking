@@ -5,7 +5,6 @@
 package larking
 
 import (
-	"bytes"
 	"testing"
 )
 
@@ -19,19 +18,19 @@ func TestLexer(t *testing.T) {
 		name: "one",
 		tmpl: "/v1/messages/{name=name/*}",
 		want: tokens{
-			{typ: tokenSlash, val: []byte("/")},
-			{typ: tokenValue, val: []byte("v1")},
-			{typ: tokenSlash, val: []byte("/")},
-			{typ: tokenValue, val: []byte("messages")},
-			{typ: tokenSlash, val: []byte("/")},
-			{typ: tokenVariableStart, val: []byte("{")},
-			{typ: tokenValue, val: []byte("name")},
-			{typ: tokenEqual, val: []byte("=")},
-			{typ: tokenValue, val: []byte("name")},
-			{typ: tokenSlash, val: []byte("/")},
-			{typ: tokenStar, val: []byte("*")},
-			{typ: tokenVariableEnd, val: []byte("}")},
-			{typ: tokenEOF, val: []byte("")},
+			{typ: tokenSlash, val: "/"},
+			{typ: tokenValue, val: "v1"},
+			{typ: tokenSlash, val: "/"},
+			{typ: tokenValue, val: "messages"},
+			{typ: tokenSlash, val: "/"},
+			{typ: tokenVariableStart, val: "{"},
+			{typ: tokenValue, val: "name"},
+			{typ: tokenEqual, val: "="},
+			{typ: tokenValue, val: "name"},
+			{typ: tokenSlash, val: "/"},
+			{typ: tokenStar, val: "*"},
+			{typ: tokenVariableEnd, val: "}"},
+			{typ: tokenEOF, val: ""},
 		},
 	}}
 
@@ -39,7 +38,7 @@ func TestLexer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 
 			l := &lexer{
-				input: []byte(tt.tmpl),
+				input: tt.tmpl,
 			}
 			err := lexTemplate(l)
 			if tt.wantErr {
@@ -57,7 +56,7 @@ func TestLexer(t *testing.T) {
 			}
 			for i, want := range tt.want {
 				tok := l.toks[i]
-				if want.typ != tok.typ || !bytes.Equal(want.val, tok.val) {
+				if want.typ != tok.typ || want.val != tok.val {
 					t.Errorf("%d: %v != %v", i, tok, want)
 				}
 			}
@@ -66,14 +65,15 @@ func TestLexer(t *testing.T) {
 }
 
 func BenchmarkLexer(b *testing.B) {
-	input := []byte("/v1/books/1/shevles/1:read")
+	input := "/v1/books/1/shevles/1:read"
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		l := &lexer{
-			input: input,
-		}
+		l := lexPool.Get().(*lexer)
+		l.init(input)
+
 		lexPath(l)
+		lexPool.Put(l)
 	}
 }
