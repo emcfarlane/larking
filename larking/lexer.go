@@ -5,10 +5,12 @@
 package larking
 
 import (
-	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // ### Path template syntax
@@ -20,30 +22,26 @@ import (
 //     FieldPath = IDENT { "." IDENT } ;
 //     Verb     = ":" LITERAL ;
 
-type tokenType int
+type tokenType uint16
 
 const (
-	tokenError         = iota
-	tokenSlash         // /
-	tokenStar          // *
-	tokenStarStar      // **
-	tokenVariableStart // {
-	tokenVariableEnd   // }
-	tokenEqual         // =
-	tokenValue         // a-z A-Z 0-9 - _
-	tokenDot           // .
-	tokenVerb          // :
-	tokenPath          // a-z A-Z 0-9 . - _ ~ ! $ & ' ( ) * + , ; = @
+	tokenError         tokenType = 0
+	tokenSlash         tokenType = 1 << iota // /
+	tokenStar                                // *
+	tokenStarStar                            // **
+	tokenVariableStart                       // {
+	tokenVariableEnd                         // }
+	tokenEqual                               // =
+	tokenValue                               // a-z A-Z 0-9 - _
+	tokenDot                                 // .
+	tokenVerb                                // :
+	tokenPath                                // a-z A-Z 0-9 . - _ ~ ! $ & ' ( ) * + , ; = @
 	tokenEOF
 )
 
 type token struct {
-	typ tokenType
 	val string
-}
-
-func (t token) String() string {
-	return fmt.Sprintf("(%d) %s", t.typ, t.val)
+	typ tokenType
 }
 
 type tokens []token
@@ -65,9 +63,9 @@ func (toks tokens) index(typ tokenType) int {
 	return -1
 }
 
-func (toks tokens) indexAny(set tokenSet) int {
+func (toks tokens) indexAny(s tokenType) int {
 	for i, tok := range toks {
-		if set.has(tok.typ) {
+		if s&tok.typ != 0 {
 			return i
 		}
 	}
@@ -76,23 +74,14 @@ func (toks tokens) indexAny(set tokenSet) int {
 
 type lexer struct {
 	input string
+	toks  [64]token
+	len   int
 	start int
 	pos   int
 	width int
-
-	toks tokens
 }
 
-type tokenSet uint64
-
-func (s tokenSet) has(typ tokenType) bool { return s&(1<<uint64(typ)) != 0 }
-
-func newTokenSet(typs ...tokenType) (s tokenSet) {
-	for _, typ := range typs {
-		s |= 1 << uint(typ)
-	}
-	return s
-}
+func (l *lexer) tokens() tokens { return l.toks[:l.len] }
 
 const eof = -1
 
@@ -101,7 +90,12 @@ func (l *lexer) next() (r rune) {
 		l.width = 0
 		return eof
 	}
-	r, l.width = utf8.DecodeRuneInString(l.input[l.pos:])
+	if c := l.input[l.pos]; c < utf8.RuneSelf {
+		l.width = 1
+		r = rune(c)
+	} else {
+		r, l.width = utf8.DecodeRuneInString(l.input[l.pos:])
+	}
 	l.pos += l.width
 	return r
 }
@@ -130,45 +124,50 @@ func (l *lexer) acceptRun(isValid func(r rune) bool) int {
 	return i
 }
 
-func (l *lexer) emit(typ tokenType) {
+var errTokenLimit = status.Errorf(codes.InvalidArgument, "path: too many tokens")
+
+func (l *lexer) emit(typ tokenType) error {
+	if l.len >= len(l.toks) {
+		return errTokenLimit
+	}
 	tok := token{typ: typ, val: l.input[l.start:l.pos]}
-	l.toks = append(l.toks, tok)
+
+	l.toks[l.len] = tok
+	l.len++
 	l.start = l.pos
+	return nil
 }
 
 func (l *lexer) errUnexpected() error {
-	l.emit(tokenError)
+	if err := l.emit(tokenError); err != nil {
+		return err
+	}
 	r := l.current()
-	return fmt.Errorf("%v:%v unexpected rune %q", l.pos-l.width, l.pos, r)
+	return status.Errorf(codes.InvalidArgument, "path: %v:%v unexpected rune %q", l.pos-l.width, l.pos, r)
 }
 func (l *lexer) errShort() error {
-	l.emit(tokenError)
+	if err := l.emit(tokenError); err != nil {
+		return err
+	}
 	r := l.current()
-	return fmt.Errorf("%v:%v short read %q", l.pos-l.width, l.pos, r)
+	return status.Errorf(codes.InvalidArgument, "path: %v:%v short read %q", l.pos-l.width, l.pos, r)
 }
 
 func isValue(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsNumber(r) || r == '_' || r == '-'
 }
 
-var isPathRune = func() map[rune]bool {
-	m := make(map[rune]bool)
-	for _, r := range ".-_~!$&'()*+,;=@" {
-		m[r] = true
-	}
-	return m
-}()
-
 func isPath(r rune) bool {
-	return isValue(r) || isPathRune[r]
+	return isValue(r) || r == '.' || r == '~' || r == '!' || r == '$' ||
+		r == '&' || r == '\'' || r == '(' || r == ')' || r == '*' ||
+		r == '+' || r == ',' || r == ';' || r == '=' || r == '@'
 }
 
 func lexValue(l *lexer) error {
 	if i := l.acceptRun(isValue); i == 0 {
 		return l.errShort()
 	}
-	l.emit(tokenValue)
-	return nil
+	return l.emit(tokenValue)
 }
 
 func lexFieldPath(l *lexer) error {
@@ -180,7 +179,9 @@ func lexFieldPath(l *lexer) error {
 			l.backup() // unknown
 			return nil
 		}
-		l.emit(tokenDot)
+		if err := l.emit(tokenDot); err != nil {
+			return err
+		}
 		if err := lexValue(l); err != nil {
 			return err
 		}
@@ -192,8 +193,7 @@ func lexVerb(l *lexer) error {
 		return err
 	}
 	if r := l.next(); r == eof {
-		l.emit(tokenEOF)
-		return nil
+		return l.emit(tokenEOF)
 	}
 	return l.errUnexpected()
 }
@@ -203,14 +203,18 @@ func lexVariable(l *lexer) error {
 	if r != '{' {
 		return l.errUnexpected()
 	}
-	l.emit(tokenVariableStart)
+	if err := l.emit(tokenVariableStart); err != nil {
+		return err
+	}
 	if err := lexFieldPath(l); err != nil {
 		return err
 	}
 
 	r = l.next()
 	if r == '=' {
-		l.emit(tokenEqual)
+		if err := l.emit(tokenEqual); err != nil {
+			return err
+		}
 
 		if err := lexSegments(l); err != nil {
 			return err
@@ -221,8 +225,7 @@ func lexVariable(l *lexer) error {
 	if r != '}' {
 		return l.errUnexpected()
 	}
-	l.emit(tokenVariableEnd)
-	return nil
+	return l.emit(tokenVariableEnd)
 }
 
 func lexSegment(l *lexer) error {
@@ -232,17 +235,14 @@ func lexSegment(l *lexer) error {
 		if i := l.acceptRun(isValue); i == 0 {
 			return l.errShort()
 		}
-		l.emit(tokenValue)
-		return nil
+		return l.emit(tokenValue)
 	case r == '*':
 		rn := l.next()
 		if rn == '*' {
-			l.emit(tokenStarStar)
-			return nil
+			return l.emit(tokenStarStar)
 		}
 		l.backup()
-		l.emit(tokenStar)
-		return nil
+		return l.emit(tokenStar)
 	case r == '{':
 		l.backup()
 		return lexVariable(l)
@@ -260,7 +260,9 @@ func lexSegments(l *lexer) error {
 			l.backup() // unknown
 			return nil
 		}
-		l.emit(tokenSlash)
+		if err := l.emit(tokenSlash); err != nil {
+			return err
+		}
 	}
 }
 
@@ -268,17 +270,23 @@ func lexTemplate(l *lexer) error {
 	if r := l.next(); r != '/' {
 		return l.errUnexpected()
 	}
-	l.emit(tokenSlash)
+	if err := l.emit(tokenSlash); err != nil {
+		return err
+	}
 	if err := lexSegments(l); err != nil {
 		return err
 	}
 
 	switch r := l.next(); r {
 	case ':':
-		l.emit(tokenVerb)
+		if err := l.emit(tokenVerb); err != nil {
+			return err
+		}
 		return lexVerb(l)
 	case eof:
-		l.emit(tokenEOF)
+		if err := l.emit(tokenEOF); err != nil {
+			return err
+		}
 		return nil
 	default:
 		return l.errUnexpected()
@@ -289,8 +297,7 @@ func lexPathSegment(l *lexer) error {
 	if i := l.acceptRun(isPath); i == 0 {
 		return l.errShort()
 	}
-	l.emit(tokenPath)
-	return nil
+	return l.emit(tokenPath)
 }
 
 // lexPath emits all tokenSlash, tokenVerb and the rest as tokenPath
@@ -298,18 +305,21 @@ func lexPath(l *lexer) error {
 	for {
 		switch r := l.next(); r {
 		case '/':
-			l.emit(tokenSlash)
+			if err := l.emit(tokenSlash); err != nil {
+				return err
+			}
 			if err := lexPathSegment(l); err != nil {
 				return err
 			}
 		case ':':
-			l.emit(tokenVerb)
+			if err := l.emit(tokenVerb); err != nil {
+				return err
+			}
 			if err := lexPathSegment(l); err != nil {
 				return err
 			}
 		case eof:
-			l.emit(tokenEOF)
-			return nil
+			return l.emit(tokenEOF)
 		default:
 			return l.errUnexpected()
 		}

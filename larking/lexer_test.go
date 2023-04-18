@@ -6,6 +6,7 @@ package larking
 
 import (
 	"testing"
+	"unsafe"
 )
 
 func TestLexer(t *testing.T) {
@@ -18,19 +19,19 @@ func TestLexer(t *testing.T) {
 		name: "one",
 		tmpl: "/v1/messages/{name=name/*}",
 		want: tokens{
-			{tokenSlash, "/"},
-			{tokenValue, "v1"},
-			{tokenSlash, "/"},
-			{tokenValue, "messages"},
-			{tokenSlash, "/"},
-			{tokenVariableStart, "{"},
-			{tokenValue, "name"},
-			{tokenEqual, "="},
-			{tokenValue, "name"},
-			{tokenSlash, "/"},
-			{tokenStar, "*"},
-			{tokenVariableEnd, "}"},
-			{tokenEOF, ""},
+			{typ: tokenSlash, val: "/"},
+			{typ: tokenValue, val: "v1"},
+			{typ: tokenSlash, val: "/"},
+			{typ: tokenValue, val: "messages"},
+			{typ: tokenSlash, val: "/"},
+			{typ: tokenVariableStart, val: "{"},
+			{typ: tokenValue, val: "name"},
+			{typ: tokenEqual, val: "="},
+			{typ: tokenValue, val: "name"},
+			{typ: tokenSlash, val: "/"},
+			{typ: tokenStar, val: "*"},
+			{typ: tokenVariableEnd, val: "}"},
+			{typ: tokenEOF, val: ""},
 		},
 	}}
 
@@ -50,16 +51,35 @@ func TestLexer(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			if n, m := len(tt.want), len(l.toks); n != m {
-				t.Errorf("mismatch length %v != %v:\n\t%v\n\t%v", n, m, tt.want, l.toks)
+			if n, m := len(tt.want), len(l.tokens()); n != m {
+				t.Errorf("mismatch length %v != %v:\n\t%v\n\t%v", n, m, tt.want, l.tokens())
 				return
 			}
 			for i, want := range tt.want {
 				tok := l.toks[i]
-				if want != tok {
+				if want.typ != tok.typ || want.val != tok.val {
 					t.Errorf("%d: %v != %v", i, tok, want)
 				}
 			}
 		})
 	}
+}
+
+func BenchmarkLexer(b *testing.B) {
+	var l lexer
+	input := "/v1/books/1/shevles/1:read"
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		l = lexer{input: input}
+		if err := lexPath(&l); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+	if n := l.len; n != 13 {
+		b.Errorf("expected %d tokens: %d", 7, n)
+	}
+	b.Logf("%v", unsafe.Sizeof(l))
 }

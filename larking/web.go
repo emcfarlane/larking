@@ -41,15 +41,13 @@ func isWebRequest(r *http.Request) (typ string, enc string, ok bool) {
 }
 
 type webWriter struct {
-	w   http.ResponseWriter
-	typ string // grpcWEB || grpcWebText
-	enc string // proto || json || ...
-
-	wroteHeader bool
+	w           http.ResponseWriter
+	resp        io.Writer
 	seenHeaders map[string]bool
-
-	wroteResp bool
-	resp      io.Writer
+	typ         string // grpcWeb or grpcWebText
+	enc         string // proto or json
+	wroteHeader bool
+	wroteResp   bool
 }
 
 func newWebWriter(w http.ResponseWriter, typ, enc string) *webWriter {

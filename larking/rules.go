@@ -38,9 +38,9 @@ func getExtensionHTTP(m proto.Message) *annotations.HttpRule {
 }
 
 type variable struct {
-	name string // path.to.field=segment/*/**
-	toks tokens // segment/*/**
 	next *path
+	name string
+	toks tokens
 }
 
 func (v *variable) String() string {
@@ -55,9 +55,9 @@ func (p variables) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 type path struct {
 	segments  map[string]*path   // maps constants to path routes
-	variables variables          // sorted array of variables
 	methods   map[string]*method // maps http methods to grpc methods
 	methodAll *method            // maps kind '*'
+	variables variables          // sorted array of variables
 }
 
 func (p *path) String() string {
@@ -131,11 +131,11 @@ func newPath() *path {
 
 type method struct {
 	desc    protoreflect.MethodDescriptor
+	name    string                           // /{ServiceName}/{MethodName}
 	body    []protoreflect.FieldDescriptor   // body
 	vars    [][]protoreflect.FieldDescriptor // variables on path
-	hasBody bool                             // body="*" or body="field.name" or body="" for no body
 	resp    []protoreflect.FieldDescriptor   // body=[""|"*"]
-	name    string                           // /{ServiceName}/{MethodName}
+	hasBody bool                             // body="*" or body="field.name" or body="" for no body
 }
 
 func (m *method) String() string {
@@ -415,8 +415,8 @@ func quote(raw []byte) []byte {
 }
 
 type param struct {
-	fds []protoreflect.FieldDescriptor
 	val protoreflect.Value
+	fds []protoreflect.FieldDescriptor
 }
 
 func parseParam(fds []protoreflect.FieldDescriptor, raw []byte) (param, error) {
@@ -431,52 +431,52 @@ func parseParam(fds []protoreflect.FieldDescriptor, raw []byte) (param, error) {
 		if err := json.Unmarshal(raw, &b); err != nil {
 			return param{}, err
 		}
-		return param{fds, protoreflect.ValueOfBool(b)}, nil
+		return param{fds: fds, val: protoreflect.ValueOfBool(b)}, nil
 
 	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
 		var x int32
 		if err := json.Unmarshal(raw, &x); err != nil {
 			return param{}, err
 		}
-		return param{fds, protoreflect.ValueOfInt32(x)}, nil
+		return param{fds: fds, val: protoreflect.ValueOfInt32(x)}, nil
 
 	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
 		var x int64
 		if err := json.Unmarshal(raw, &x); err != nil {
 			return param{}, err
 		}
-		return param{fds, protoreflect.ValueOfInt64(x)}, nil
+		return param{fds: fds, val: protoreflect.ValueOfInt64(x)}, nil
 
 	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
 		var x uint32
 		if err := json.Unmarshal(raw, &x); err != nil {
 			return param{}, err
 		}
-		return param{fds, protoreflect.ValueOfUint32(x)}, nil
+		return param{fds: fds, val: protoreflect.ValueOfUint32(x)}, nil
 
 	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
 		var x uint64
 		if err := json.Unmarshal(raw, &x); err != nil {
 			return param{}, err
 		}
-		return param{fds, protoreflect.ValueOfUint64(x)}, nil
+		return param{fds: fds, val: protoreflect.ValueOfUint64(x)}, nil
 
 	case protoreflect.FloatKind:
 		var x float32
 		if err := json.Unmarshal(raw, &x); err != nil {
 			return param{}, err
 		}
-		return param{fds, protoreflect.ValueOfFloat32(x)}, nil
+		return param{fds: fds, val: protoreflect.ValueOfFloat32(x)}, nil
 
 	case protoreflect.DoubleKind:
 		var x float64
 		if err := json.Unmarshal(raw, &x); err != nil {
 			return param{}, err
 		}
-		return param{fds, protoreflect.ValueOfFloat64(x)}, nil
+		return param{fds: fds, val: protoreflect.ValueOfFloat64(x)}, nil
 
 	case protoreflect.StringKind:
-		return param{fds, protoreflect.ValueOfString(string(raw))}, nil
+		return param{fds: fds, val: protoreflect.ValueOfString(string(raw))}, nil
 
 	case protoreflect.BytesKind:
 		enc := base64.StdEncoding
@@ -492,24 +492,24 @@ func parseParam(fds []protoreflect.FieldDescriptor, raw []byte) (param, error) {
 		if err != nil {
 			return param{}, err
 		}
-		return param{fds, protoreflect.ValueOfBytes(dst[:n])}, nil
+		return param{fds: fds, val: protoreflect.ValueOfBytes(dst[:n])}, nil
 
 	case protoreflect.EnumKind:
 		var x int32
 		if err := json.Unmarshal(raw, &x); err == nil {
-			return param{fds, protoreflect.ValueOfEnum(protoreflect.EnumNumber(x))}, nil
+			return param{fds: fds, val: protoreflect.ValueOfEnum(protoreflect.EnumNumber(x))}, nil
 		}
 
 		s := string(raw)
 		if isNullValue(fd) && s == "null" {
-			return param{fds, protoreflect.ValueOfEnum(0)}, nil
+			return param{fds: fds, val: protoreflect.ValueOfEnum(0)}, nil
 		}
 
 		enumVal := fd.Enum().Values().ByName(protoreflect.Name(s))
 		if enumVal == nil {
 			return param{}, fmt.Errorf("unexpected enum %s", raw)
 		}
-		return param{fds, protoreflect.ValueOfEnum(enumVal.Number())}, nil
+		return param{fds: fds, val: protoreflect.ValueOfEnum(enumVal.Number())}, nil
 
 	case protoreflect.MessageKind:
 		// Well known JSON scalars are decoded to message types.
@@ -520,74 +520,74 @@ func parseParam(fds []protoreflect.FieldDescriptor, raw []byte) (param, error) {
 			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
 				return param{}, err
 			}
-			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		case "google.protobuf.Duration":
 			var msg durationpb.Duration
 			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
 				return param{}, err
 			}
-			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		case "google.protobuf.BoolValue":
 			var msg wrapperspb.BoolValue
 			if err := protojson.Unmarshal(raw, &msg); err != nil {
 				return param{}, err
 			}
-			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		case "google.protobuf.Int32Value":
 			var msg wrapperspb.Int32Value
 			if err := protojson.Unmarshal(raw, &msg); err != nil {
 				return param{}, err
 			}
-			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		case "google.protobuf.Int64Value":
 			var msg wrapperspb.Int64Value
 			if err := protojson.Unmarshal(raw, &msg); err != nil {
 				return param{}, err
 			}
-			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		case "google.protobuf.UInt32Value":
 			var msg wrapperspb.UInt32Value
 			if err := protojson.Unmarshal(raw, &msg); err != nil {
 				return param{}, err
 			}
-			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		case "google.protobuf.UInt64Value":
 			var msg wrapperspb.UInt64Value
 			if err := protojson.Unmarshal(raw, &msg); err != nil {
 				return param{}, err
 			}
-			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		case "google.protobuf.FloatValue":
 			var msg wrapperspb.FloatValue
 			if err := protojson.Unmarshal(raw, &msg); err != nil {
 				return param{}, err
 			}
-			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		case "google.protobuf.DoubleValue":
 			var msg wrapperspb.DoubleValue
 			if err := protojson.Unmarshal(raw, &msg); err != nil {
 				return param{}, err
 			}
-			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		case "google.protobuf.BytesValue":
 			var msg wrapperspb.BytesValue
 			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
 				return param{}, err
 			}
-			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		case "google.protobuf.StringValue":
 			var msg wrapperspb.StringValue
 			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
 				return param{}, err
 			}
-			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 
 		case "google.protobuf.FieldMask":
 			var msg fieldmaskpb.FieldMask
 			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
 				return param{}, err
 			}
-			return param{fds, protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 		default:
 			return param{}, fmt.Errorf("unexpected message type %s", md.FullName())
 		}
@@ -663,8 +663,7 @@ func (v *variable) index(toks tokens) int {
 			i += 1
 
 		case tokenStar:
-			set := newTokenSet(tokenSlash, tokenVerb)
-			if j := toks.indexAny(set); j != -1 {
+			if j := toks.indexAny(tokenSlash | tokenVerb); j != -1 {
 				i += j
 			} else {
 				i = n // EOL
@@ -706,9 +705,8 @@ func (p *path) search(toks tokens, verb string) (*method, params, error) {
 		return nil, nil, status.Error(codes.NotFound, "not found")
 	}
 
-	tt, tv := toks[0], toks[1]
-	segment := tt.val + tv.val
-
+	// caputre path segment
+	segment := toks[0].val + toks[1].val
 	if next, ok := p.segments[segment]; ok {
 		if m, ps, err := next.search(toks[2:], verb); err == nil {
 			return m, ps, err
@@ -742,10 +740,11 @@ func (p *path) search(toks tokens, verb string) (*method, params, error) {
 // match the route to a method.
 func (p *path) match(route, verb string) (*method, params, error) {
 	l := &lexer{input: route}
+
 	if err := lexPath(l); err != nil {
 		return nil, nil, status.Errorf(codes.NotFound, "not found: %v", err)
 	}
-	return p.search(l.toks, verb)
+	return p.search(l.tokens(), verb)
 }
 
 const httpHeaderPrefix = "http-"
@@ -753,7 +752,7 @@ const httpHeaderPrefix = "http-"
 func newIncomingContext(ctx context.Context, header http.Header) (context.Context, metadata.MD) {
 	md := make(metadata.MD, len(header))
 	for k, vs := range header {
-		md.Set(httpHeaderPrefix+k, vs...)
+		md[httpHeaderPrefix+strings.ToLower(k)] = vs
 	}
 	return metadata.NewIncomingContext(ctx, md), md
 }

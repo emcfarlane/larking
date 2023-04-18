@@ -37,9 +37,8 @@ import (
 )
 
 type in struct {
-	method string
 	msg    proto.Message
-	// TODO: headers?
+	method string
 }
 
 type out struct {
@@ -203,19 +202,18 @@ func TestMessageServer(t *testing.T) {
 	}
 
 	type want struct {
+		msg        proto.Message
+		body       []byte
 		statusCode int
-		body       []byte        // either
-		msg        proto.Message // or
-		// TODO: headers
 	}
 
 	// TODO: compare http.Response output
 	tests := []struct {
-		name string
-		req  *http.Request
+		want want
 		in   in
 		out  out
-		want want
+		req  *http.Request
+		name string
 	}{{
 		name: "first",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/messages/name/hello", nil),

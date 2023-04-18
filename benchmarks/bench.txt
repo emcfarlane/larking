@@ -1,0 +1,13 @@
+goos: darwin
+goarch: arm64
+pkg: larking.io/benchmarks
+BenchmarkLarking/GRPC_GetBook-8         	   16232	     72074 ns/op	   25544 B/op	     230 allocs/op
+BenchmarkLarking/HTTP_GetBook-8         	   26217	     45169 ns/op	    9338 B/op	     154 allocs/op
+BenchmarkLarking/HTTP_UpdateBook-8      	   25369	     47217 ns/op	   11418 B/op	     180 allocs/op
+BenchmarkLarking/HTTP_DeleteBook-8      	   32587	     36809 ns/op	    7615 B/op	     100 allocs/op
+BenchmarkGRPCGateway/GRPC_GetBook-8     	   32892	     36122 ns/op	    9496 B/op	     178 allocs/op
+BenchmarkGRPCGateway/HTTP_GetBook-8     	   25860	     46307 ns/op	   10714 B/op	     173 allocs/op
+BenchmarkGRPCGateway/HTTP_UpdateBook-8  	   23271	     51380 ns/op	   16195 B/op	     223 allocs/op
+BenchmarkGRPCGateway/HTTP_DeleteBook-8  	   32416	     37014 ns/op	    8653 B/op	     112 allocs/op
+PASS
+ok  	larking.io/benchmarks	13.337s
