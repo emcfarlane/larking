@@ -73,7 +73,9 @@ func BenchmarkLexer(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		l = lexer{input: input}
-		lexPath(&l)
+		if err := lexPath(&l); err != nil {
+			b.Fatal(err)
+		}
 	}
 	b.StopTimer()
 	if n := l.len; n != 13 {
