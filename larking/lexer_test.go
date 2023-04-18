@@ -6,6 +6,7 @@ package larking
 
 import (
 	"testing"
+	"unsafe"
 )
 
 func TestLexer(t *testing.T) {
@@ -50,8 +51,8 @@ func TestLexer(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			if n, m := len(tt.want), len(l.toks); n != m {
-				t.Errorf("mismatch length %v != %v:\n\t%v\n\t%v", n, m, tt.want, l.toks)
+			if n, m := len(tt.want), len(l.tokens()); n != m {
+				t.Errorf("mismatch length %v != %v:\n\t%v\n\t%v", n, m, tt.want, l.tokens())
 				return
 			}
 			for i, want := range tt.want {
@@ -65,15 +66,18 @@ func TestLexer(t *testing.T) {
 }
 
 func BenchmarkLexer(b *testing.B) {
+	var l lexer
 	input := "/v1/books/1/shevles/1:read"
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		l := lexPool.Get().(*lexer)
-		l.init(input)
-
-		lexPath(l)
-		lexPool.Put(l)
+		l = lexer{input: input}
+		lexPath(&l)
 	}
+	b.StopTimer()
+	if n := l.len; n != 13 {
+		b.Errorf("expected %d tokens: %d", 7, n)
+	}
+	b.Logf("%v", unsafe.Sizeof(l))
 }

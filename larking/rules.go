@@ -113,7 +113,7 @@ func (p *path) addVariable(toks tokens) *variable {
 }
 
 func (p *path) addPath(parent, value token) *path {
-	val := tokens{parent, value}.String()
+	val := parent.val + value.val
 	if next, ok := p.segments[val]; ok {
 		return next
 	}
@@ -299,11 +299,11 @@ func (p *path) addRule(
 		case tokenVariableStart:
 			// FieldPath
 			tok := next()
-			keys := []string{string(tok.val)}
+			keys := []string{tok.val}
 
 			nxt := next()
 			for nxt.typ == tokenDot {
-				keys = append(keys, string(next().val))
+				keys = append(keys, next().val)
 				nxt = next()
 			}
 
@@ -706,8 +706,7 @@ func (p *path) search(toks tokens, verb string) (*method, params, error) {
 	}
 
 	// caputre path segment
-	segment := toks[0:2].String()
-
+	segment := toks[0].val + toks[1].val
 	if next, ok := p.segments[segment]; ok {
 		if m, ps, err := next.search(toks[2:], verb); err == nil {
 			return m, ps, err
@@ -740,14 +739,12 @@ func (p *path) search(toks tokens, verb string) (*method, params, error) {
 
 // match the route to a method.
 func (p *path) match(route, verb string) (*method, params, error) {
-	l := lexPool.Get().(*lexer)
-	l.init(route)
-	defer lexPool.Put(l)
+	l := &lexer{input: route}
 
 	if err := lexPath(l); err != nil {
 		return nil, nil, status.Errorf(codes.NotFound, "not found: %v", err)
 	}
-	return p.search(l.toks, verb)
+	return p.search(l.tokens(), verb)
 }
 
 const httpHeaderPrefix = "http-"
