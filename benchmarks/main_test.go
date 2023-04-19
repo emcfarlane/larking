@@ -3,22 +3,27 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/soheilhy/cmux"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"larking.io/benchmarks/api/librarypb"
 	"larking.io/larking"
 )
@@ -326,5 +331,166 @@ func BenchmarkEnvoyGRPC(b *testing.B) {
 	})
 	b.Run("HTTP_DeleteBook", func(b *testing.B) {
 		benchHTTP_DeleteBook(b, envoyAddr)
+	})
+}
+
+func BenchmarkGorillaMux(b *testing.B) {
+	ctx := context.Background()
+	svc := &testService{}
+
+	writeErr := func(w http.ResponseWriter, err error) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error())) //nolint
+	}
+
+	newIncomingContext := func(ctx context.Context, header http.Header) (context.Context, metadata.MD) {
+		md := make(metadata.MD, len(header))
+		for k, vs := range header {
+			md["http-"+strings.ToLower(k)] = vs
+		}
+		return metadata.NewIncomingContext(ctx, md), md
+	}
+
+	r := mux.NewRouter()
+	r.HandleFunc("/v1/shelves/{shelfID}/books/{bookID}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		shelfID := vars["shelfID"]
+		bookID := vars["bookID"]
+		name := fmt.Sprintf("shelves/%s/books/%s", shelfID, bookID)
+
+		ctx := r.Context()
+		ctx, _ = newIncomingContext(ctx, r.Header)
+
+		msg, err := svc.GetBook(ctx, &librarypb.GetBookRequest{Name: name})
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		b, err := protojson.Marshal(msg)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(b) //nolint
+	}).Methods(http.MethodGet)
+
+	r.HandleFunc("/v1/shelves/{shelfID}/books/{bookID}", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		vars := mux.Vars(r)
+		shelfID := vars["shelfID"]
+		bookID := vars["bookID"]
+		name := fmt.Sprintf("shelves/%s/books/%s", shelfID, bookID)
+
+		ctx := r.Context()
+		ctx, _ = newIncomingContext(ctx, r.Header)
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+
+		var book librarypb.Book
+		if err := protojson.Unmarshal(body, &book); err != nil {
+			writeErr(w, err)
+			return
+		}
+		book.Name = name
+
+		var updateMask fieldmaskpb.FieldMask
+		updateMaskRaw := r.URL.Query().Get("update_mask")
+
+		if updateMaskRaw != "" {
+			mv := []byte(strconv.Quote(updateMaskRaw))
+			if err := protojson.Unmarshal(mv, &updateMask); err != nil {
+				writeErr(w, err)
+				return
+			}
+		}
+
+		msg, err := svc.UpdateBook(ctx, &librarypb.UpdateBookRequest{
+			Book:       &book,
+			UpdateMask: &updateMask,
+		})
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		b, err := protojson.Marshal(msg)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(b) //nolint
+	}).Methods(http.MethodPatch)
+
+	r.HandleFunc("/v1/shelves/{shelfID}/books/{bookID}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		shelfID := vars["shelfID"]
+		bookID := vars["bookID"]
+		name := fmt.Sprintf("shelves/%s/books/%s", shelfID, bookID)
+
+		ctx := r.Context()
+		ctx, _ = newIncomingContext(ctx, r.Header)
+
+		msg, err := svc.DeleteBook(ctx, &librarypb.DeleteBookRequest{Name: name})
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		b, err := protojson.Marshal(msg)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(b) //nolint
+	}).Methods(http.MethodDelete)
+
+	lis, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		b.Fatalf("failed to listen: %v", err)
+	}
+	defer lis.Close()
+
+	var g errgroup.Group
+	defer func() {
+		if err := g.Wait(); err != nil {
+			b.Fatal(err)
+		}
+		b.Log("all server shutdown")
+	}()
+
+	s := &http.Server{
+		Handler: r,
+	}
+
+	g.Go(func() (err error) {
+		if err := s.Serve(lis); err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		return nil
+	})
+	defer func() {
+		b.Log("shutdown server")
+		if err := s.Shutdown(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}()
+
+	b.Run("HTTP_GetBook", func(b *testing.B) {
+		benchHTTP_GetBook(b, lis.Addr().String())
+	})
+	b.Run("HTTP_UpdateBook", func(b *testing.B) {
+		benchHTTP_UpdateBook(b, lis.Addr().String())
+	})
+	b.Run("HTTP_DeleteBook", func(b *testing.B) {
+		benchHTTP_DeleteBook(b, lis.Addr().String())
 	})
 }
