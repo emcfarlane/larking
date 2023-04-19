@@ -1,6 +1,8 @@
 # Benchmarks
 
-Comparisons against other services. See `bench.txt` for results.
+Comparisons against other services. See `bench.txt` for results. 
+
+https://www.emcfarlane.com/blog/2023-04-18-profile-lexer 
 
 ## gRPC-Gateway
 
