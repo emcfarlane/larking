@@ -6,6 +6,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,77 +15,13 @@ import (
 	"github.com/soheilhy/cmux"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 	"larking.io/benchmarks/api/librarypb"
 	"larking.io/larking"
 )
-
-type testService struct {
-	librarypb.UnimplementedLibraryServiceServer
-}
-
-func (testService) GetBook(ctx context.Context, req *librarypb.GetBookRequest) (*librarypb.Book, error) {
-	if req.Name != "shelves/1/books/1" {
-		return nil, grpc.Errorf(codes.NotFound, "not found")
-	}
-	return &librarypb.Book{
-		Name:        "shelves/1/books/1",
-		Title:       "The Great Gatsby",
-		Author:      "F. Scott Fitzgerald",
-		PageCount:   180,
-		PublishTime: timestamppb.New(time.Now()),
-		Duration:    durationpb.New(1 * time.Hour),
-		Price:       wrapperspb.Double(9.99),
-	}, nil
-}
-
-func (testService) ListBooks(ctx context.Context, req *librarypb.ListBooksRequest) (*librarypb.ListBooksResponse, error) {
-	if req.Parent != "shelves/1" {
-		return nil, grpc.Errorf(codes.NotFound, "not found")
-	}
-	return &librarypb.ListBooksResponse{
-		Books: []*librarypb.Book{
-			{
-				Name:  "shelves/1/books/1",
-				Title: "The Great Gatsby",
-			},
-			{
-				Name:  "shelves/1/books/2",
-				Title: "The Catcher in the Rye",
-			},
-			{
-				Name:  "shelves/1/books/3",
-				Title: "The Grapes of Wrath",
-			},
-		},
-	}, nil
-}
-
-func (testService) CreateBook(ctx context.Context, req *librarypb.CreateBookRequest) (*librarypb.Book, error) {
-	return req.Book, nil
-}
-func (testService) UpdateBook(ctx context.Context, req *librarypb.UpdateBookRequest) (*librarypb.Book, error) {
-	if req.Book.GetName() != "shelves/1/books/1" {
-		return nil, grpc.Errorf(codes.NotFound, "not found")
-	}
-	if req.UpdateMask.Paths[0] != "book.title" {
-		return nil, grpc.Errorf(codes.InvalidArgument, "invalid field mask")
-	}
-	return req.Book, nil
-}
-func (testService) DeleteBook(ctx context.Context, req *librarypb.DeleteBookRequest) (*emptypb.Empty, error) {
-	if req.Name != "shelves/1/books/1" {
-		return nil, grpc.Errorf(codes.NotFound, "not found")
-	}
-	return &emptypb.Empty{}, nil
-}
 
 func benchGRPC_GetBook(b *testing.B, client librarypb.LibraryServiceClient) {
 	ctx := context.Background()
@@ -311,5 +249,82 @@ func BenchmarkGRPCGateway(b *testing.B) {
 	})
 	b.Run("HTTP_DeleteBook", func(b *testing.B) {
 		benchHTTP_DeleteBook(b, lis.Addr().String())
+	})
+}
+
+func BenchmarkEnvoyGRPC(b *testing.B) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	if err := exec.CommandContext(ctx, "which", "envoy").Run(); err != nil {
+		b.Log(err)
+		b.Skip("envoy is not ready")
+	}
+
+	svc := &testService{}
+
+	gs := grpc.NewServer(grpc.Creds(insecure.NewCredentials()))
+	librarypb.RegisterLibraryServiceServer(gs, svc)
+
+	envoyAddr := "localhost:10000"
+
+	lis, err := net.Listen("tcp", "localhost:5050")
+	if err != nil {
+		b.Fatalf("failed to listen: %v", err)
+	}
+	defer lis.Close()
+
+	var g errgroup.Group
+	defer func() {
+		if err := g.Wait(); err != nil {
+			b.Fatal(err)
+		}
+		b.Log("all server shutdown")
+	}()
+
+	g.Go(func() (err error) {
+		if err := gs.Serve(lis); err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		return nil
+	})
+	defer gs.Stop()
+
+	g.Go(func() (err error) {
+		cmd := exec.CommandContext(ctx, "envoy", "-c", "testdata/envoy.yaml")
+
+		var out strings.Builder
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		if err := cmd.Run(); err != nil {
+			b.Log(err)
+		}
+		//b.Log(out.String())
+		return nil
+	})
+	defer cancel()
+
+	cc, err := grpc.Dial(
+		envoyAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+		grpc.WithTimeout(2*time.Second),
+	)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer cc.Close()
+	client := librarypb.NewLibraryServiceClient(cc)
+
+	b.Run("GRPC_GetBook", func(b *testing.B) {
+		benchGRPC_GetBook(b, client)
+	})
+	b.Run("HTTP_GetBook", func(b *testing.B) {
+		benchHTTP_GetBook(b, envoyAddr)
+	})
+	b.Run("HTTP_UpdateBook", func(b *testing.B) {
+		benchHTTP_UpdateBook(b, envoyAddr)
+	})
+	b.Run("HTTP_DeleteBook", func(b *testing.B) {
+		benchHTTP_DeleteBook(b, envoyAddr)
 	})
 }

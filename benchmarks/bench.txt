@@ -1,13 +1,17 @@
 goos: darwin
 goarch: arm64
 pkg: larking.io/benchmarks
-BenchmarkLarking/GRPC_GetBook-8         	   16232	     72074 ns/op	   25544 B/op	     230 allocs/op
-BenchmarkLarking/HTTP_GetBook-8         	   26217	     45169 ns/op	    9338 B/op	     154 allocs/op
-BenchmarkLarking/HTTP_UpdateBook-8      	   25369	     47217 ns/op	   11418 B/op	     180 allocs/op
-BenchmarkLarking/HTTP_DeleteBook-8      	   32587	     36809 ns/op	    7615 B/op	     100 allocs/op
-BenchmarkGRPCGateway/GRPC_GetBook-8     	   32892	     36122 ns/op	    9496 B/op	     178 allocs/op
-BenchmarkGRPCGateway/HTTP_GetBook-8     	   25860	     46307 ns/op	   10714 B/op	     173 allocs/op
-BenchmarkGRPCGateway/HTTP_UpdateBook-8  	   23271	     51380 ns/op	   16195 B/op	     223 allocs/op
-BenchmarkGRPCGateway/HTTP_DeleteBook-8  	   32416	     37014 ns/op	    8653 B/op	     112 allocs/op
+BenchmarkLarking/GRPC_GetBook-8         	   16550	     71479 ns/op	   25539 B/op	     230 allocs/op
+BenchmarkLarking/HTTP_GetBook-8         	   26666	     44819 ns/op	    9343 B/op	     154 allocs/op
+BenchmarkLarking/HTTP_UpdateBook-8      	   25627	     46572 ns/op	   11421 B/op	     180 allocs/op
+BenchmarkLarking/HTTP_DeleteBook-8      	   32762	     36555 ns/op	    7614 B/op	     100 allocs/op
+BenchmarkGRPCGateway/GRPC_GetBook-8     	   33470	     35710 ns/op	    9496 B/op	     178 allocs/op
+BenchmarkGRPCGateway/HTTP_GetBook-8     	   26257	     45733 ns/op	   10713 B/op	     173 allocs/op
+BenchmarkGRPCGateway/HTTP_UpdateBook-8  	   23522	     51028 ns/op	   16179 B/op	     223 allocs/op
+BenchmarkGRPCGateway/HTTP_DeleteBook-8  	   32832	     36548 ns/op	    8654 B/op	     112 allocs/op
+BenchmarkEnvoyGRPC/GRPC_GetBook-8       	    9073	    131169 ns/op	   10959 B/op	     177 allocs/op
+BenchmarkEnvoyGRPC/HTTP_GetBook-8       	    7795	    145246 ns/op	    9617 B/op	     161 allocs/op
+BenchmarkEnvoyGRPC/HTTP_UpdateBook-8    	    7810	    149683 ns/op	   10293 B/op	     164 allocs/op
+BenchmarkEnvoyGRPC/HTTP_DeleteBook-8    	    9069	    130203 ns/op	    8670 B/op	     124 allocs/op
 PASS
-ok  	larking.io/benchmarks	13.337s
+ok  	larking.io/benchmarks	19.649s
