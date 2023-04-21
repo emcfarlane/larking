@@ -287,9 +287,11 @@ func (p *path) addRule(
 	tok := l.toks[i]
 	for ; tok.typ == tokenSlash; tok = next() {
 		switch val := next(); val.typ {
+		// Wildcard
 		case tokenStar, tokenStarStar:
-			// TODO: Variables that don't capture the path.
-			panic("todo")
+			varfds = append(varfds, nil)
+			v := cursor.addVariable(l.toks[i : i+1])
+			cursor = v.next
 
 		// Literal
 		case tokenValue:
@@ -605,6 +607,8 @@ func isNullValue(fd protoreflect.FieldDescriptor) bool {
 
 type params []param
 
+var paramNone = param{}
+
 func (ps params) set(m proto.Message) error {
 	for _, p := range ps {
 		cur := m.ProtoReflect()
@@ -729,14 +733,18 @@ func (p *path) search(toks tokens, verb string) (*method, params, error) {
 			continue
 		}
 
-		capture := []byte(toks[1:l].String())
-
+		// fds is nil for non capture variables.
 		fds := m.vars[len(m.vars)-len(ps)-1]
-		if p, err := parseParam(fds, capture); err != nil {
-			return nil, nil, err
-		} else {
-			ps = append(ps, p)
+		p := param{fds: fds}
+		if len(fds) > 0 {
+			capture := []byte(toks[1:l].String())
+			p, err = parseParam(fds, capture)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
+		ps = append(ps, p)
+
 		return m, ps, err
 	}
 	return nil, nil, status.Error(codes.NotFound, "not found")

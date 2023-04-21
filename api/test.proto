@@ -214,6 +214,8 @@ service Complex {
   rpc Check(ComplexRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       get : "/v1/complex"
+      additional_bindings {get : "/v1/complex/{double_value}/star/*"}
+      additional_bindings {get : "/v1/complex/{double_value}/starstar/**"}
     };
   }
 }
