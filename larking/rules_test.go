@@ -570,6 +570,63 @@ func TestMessageServer(t *testing.T) {
 			msg:        &emptypb.Empty{},
 		},
 	}, {
+		name: "complex-star",
+		req: httptest.NewRequest(
+			http.MethodGet,
+			"/v1/complex/2.1/star/one",
+			nil,
+		),
+		in: in{
+			method: "/larking.testpb.Complex/Check",
+			msg: &testpb.ComplexRequest{
+				DoubleValue: 2.1,
+			},
+		},
+		out: out{
+			msg: &emptypb.Empty{},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &emptypb.Empty{},
+		},
+	}, {
+		name: "complex-star/404",
+		req: httptest.NewRequest(
+			http.MethodGet,
+			"/v1/complex/2.1/star/one/two/three",
+			nil,
+		),
+		in: in{
+			method: "/larking.testpb.Complex/Check",
+			msg: &testpb.ComplexRequest{
+				DoubleValue: 2.1,
+			},
+		},
+		out: out{},
+		want: want{
+			statusCode: 404,
+		},
+	}, {
+		name: "complex-starstar",
+		req: httptest.NewRequest(
+			http.MethodGet,
+			"/v1/complex/2.1/starstar/one/two/three",
+			nil,
+		),
+		in: in{
+			method: "/larking.testpb.Complex/Check",
+			msg: &testpb.ComplexRequest{
+				DoubleValue: 2.1,
+			},
+		},
+		out: out{
+			msg: &emptypb.Empty{},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &emptypb.Empty{},
+		},
+	}, {
 		name: "variable_one",
 		req:  httptest.NewRequest(http.MethodGet, "/version/one", nil),
 		in: in{
