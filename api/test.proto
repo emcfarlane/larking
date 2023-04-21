@@ -8,10 +8,12 @@ package larking.testpb;
 
 import "google/api/annotations.proto";
 import "google/api/httpbody.proto";
-import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
-import "google/protobuf/field_mask.proto";
 import "google/protobuf/empty.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
 option go_package = "larking.io/api/testpb;testpb";
@@ -206,6 +208,156 @@ message Scalars {
   google.protobuf.BytesValue bytes_value = 10;
   google.protobuf.StringValue string_value = 11;
   google.protobuf.FieldMask field_mask = 12;
+}
+
+service Complex {
+  rpc Check(ComplexRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      get : "/v1/complex"
+    };
+  }
+}
+
+message ComplexRequest {
+  double double_value = 1;
+  float float_value = 2;
+  int32 int32_value = 3;
+  int64 int64_value = 4;
+  uint32 uint32_value = 5;
+  uint64 uint64_value = 6;
+  sint32 sint32_value = 7;
+  sint64 sint64_value = 8;
+  fixed32 fixed32_value = 9;
+  fixed64 fixed64_value = 10;
+  sfixed32 sfixed32_value = 11;
+  sfixed64 sfixed64_value = 12;
+  bool bool_value = 13;
+  string string_value = 14;
+  bytes bytes_value = 15;
+
+  repeated double double_list = 16;
+  repeated float float_list = 17;
+  repeated int32 int32_list = 18;
+  repeated int64 int64_list = 19;
+  repeated uint32 uint32_list = 20;
+  repeated uint64 uint64_list = 21;
+  repeated sint32 sint32_list = 22;
+  repeated sint64 sint64_list = 23;
+  repeated fixed32 fixed32_list = 24;
+  repeated fixed64 fixed64_list = 25;
+  repeated sfixed32 sfixed32_list = 26;
+  repeated sfixed64 sfixed64_list = 27;
+  repeated bool bool_list = 28;
+  repeated string string_list = 29;
+  repeated bytes bytes_list = 30;
+
+  map<string, double> double_map = 31;
+  map<string, float> float_map = 32;
+  map<int32, int32> int32_map = 33;
+  map<int64, int64> int64_map = 34;
+  map<uint32, uint32> uint32_map = 35;
+  map<uint64, uint64> uint64_map = 36;
+  map<sint32, sint32> sint32_map = 37;
+  map<sint64, sint64> sint64_map = 38;
+  map<fixed32, fixed32> fixed32_map = 39;
+  map<fixed64, fixed64> fixed64_map = 40;
+  map<sfixed32, sfixed32> sfixed32_map = 41;
+  map<sfixed64, sfixed64> sfixed64_map = 42;
+  map<bool, bool> bool_map = 43;
+  map<string, string> string_map = 44;
+  map<string, bytes> bytes_map = 45;
+
+  google.protobuf.Timestamp timestamp = 46;
+  google.protobuf.Duration duration = 47;
+  google.protobuf.BoolValue bool_value_wrapper = 48;
+  google.protobuf.Int32Value int32_value_wrapper = 49;
+  google.protobuf.Int64Value int64_value_wrapper = 50;
+  google.protobuf.UInt32Value uint32_value_wrapper = 51;
+  google.protobuf.UInt64Value uint64_value_wrapper = 52;
+  google.protobuf.FloatValue float_value_wrapper = 53;
+  google.protobuf.DoubleValue double_value_wrapper = 54;
+  google.protobuf.BytesValue bytes_value_wrapper = 55;
+  google.protobuf.StringValue string_value_wrapper = 56;
+  google.protobuf.FieldMask field_mask = 57;
+  google.protobuf.Struct struct = 58;
+  google.protobuf.Any any = 59;
+  google.protobuf.Value value = 60;
+  google.protobuf.ListValue list_value = 61;
+  google.protobuf.NullValue null_value = 62;
+  google.protobuf.Empty empty = 63;
+
+  message Nested {
+    double double_value = 1;
+    float float_value = 2;
+    int32 int32_value = 3;
+    int64 int64_value = 4;
+    uint32 uint32_value = 5;
+    uint64 uint64_value = 6;
+    sint32 sint32_value = 7;
+    sint64 sint64_value = 8;
+    fixed32 fixed32_value = 9;
+    fixed64 fixed64_value = 10;
+    sfixed32 sfixed32_value = 11;
+    sfixed64 sfixed64_value = 12;
+    bool bool_value = 13;
+    string string_value = 14;
+    bytes bytes_value = 15;
+
+    enum Enum {
+      ENUM_UNSPECIFIED = 0;
+      ENUM_VALUE = 1;
+    }
+    Enum enum_value = 16;
+  }
+  Nested nested = 64;
+  repeated Nested nested_list = 65;
+  map<string, Nested> nested_map = 66;
+
+  enum Enum {
+    ENUM_UNSPECIFIED = 0;
+    ENUM_VALUE = 1;
+  }
+  Enum enum_value = 67;
+  repeated Enum enum_list = 68;
+  map<string, Enum> enum_map = 69;
+
+  oneof oneof {
+    double oneof_double_value = 70;
+    float oneof_float_value = 71;
+    int32 oneof_int32_value = 72;
+    int64 oneof_int64_value = 73;
+    uint32 oneof_uint32_value = 74;
+    uint64 oneof_uint64_value = 75;
+    sint32 oneof_sint32_value = 76;
+    sint64 oneof_sint64_value = 77;
+    fixed32 oneof_fixed32_value = 78;
+    fixed64 oneof_fixed64_value = 79;
+    sfixed32 oneof_sfixed32_value = 80;
+    sfixed64 oneof_sfixed64_value = 81;
+    bool oneof_bool_value = 82;
+    string oneof_string_value = 83;
+    bytes oneof_bytes_value = 84;
+    google.protobuf.Timestamp oneof_timestamp = 85;
+    google.protobuf.Duration oneof_duration = 86;
+    google.protobuf.BoolValue oneof_bool_value_wrapper = 87;
+    google.protobuf.Int32Value oneof_int32_value_wrapper = 88;
+    google.protobuf.Int64Value oneof_int64_value_wrapper = 89;
+    google.protobuf.UInt32Value oneof_uint32_value_wrapper = 90;
+    google.protobuf.UInt64Value oneof_uint64_value_wrapper = 91;
+    google.protobuf.FloatValue oneof_float_value_wrapper = 92;
+    google.protobuf.DoubleValue oneof_double_value_wrapper = 93;
+    google.protobuf.BytesValue oneof_bytes_value_wrapper = 94;
+    google.protobuf.StringValue oneof_string_value_wrapper = 95;
+    google.protobuf.FieldMask oneof_field_mask = 96;
+    google.protobuf.Struct oneof_struct = 97;
+    google.protobuf.Any oneof_any = 98;
+    google.protobuf.Value oneof_value = 99;
+    google.protobuf.ListValue oneof_list_value = 100;
+    google.protobuf.NullValue oneof_null_value = 101;
+    google.protobuf.Empty oneof_empty = 102;
+    Nested oneof_nested = 103;
+    Enum oneof_enum_value = 104;
+  }
 }
 
 message Shelf {

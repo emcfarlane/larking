@@ -610,14 +610,19 @@ func (ps params) set(m proto.Message) error {
 		cur := m.ProtoReflect()
 		for i, fd := range p.fds {
 			if len(p.fds)-1 == i {
-				cur.Set(fd, p.val)
+				switch {
+				case fd.IsList():
+					l := cur.Mutable(fd).List()
+					l.Append(p.val)
+				case fd.IsMap():
+					return fmt.Errorf("map fields are not supported")
+				default:
+					cur.Set(fd, p.val)
+				}
 				break
 			}
 
-			// TODO: more types?
 			cur = cur.Mutable(fd).Message()
-			// IsList()
-			// IsMap()
 		}
 	}
 	return nil
@@ -631,7 +636,7 @@ func (m *method) parseQueryParams(values url.Values) (params, error) {
 	for key, vs := range values {
 		fds := fieldPath(fieldDescs, strings.Split(key, ".")...)
 		if fds == nil {
-			continue
+			return nil, status.Errorf(codes.InvalidArgument, "unknown query param %q", key)
 		}
 
 		for _, v := range vs {

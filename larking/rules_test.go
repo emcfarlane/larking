@@ -156,6 +156,7 @@ func TestMessageServer(t *testing.T) {
 	ms := &testpb.UnimplementedMessagingServer{}
 	fs := &testpb.UnimplementedFilesServer{}
 	js := &testpb.UnimplementedWellKnownServer{}
+	cs := &testpb.UnimplementedComplexServer{}
 
 	o := new(overrides)
 	gs := grpc.NewServer(o.unaryOption(), o.streamOption())
@@ -163,6 +164,7 @@ func TestMessageServer(t *testing.T) {
 	testpb.RegisterMessagingServer(gs, ms)
 	testpb.RegisterFilesServer(gs, fs)
 	testpb.RegisterWellKnownServer(gs, js)
+	testpb.RegisterComplexServer(gs, cs)
 	reflection.Register(gs)
 
 	lis, err := net.Listen("tcp", "localhost:0")
@@ -508,6 +510,66 @@ func TestMessageServer(t *testing.T) {
 			msg:        &emptypb.Empty{},
 		},
 	}, {
+		name: "complex",
+		req: httptest.NewRequest(
+			http.MethodGet,
+			"/v1/complex?"+
+				url.Values{
+					"int32_value": []string{"1"},
+					"int64_value": []string{"2"},
+
+					// list values
+					"int32_list": []string{"1", "2"},
+					"string_list": []string{
+						"hello",
+						"world",
+					},
+
+					// enum values
+					"enum_value": []string{"ENUM_VALUE"},
+
+					// nested values
+					"nested.int32_value": []string{"1"},
+					"nested.enum_value":  []string{"ENUM_VALUE"},
+
+					// oneof values
+					"oneof_timestamp": []string{"2017-01-15T01:30:15.01Z"},
+				}.Encode(),
+			nil,
+		),
+		in: in{
+			method: "/larking.testpb.Complex/Check",
+			msg: &testpb.ComplexRequest{
+				Int32Value: 1,
+				Int64Value: 2,
+				Int32List: []int32{
+					1, 2,
+				},
+				StringList: []string{
+					"hello",
+					"world",
+				},
+				EnumValue: testpb.ComplexRequest_ENUM_VALUE,
+				Nested: &testpb.ComplexRequest_Nested{
+					Int32Value: 1,
+					EnumValue:  testpb.ComplexRequest_Nested_ENUM_VALUE,
+				},
+				Oneof: &testpb.ComplexRequest_OneofTimestamp{
+					OneofTimestamp: &timestamppb.Timestamp{
+						Seconds: 1484443815,
+						Nanos:   10000000,
+					},
+				},
+			},
+		},
+		out: out{
+			msg: &emptypb.Empty{},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &emptypb.Empty{},
+		},
+	}, {
 		name: "variable_one",
 		req:  httptest.NewRequest(http.MethodGet, "/version/one", nil),
 		in: in{
@@ -627,6 +689,7 @@ func TestMessageServer(t *testing.T) {
 
 			req := tt.req
 			req.Header["test"] = []string{tt.in.method}
+			t.Log(req.Method, req.URL.String())
 
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, req)
