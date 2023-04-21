@@ -607,8 +607,6 @@ func isNullValue(fd protoreflect.FieldDescriptor) bool {
 
 type params []param
 
-var paramNone = param{}
-
 func (ps params) set(m proto.Message) error {
 	for _, p := range ps {
 		cur := m.ProtoReflect()
@@ -714,7 +712,7 @@ func (p *path) search(toks tokens, verb string) (*method, params, error) {
 		return nil, nil, status.Error(codes.NotFound, "not found")
 	}
 
-	// caputre path segment
+	// capture path segment
 	segment := toks[0].val + toks[1].val
 	if next, ok := p.segments[segment]; ok {
 		if m, ps, err := next.search(toks[2:], verb); err == nil {
