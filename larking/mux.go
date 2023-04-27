@@ -182,7 +182,9 @@ func TypesOption(t protoregistry.MessageTypeResolver) MuxOption {
 func FilesOption(f *protoregistry.Files) MuxOption {
 	return func(opts *muxOptions) { opts.files = f }
 }
-func CodecsOption(contentType string, c Codec) MuxOption {
+
+// CodecOption registers a codec for the given content type.
+func CodecOption(contentType string, c Codec) MuxOption {
 	return func(opts *muxOptions) {
 		if opts.codecs == nil {
 			opts.codecs = make(map[string]Codec)
