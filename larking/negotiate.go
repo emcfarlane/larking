@@ -23,18 +23,18 @@ const (
 	isSpace
 )
 
-// AcceptSpec describes an Accept* header.
-type AcceptSpec struct {
+// acceptSpec describes an Accept* header.
+type acceptSpec struct {
 	Value string
 	Q     float64
 }
 
-// ParseAccept parses Accept* headers.
-func ParseAccept(header http.Header, key string) (specs []AcceptSpec) {
+// parseAccept parses Accept* headers.
+func parseAccept(header http.Header, key string) (specs []acceptSpec) {
 loop:
 	for _, s := range header[key] {
 		for {
-			var spec AcceptSpec
+			var spec acceptSpec
 			spec.Value, s = expectTokenSlash(s)
 			if spec.Value == "" {
 				continue loop
@@ -113,14 +113,14 @@ func expectQuality(s string) (q float64, rest string) {
 	return q + float64(n)/float64(d), s[i:]
 }
 
-// NegotiateContentEncoding returns the best offered content encoding for the
+// negotiateContentEncoding returns the best offered content encoding for the
 // request's Accept-Encoding header. If two offers match with equal weight and
 // then the offer earlier in the list is preferred. If no offers are
 // acceptable, then "" is returned.
-func NegotiateContentEncoding(header http.Header, offers []string) string {
+func negotiateContentEncoding(header http.Header, offers []string) string {
 	bestOffer := "identity"
 	bestQ := -1.0
-	specs := ParseAccept(header, "Accept-Encoding")
+	specs := parseAccept(header, "Accept-Encoding")
 	for _, offer := range offers {
 		for _, spec := range specs {
 			if spec.Q > bestQ &&
@@ -136,16 +136,16 @@ func NegotiateContentEncoding(header http.Header, offers []string) string {
 	return bestOffer
 }
 
-// NegotiateContentType returns the best offered content type for the request's
+// negotiateContentType returns the best offered content type for the request's
 // Accept header. If two offers match with equal weight, then the more specific
 // offer is preferred.  For example, text/* trumps */*. If two offers match
 // with equal weight and specificity, then the offer earlier in the list is
 // preferred. If no offers match, then defaultOffer is returned.
-func NegotiateContentType(header http.Header, offers []string, defaultOffer string) string {
+func negotiateContentType(header http.Header, offers []string, defaultOffer string) string {
 	bestOffer := defaultOffer
 	bestQ := -1.0
 	bestWild := 3
-	specs := ParseAccept(header, "Accept")
+	specs := parseAccept(header, "Accept")
 	for _, offer := range offers {
 		for _, spec := range specs {
 			switch {

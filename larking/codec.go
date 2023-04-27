@@ -6,32 +6,58 @@ package larking
 
 import (
 	"fmt"
+	"sync"
 
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
+var bytesPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 0, 64)
+		return &b
+	},
+}
+
+// Codec defines the interface used to encode and decode messages.
+type Codec interface {
+	encoding.Codec
+	// MarshalAppend appends the marshaled form of v to b and returns the result.
+	MarshalAppend([]byte, interface{}) ([]byte, error)
+}
+
 func init() {
-	encoding.RegisterCodec(protoCodec{})
-	encoding.RegisterCodec(jsonCodec{})
+	encoding.RegisterCodec(CodecProto{})
+	encoding.RegisterCodec(CodecJSON{})
 }
 
 func errInvalidType(v any) error {
 	return fmt.Errorf("marshal invalid type %T", v)
 }
 
-type protoCodec struct{}
+// CodecProto is a Codec implementation with protobuf binary format.
+type CodecProto struct {
+	proto.MarshalOptions
+}
 
-func (protoCodec) Marshal(v interface{}) ([]byte, error) {
+func (c CodecProto) Marshal(v interface{}) ([]byte, error) {
 	m, ok := v.(proto.Message)
 	if !ok {
 		return nil, errInvalidType(v)
 	}
-	return proto.Marshal(m)
+	return c.MarshalOptions.Marshal(m)
 }
 
-func (protoCodec) Unmarshal(data []byte, v interface{}) error {
+func (c CodecProto) MarshalAppend(b []byte, v interface{}) ([]byte, error) {
+	m, ok := v.(proto.Message)
+	if !ok {
+		return nil, errInvalidType(v)
+	}
+	return c.MarshalOptions.MarshalAppend(b, m)
+}
+
+func (CodecProto) Unmarshal(data []byte, v interface{}) error {
 	m, ok := v.(proto.Message)
 	if !ok {
 		return errInvalidType(v)
@@ -40,19 +66,31 @@ func (protoCodec) Unmarshal(data []byte, v interface{}) error {
 }
 
 // Name == "proto" overwritting internal proto codec
-func (protoCodec) Name() string { return "proto" }
+func (CodecProto) Name() string { return "proto" }
 
-type jsonCodec struct{}
+// CodecJSON is a Codec implementation with protobuf json format.
+type CodecJSON struct {
+	protojson.MarshalOptions
+}
 
-func (jsonCodec) Marshal(v interface{}) ([]byte, error) {
+func (c CodecJSON) Marshal(v interface{}) ([]byte, error) {
 	m, ok := v.(proto.Message)
 	if !ok {
 		return nil, errInvalidType(v)
 	}
-	return protojson.Marshal(m)
+	return c.MarshalOptions.Marshal(m)
 }
 
-func (jsonCodec) Unmarshal(data []byte, v interface{}) error {
+func (c CodecJSON) MarshalAppend(b []byte, v interface{}) ([]byte, error) {
+	m, ok := v.(proto.Message)
+	if !ok {
+		return nil, errInvalidType(v)
+	}
+	// TODO: implement MarshalAppend
+	return c.MarshalOptions.Marshal(m)
+}
+
+func (CodecJSON) Unmarshal(data []byte, v interface{}) error {
 	m, ok := v.(proto.Message)
 	if !ok {
 		return errInvalidType(v)
@@ -60,4 +98,4 @@ func (jsonCodec) Unmarshal(data []byte, v interface{}) error {
 	return protojson.Unmarshal(data, m)
 }
 
-func (jsonCodec) Name() string { return "json" }
+func (CodecJSON) Name() string { return "json" }
