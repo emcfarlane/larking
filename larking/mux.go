@@ -13,6 +13,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,12 +24,10 @@ import (
 	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
 	rpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -81,27 +80,43 @@ type muxOptions struct {
 	files                 *protoregistry.Files
 	unaryInterceptor      grpc.UnaryServerInterceptor
 	streamInterceptor     grpc.StreamServerInterceptor
+	codecs                map[string]Codec
+	contentTypeOffers     []string
 	maxReceiveMessageSize int
 	maxSendMessageSize    int
 	connectionTimeout     time.Duration
 }
 
-func (o *muxOptions) readAll(r io.Reader) ([]byte, error) {
-	b, err := io.ReadAll(io.LimitReader(r, int64(o.maxReceiveMessageSize)+1))
-	if err != nil {
-		return nil, err
+// readAll reads from r until an error or EOF and returns the data it read.
+func (o *muxOptions) readAll(b []byte, r io.Reader) ([]byte, error) {
+	var total int64
+	for {
+		if len(b) == cap(b) {
+			// Add more capacity (let append pick how much).
+			b = append(b, 0)[:len(b)]
+		}
+		n, err := r.Read(b[len(b):cap(b)])
+		b = b[:len(b)+n]
+		total += int64(n)
+		if total > int64(o.maxReceiveMessageSize) {
+			return nil, fmt.Errorf("max receive message size reached")
+		}
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return b, err
+		}
 	}
-	if len(b) > o.maxReceiveMessageSize {
-		return nil, fmt.Errorf("max receive message size reached")
-	}
-	return b, nil
 }
 func (o *muxOptions) writeAll(dst io.Writer, b []byte) error {
 	if len(b) > o.maxSendMessageSize {
 		return fmt.Errorf("max send message size reached")
 	}
-	src := bytes.NewReader(b)
-	_, err := io.Copy(dst, src)
+	n, err := dst.Write(b)
+	if n != len(b) {
+		return io.ErrShortWrite
+	}
 	return err
 }
 
@@ -121,15 +136,24 @@ func (o *muxOptions) stream(srv interface{}, ss grpc.ServerStream, info *grpc.St
 	return handler(srv, ss)
 }
 
+// MuxOption is an option for a mux.
 type MuxOption func(*muxOptions)
 
-var defaultMuxOptions = muxOptions{
-	maxReceiveMessageSize: defaultServerMaxReceiveMessageSize,
-	maxSendMessageSize:    defaultServerMaxSendMessageSize,
-	connectionTimeout:     defaultServerConnectionTimeout,
-	files:                 protoregistry.GlobalFiles,
-	types:                 protoregistry.GlobalTypes,
-}
+var (
+	defaultMuxOptions = muxOptions{
+		maxReceiveMessageSize: defaultServerMaxReceiveMessageSize,
+		maxSendMessageSize:    defaultServerMaxSendMessageSize,
+		connectionTimeout:     defaultServerConnectionTimeout,
+		files:                 protoregistry.GlobalFiles,
+		types:                 protoregistry.GlobalTypes,
+	}
+
+	defaultCodecs = map[string]Codec{
+		"application/json":         CodecJSON{},
+		"application/protobuf":     CodecProto{},
+		"application/octet-stream": CodecProto{},
+	}
+)
 
 func UnaryServerInterceptorOption(interceptor grpc.UnaryServerInterceptor) MuxOption {
 	return func(opts *muxOptions) { opts.unaryInterceptor = interceptor }
@@ -141,6 +165,30 @@ func StreamServerInterceptorOption(interceptor grpc.StreamServerInterceptor) Mux
 
 func StatsOption(h stats.Handler) MuxOption {
 	return func(opts *muxOptions) { opts.statsHandler = h }
+}
+
+func MaxReceiveMessageSizeOption(s int) MuxOption {
+	return func(opts *muxOptions) { opts.maxReceiveMessageSize = s }
+}
+func MaxSendMessageSizeOption(s int) MuxOption {
+	return func(opts *muxOptions) { opts.maxSendMessageSize = s }
+}
+func ConnectionTimeoutOption(d time.Duration) MuxOption {
+	return func(opts *muxOptions) { opts.connectionTimeout = d }
+}
+func TypesOption(t protoregistry.MessageTypeResolver) MuxOption {
+	return func(opts *muxOptions) { opts.types = t }
+}
+func FilesOption(f *protoregistry.Files) MuxOption {
+	return func(opts *muxOptions) { opts.files = f }
+}
+func CodecsOption(contentType string, c Codec) MuxOption {
+	return func(opts *muxOptions) {
+		if opts.codecs == nil {
+			opts.codecs = make(map[string]Codec)
+		}
+		opts.codecs[contentType] = c
+	}
 }
 
 type Mux struct {
@@ -156,6 +204,20 @@ func NewMux(opts ...MuxOption) (*Mux, error) {
 	for _, opt := range opts {
 		opt(&muxOpts)
 	}
+
+	// Ensure codecs are set.
+	if muxOpts.codecs == nil {
+		muxOpts.codecs = make(map[string]Codec)
+	}
+	for k, v := range defaultCodecs {
+		if _, ok := muxOpts.codecs[k]; !ok {
+			muxOpts.codecs[k] = v
+		}
+	}
+	for k := range muxOpts.codecs {
+		muxOpts.contentTypeOffers = append(muxOpts.contentTypeOffers, k)
+	}
+	sort.Strings(muxOpts.contentTypeOffers)
 
 	return &Mux{
 		opts: muxOpts,
@@ -590,16 +652,6 @@ func (s *state) match(route, verb string) (*method, params, error) {
 }
 
 var (
-	contentTypeCodec = map[string]encoding.Codec{
-		"application/json":         jsonCodec{},
-		"application/protobuf":     protoCodec{},
-		"application/octet-stream": protoCodec{},
-	}
-	contentTypeOffers = []string{
-		"application/json",
-		"application/protobuf",
-		"application/octet-stream",
-	}
 	encodingOffers = []string{
 		"gzip",
 		"identity",
@@ -658,8 +710,8 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 	s.sendN += 1
 	reply := m.(proto.Message)
 
-	accept := NegotiateContentType(s.r.Header, contentTypeOffers, contentTypeOffers[0])
-	acceptEncoding := NegotiateContentEncoding(s.r.Header, encodingOffers)
+	accept := negotiateContentType(s.r.Header, s.opts.contentTypeOffers, "application/json")
+	acceptEncoding := negotiateContentEncoding(s.r.Header, encodingOffers)
 
 	if fRsp, ok := s.w.(http.Flusher); ok {
 		defer fRsp.Flush()
@@ -698,11 +750,22 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 		return nil
 	}
 
-	codec, ok := contentTypeCodec[accept]
+	codec, ok := s.opts.codecs[accept]
 	if !ok {
 		return fmt.Errorf("unknown accept encoding: %s", accept)
 	}
-	b, err := codec.Marshal(msg)
+
+	bytes := bytesPool.Get().(*[]byte)
+	b := (*bytes)[:0]
+	defer func() {
+		if cap(b) < s.opts.maxReceiveMessageSize {
+			*bytes = b
+			bytesPool.Put(bytes)
+		}
+	}()
+
+	var err error
+	b, err = codec.MarshalAppend(b, msg)
 	if err != nil {
 		return err
 	}
@@ -735,7 +798,17 @@ func (s *streamHTTP) decodeRequestArgs(args proto.Message) error {
 	}
 	defer body.Close()
 
-	b, err := s.opts.readAll(body)
+	bytes := bytesPool.Get().(*[]byte)
+	b := (*bytes)[:0]
+	defer func() {
+		if cap(b) < s.opts.maxReceiveMessageSize {
+			*bytes = b
+			bytesPool.Put(bytes)
+		}
+	}()
+
+	var err error
+	b, err = s.opts.readAll(b, body)
 	if err != nil {
 		return err
 	}
@@ -763,7 +836,7 @@ func (s *streamHTTP) decodeRequestArgs(args proto.Message) error {
 		contentType = "application/json"
 	}
 
-	codec, ok := contentTypeCodec[contentType]
+	codec, ok := s.opts.codecs[contentType]
 	if !ok {
 		return fmt.Errorf("unknown content-type encoding: %s", contentType)
 	}
@@ -805,12 +878,16 @@ func isWebsocketRequest(r *http.Request) bool {
 	return false
 }
 
-func encError(w http.ResponseWriter, err error) {
+func (m *Mux) encError(w http.ResponseWriter, r *http.Request, err error) {
 	s, _ := status.FromError(err)
-	w.Header().Set("Content-Type", "application/json")
+
+	accept := negotiateContentType(r.Header, m.opts.contentTypeOffers, "application/json")
+	w.Header().Set("Content-Type", accept)
 	w.WriteHeader(HTTPStatusCode(s.Code()))
 
-	b, err := protojson.Marshal(s.Proto())
+	c := m.opts.codecs[accept]
+
+	b, err := c.Marshal(s.Proto())
 	if err != nil {
 		panic(err) // ...
 	}
@@ -949,6 +1026,6 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.URL.Path = "/" + r.URL.Path
 	}
 	if err := m.serveHTTP(w, r); err != nil {
-		encError(w, err)
+		m.encError(w, r, err)
 	}
 }
