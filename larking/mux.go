@@ -114,7 +114,7 @@ func (o *muxOptions) writeAll(dst io.Writer, b []byte) error {
 		return fmt.Errorf("max send message size reached")
 	}
 	n, err := dst.Write(b)
-	if n != len(b) {
+	if err == nil && n != len(b) {
 		return io.ErrShortWrite
 	}
 	return err
