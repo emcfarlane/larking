@@ -13,10 +13,14 @@ import (
 	"testing"
 	"time"
 
+	connect_go "github.com/bufbuild/connect-go"
 	"github.com/gorilla/mux"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/soheilhy/cmux"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/genproto/protobuf/field_mask"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -25,6 +29,8 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"larking.io/benchmarks/api/librarypb"
+	"larking.io/benchmarks/api/librarypb/librarypbconnect"
+	cpb "larking.io/benchmarks/api/librarypb/librarypbconnect"
 	"larking.io/larking"
 )
 
@@ -59,6 +65,7 @@ func doRequest(b *testing.B, method, url string, in, out proto.Message) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	r.Header.Set("Content-Type", "application/json")
 
 	w, err := http.DefaultClient.Do(r)
 	if err != nil {
@@ -73,7 +80,8 @@ func doRequest(b *testing.B, method, url string, in, out proto.Message) {
 		b.Fatal(err)
 	}
 	if w.StatusCode != http.StatusOK {
-		b.Logf("body: %s", body)
+		b.Log(r.URL.String())
+		b.Logf("body: %s", buf)
 		b.Fatalf("status code: %d", w.StatusCode)
 	}
 	if err := protojson.Unmarshal(buf, out); err != nil {
@@ -492,5 +500,145 @@ func BenchmarkGorillaMux(b *testing.B) {
 	})
 	b.Run("HTTP_DeleteBook", func(b *testing.B) {
 		benchHTTP_DeleteBook(b, lis.Addr().String())
+	})
+}
+
+func BenchmarkConnectGo(b *testing.B) {
+	ctx := context.Background()
+	svc := &testConnectService{}
+
+	mux := http.NewServeMux()
+	path, handler := librarypbconnect.NewLibraryServiceHandler(svc)
+	mux.Handle(path, handler)
+
+	lis, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		b.Fatalf("failed to listen: %v", err)
+	}
+	defer lis.Close()
+
+	n := 1
+	errs := make(chan error, n)
+
+	h2s := &http2.Server{}
+	hs := &http.Server{
+		Handler: h2c.NewHandler(mux, h2s),
+	}
+
+	go func() { errs <- hs.Serve(lis) }()
+	defer hs.Close()
+
+	cc, err := grpc.Dial(
+		lis.Addr().String(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+		grpc.WithTimeout(time.Second),
+	)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer cc.Close()
+	client := librarypb.NewLibraryServiceClient(cc)
+
+	ccc := librarypbconnect.NewLibraryServiceClient(
+		http.DefaultClient,
+		"http://"+lis.Addr().String(),
+	)
+
+	b.Run("GRPC_GetBook", func(b *testing.B) {
+		benchGRPC_GetBook(b, client)
+	})
+	b.Run("HTTP_GetBook", func(b *testing.B) {
+		addr := lis.Addr().String()
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			in := &librarypb.GetBookRequest{
+				Name: "shelves/1/books/1",
+			}
+			out := &librarypb.Book{}
+			doRequest(b, http.MethodPost, "http://"+addr+cpb.LibraryServiceGetBookProcedure, in, out)
+		}
+		b.StopTimer()
+	})
+	b.Run("HTTP_UpdateBook", func(b *testing.B) {
+		addr := lis.Addr().String()
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			in := &librarypb.UpdateBookRequest{
+				Book: &librarypb.Book{
+					Name:  "shelves/1/books/1",
+					Title: "The Great Gatsby",
+				},
+				UpdateMask: &field_mask.FieldMask{
+					Paths: []string{"book.title"},
+				},
+			}
+			out := &librarypb.Book{}
+			doRequest(b, http.MethodPost, "http://"+addr+cpb.LibraryServiceUpdateBookProcedure, in, out)
+		}
+		b.StopTimer()
+	})
+	b.Run("HTTP_DeleteBook", func(b *testing.B) {
+		addr := lis.Addr().String()
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			in := &librarypb.DeleteBookRequest{
+				Name: "shelves/1/books/1",
+			}
+			out := &emptypb.Empty{}
+			doRequest(b, http.MethodPost, "http://"+addr+cpb.LibraryServiceDeleteBookProcedure, in, out)
+		}
+		b.StopTimer()
+	})
+	b.Run("Connect_GetBook", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			in := &librarypb.GetBookRequest{
+				Name: "shelves/1/books/1",
+			}
+			_, err := ccc.GetBook(ctx, connect_go.NewRequest(in))
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StopTimer()
+	})
+	b.Run("Connect_UpdateBook", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			in := &librarypb.UpdateBookRequest{
+				Book: &librarypb.Book{
+					Name:  "shelves/1/books/1",
+					Title: "The Great Gatsby",
+				},
+				UpdateMask: &field_mask.FieldMask{
+					Paths: []string{"book.title"},
+				},
+			}
+			_, err := ccc.UpdateBook(ctx, connect_go.NewRequest(in))
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StopTimer()
+	})
+	b.Run("Connect_DeleteBook", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			in := &librarypb.DeleteBookRequest{
+				Name: "shelves/1/books/1",
+			}
+			_, err := ccc.DeleteBook(ctx, connect_go.NewRequest(in))
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StopTimer()
 	})
 }
