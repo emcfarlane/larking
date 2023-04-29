@@ -642,3 +642,80 @@ func BenchmarkConnectGo(b *testing.B) {
 		b.StopTimer()
 	})
 }
+
+func BenchmarkTwirp(b *testing.B) {
+	ctx := context.Background()
+	svc := &testService{}
+
+	svr := librarypb.NewLibraryServiceServer(svc)
+
+	lis, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		b.Fatalf("failed to listen: %v", err)
+	}
+	defer lis.Close()
+
+	n := 1
+	errs := make(chan error, n)
+
+	hs := &http.Server{
+		Handler: svr,
+	}
+
+	go func() { errs <- hs.Serve(lis) }()
+	defer hs.Close()
+
+	ccc := librarypb.NewLibraryServiceJSONClient(
+		"http://"+lis.Addr().String(),
+		http.DefaultClient,
+	)
+
+	b.Run("HTTP_GetBook", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			in := &librarypb.GetBookRequest{
+				Name: "shelves/1/books/1",
+			}
+			_, err := ccc.GetBook(ctx, in)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StopTimer()
+	})
+	b.Run("HTTP_UpdateBook", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			in := &librarypb.UpdateBookRequest{
+				Book: &librarypb.Book{
+					Name:  "shelves/1/books/1",
+					Title: "The Great Gatsby",
+				},
+				UpdateMask: &field_mask.FieldMask{
+					Paths: []string{"book.title"},
+				},
+			}
+			_, err := ccc.UpdateBook(ctx, in)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StopTimer()
+	})
+	b.Run("HTTP_DeleteBook", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			in := &librarypb.DeleteBookRequest{
+				Name: "shelves/1/books/1",
+			}
+			_, err := ccc.DeleteBook(ctx, in)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StopTimer()
+	})
+}
