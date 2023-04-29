@@ -1,8 +1,7 @@
 # Benchmarks
 
-Comparisons against other services. See `bench.txt` for results. 
-
-https://www.emcfarlane.com/blog/2023-04-18-profile-lexer 
+Comparisons against other popular services. See `bench.txt` for results.
+Benchmarks should be taken with a grain of salt, please add more if you'd like to expand the test cases!
 
 ## gRPC-Gateway
 
@@ -19,3 +18,17 @@ Slower than both larking and gRPC-Gateway, price for proxying requests.
 [Gorilla Mux](https://github.com/gorilla/mux) is a popular routing library for HTTP services in Go.
 Here we write a custom mux that replicates the gRPC annotations and binds the mux to the gRPC server.
 Compares speed with writing the annotations binding by hand, useful for compairsons with Go routing libraries.
+
+## Connect-go
+
+[Connect-go](https://github.com/bufbuild/connect-go) is a slim library with gRPC compatible HTTP APIs.
+
+## Twirp
+
+[Twirp](https://github.com/twitchtv/twirp) is a simple RPC protocol based on HTTP and Protocol Buffers (proto).
+
+
+### Optimisations
+
+- https://www.emcfarlane.com/blog/2023-04-18-profile-lexer
+
