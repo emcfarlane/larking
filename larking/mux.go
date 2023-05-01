@@ -329,12 +329,28 @@ func (r *resolver) FindDescriptorByName(fullname protoreflect.FullName) (protore
 }
 
 func (s *state) appendHandler(
-	rule *annotations.HttpRule,
 	desc protoreflect.MethodDescriptor,
 	h *handler,
 ) error {
-	if err := s.path.addRule(rule, desc, h.method); err != nil {
-		return fmt.Errorf("[%s] invalid rule %s: %w", desc.FullName(), rule.String(), err)
+	// Add an implicit rule for the method.
+	implicitRule := &annotations.HttpRule{
+		Pattern: &annotations.HttpRule_Custom{
+			Custom: &annotations.CustomHttpPattern{
+				Kind: "*",
+				Path: h.method,
+			},
+		},
+		Body: "*",
+	}
+	if err := s.path.addRule(implicitRule, desc, h.method); err != nil {
+		panic(fmt.Sprintf("bug: %v", err))
+	}
+
+	// Add all annotated rules.
+	if rule := getExtensionHTTP(desc.Options()); rule != nil {
+		if err := s.path.addRule(rule, desc, h.method); err != nil {
+			return fmt.Errorf("[%s] invalid rule %s: %w", desc.FullName(), rule.String(), err)
+		}
 	}
 	s.handlers[h.method] = append(s.handlers[h.method], h)
 	return nil
@@ -610,17 +626,8 @@ func (s *state) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor)
 		mds := sd.Methods()
 		for j := 0; j < mds.Len(); j++ {
 			md := mds.Get(j)
-
-			opts := md.Options() // TODO: nil check fails?
-
-			rule := getExtensionHTTP(opts)
-			if rule == nil {
-				continue
-			}
-
 			hd := createConnHandler(cc, sd, md)
-
-			if err := s.appendHandler(rule, md, hd); err != nil {
+			if err := s.appendHandler(md, hd); err != nil {
 				return nil, err
 			}
 			handlers = append(handlers, hd)
@@ -659,217 +666,6 @@ var (
 		"identity",
 	}
 )
-
-type streamHTTP struct {
-	opts       muxOptions
-	ctx        context.Context
-	w          http.ResponseWriter
-	r          *http.Request
-	method     *method
-	header     metadata.MD
-	trailer    metadata.MD
-	params     params
-	recvN      int
-	sendN      int
-	sentHeader bool
-}
-
-func (s *streamHTTP) SetHeader(md metadata.MD) error {
-	if s.sentHeader {
-		return fmt.Errorf("already sent headers")
-	}
-	s.header = metadata.Join(s.header, md)
-	return nil
-}
-func (s *streamHTTP) SendHeader(md metadata.MD) error {
-	if s.sentHeader {
-		return fmt.Errorf("already sent headers")
-	}
-	s.header = metadata.Join(s.header, md)
-	setOutgoingHeader(s.w.Header(), s.header)
-	// don't write the header code, wait for the body.
-	s.sentHeader = true
-
-	if sh := s.opts.statsHandler; sh != nil {
-		sh.HandleRPC(s.ctx, &stats.OutHeader{
-			Header:      s.header.Copy(),
-			Compression: s.r.Header.Get("Accept-Encoding"),
-		})
-	}
-	return nil
-}
-
-func (s *streamHTTP) SetTrailer(md metadata.MD) {
-	s.trailer = metadata.Join(s.trailer, md)
-}
-
-func (s *streamHTTP) Context() context.Context {
-	sts := &serverTransportStream{s, s.method.name}
-	return grpc.NewContextWithServerTransportStream(s.ctx, sts)
-}
-
-func (s *streamHTTP) SendMsg(m interface{}) error {
-	s.sendN += 1
-	reply := m.(proto.Message)
-
-	accept := negotiateContentType(s.r.Header, s.opts.contentTypeOffers, "application/json")
-	acceptEncoding := negotiateContentEncoding(s.r.Header, encodingOffers)
-
-	if fRsp, ok := s.w.(http.Flusher); ok {
-		defer fRsp.Flush()
-	}
-
-	setOutgoingHeader(s.w.Header(), s.header, s.trailer)
-
-	var resp io.Writer = s.w
-	switch acceptEncoding {
-	case "gzip":
-		s.w.Header().Set("Content-Encoding", "gzip")
-		gRsp := gzip.NewWriter(s.w)
-		defer gRsp.Close()
-		resp = gRsp
-	}
-
-	cur := reply.ProtoReflect()
-	for _, fd := range s.method.resp {
-		cur = cur.Mutable(fd).Message()
-	}
-
-	msg := cur.Interface()
-
-	if cur.Descriptor().FullName() == "google.api.HttpBody" {
-		fds := cur.Descriptor().Fields()
-		fdContentType := fds.ByName(protoreflect.Name("content_type"))
-		fdData := fds.ByName(protoreflect.Name("data"))
-		pContentType := cur.Get(fdContentType)
-		pData := cur.Get(fdData)
-
-		s.w.Header().Set("Content-Type", pContentType.String())
-		// TODO different non-message size?
-		if err := s.opts.writeAll(resp, pData.Bytes()); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	codec, ok := s.opts.codecs[accept]
-	if !ok {
-		return fmt.Errorf("unknown accept encoding: %s", accept)
-	}
-
-	bytes := bytesPool.Get().(*[]byte)
-	b := (*bytes)[:0]
-	defer func() {
-		if cap(b) < s.opts.maxReceiveMessageSize {
-			*bytes = b
-			bytesPool.Put(bytes)
-		}
-	}()
-
-	var err error
-	b, err = codec.MarshalAppend(b, msg)
-	if err != nil {
-		return err
-	}
-	s.w.Header().Set("Content-Type", accept)
-	if err := s.opts.writeAll(resp, b); err != nil {
-		return err
-	}
-	if stats := s.opts.statsHandler; stats != nil {
-		// TODO: raw payload stats.
-		stats.HandleRPC(s.ctx, outPayload(false, m, b, b, time.Now()))
-	}
-	return nil
-}
-
-func (s *streamHTTP) decodeRequestArgs(args proto.Message) error {
-	contentType := s.r.Header.Get("Content-Type")
-	contentEncoding := s.r.Header.Get("Content-Encoding")
-
-	var body io.ReadCloser
-	switch contentEncoding {
-	case "gzip":
-		var err error
-		body, err = gzip.NewReader(s.r.Body)
-		if err != nil {
-			return err
-		}
-
-	default:
-		body = s.r.Body
-	}
-	defer body.Close()
-
-	bytes := bytesPool.Get().(*[]byte)
-	b := (*bytes)[:0]
-	defer func() {
-		if cap(b) < s.opts.maxReceiveMessageSize {
-			*bytes = b
-			bytesPool.Put(bytes)
-		}
-	}()
-
-	var err error
-	b, err = s.opts.readAll(b, body)
-	if err != nil {
-		return err
-	}
-
-	cur := args.ProtoReflect()
-	for _, fd := range s.method.body {
-		cur = cur.Mutable(fd).Message()
-	}
-	fullname := cur.Descriptor().FullName()
-
-	msg := cur.Interface()
-
-	if fullname == "google.api.HttpBody" {
-		rfl := msg.ProtoReflect()
-		fds := rfl.Descriptor().Fields()
-		fdContentType := fds.ByName(protoreflect.Name("content_type"))
-		fdData := fds.ByName(protoreflect.Name("data"))
-		rfl.Set(fdContentType, protoreflect.ValueOfString(contentType))
-		rfl.Set(fdData, protoreflect.ValueOfBytes(b))
-		// TODO: extensions?
-		return nil
-	}
-
-	if contentType == "" {
-		contentType = "application/json"
-	}
-
-	codec, ok := s.opts.codecs[contentType]
-	if !ok {
-		return fmt.Errorf("unknown content-type encoding: %s", contentType)
-	}
-	if err := codec.Unmarshal(b, msg); err != nil {
-		return err
-	}
-	if stats := s.opts.statsHandler; stats != nil {
-		// TODO: raw payload stats.
-		stats.HandleRPC(s.ctx, inPayload(false, msg, b, b, time.Now()))
-	}
-	return nil
-}
-
-func (s *streamHTTP) RecvMsg(m interface{}) error {
-	s.recvN += 1
-	args := m.(proto.Message)
-
-	// TODO: fix the body marshalling
-	if s.method.hasBody {
-		// TODO: handler should decide what to select on?
-		if err := s.decodeRequestArgs(args); err != nil {
-			return err
-		}
-	}
-	if s.recvN == 1 {
-		if err := s.params.set(args); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 func isWebsocketRequest(r *http.Request) bool {
 	for _, header := range r.Header["Upgrade"] {
@@ -995,12 +791,62 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}
 
+	contentType := r.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	contentEncoding := r.Header.Get("Content-Encoding")
+
+	defer r.Body.Close()
+
+	var body io.ReadCloser
+	switch contentEncoding {
+	case "gzip":
+		var err error
+		body, err = gzip.NewReader(r.Body)
+		if err != nil {
+			return err
+		}
+		defer body.Close()
+	default:
+		body = r.Body
+	}
+
+	accept := negotiateContentType(r.Header, m.opts.contentTypeOffers, "application/json")
+	acceptEncoding := negotiateContentEncoding(r.Header, encodingOffers)
+
+	if fRsp, ok := w.(http.Flusher); ok {
+		defer fRsp.Flush()
+	}
+
+	var resp io.Writer = w
+	switch acceptEncoding {
+	case "gzip":
+		w.Header().Set("Content-Encoding", "gzip")
+		gRsp := gzip.NewWriter(w)
+		defer gRsp.Close()
+		resp = gRsp
+	}
+
 	stream := &streamHTTP{
-		ctx: ctx,
-		w:   w, r: r,
+		ctx:    ctx,
 		method: method,
 		params: params,
 		opts:   m.opts,
+
+		// write
+		w:       resp,
+		wHeader: w.Header(),
+		wCodec:  m.opts.codecs[accept],
+
+		// read
+		r:       body,
+		rHeader: r.Header,
+		rCodec:  m.opts.codecs[contentType],
+
+		accept:      accept,
+		contentType: contentType,
+		hasBody:     r.ContentLength > 0 || r.ContentLength == -1,
 	}
 	herr := hd.handler(&m.opts, stream)
 	// Handle stats.

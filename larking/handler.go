@@ -19,7 +19,7 @@ type handlerFunc func(*muxOptions, grpc.ServerStream) error
 type handler struct {
 	descriptor protoreflect.MethodDescriptor
 	handler    handlerFunc
-	method     string
+	method     string // /Service/Method
 }
 
 // TODO: use grpclog?
@@ -73,11 +73,6 @@ func (m *Mux) registerService(gsd *grpc.ServiceDesc, ss interface{}) error {
 			return err
 		}
 
-		rule := getExtensionHTTP(md.Options())
-		if rule == nil {
-			continue
-		}
-
 		h := &handler{
 			method:     method,
 			descriptor: md,
@@ -93,7 +88,7 @@ func (m *Mux) registerService(gsd *grpc.ServiceDesc, ss interface{}) error {
 			},
 		}
 
-		if err := s.appendHandler(rule, md, h); err != nil {
+		if err := s.appendHandler(md, h); err != nil {
 			return err
 		}
 	}
@@ -103,11 +98,6 @@ func (m *Mux) registerService(gsd *grpc.ServiceDesc, ss interface{}) error {
 		md, err := findMethod(d.StreamName)
 		if err != nil {
 			return err
-		}
-
-		rule := getExtensionHTTP(md.Options())
-		if rule == nil {
-			continue
 		}
 
 		h := &handler{
@@ -123,7 +113,7 @@ func (m *Mux) registerService(gsd *grpc.ServiceDesc, ss interface{}) error {
 				return opts.stream(ss, stream, info, d.Handler)
 			},
 		}
-		if err := s.appendHandler(rule, md, h); err != nil {
+		if err := s.appendHandler(md, h); err != nil {
 			return err
 		}
 	}

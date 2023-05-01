@@ -32,10 +32,11 @@ const (
 	tokenVariableStart                       // {
 	tokenVariableEnd                         // }
 	tokenEqual                               // =
-	tokenValue                               // a-z A-Z 0-9 - _
+	tokenIdent                               // a-z A-Z 0-9 - _
+	tokenLiteral                             // a-z A-Z 0-9 - _ .
 	tokenDot                                 // .
 	tokenVerb                                // :
-	tokenPath                                // a-z A-Z 0-9 . - _ ~ ! $ & ' ( ) * + , ; = @
+	tokenPath                                // a-z A-Z 0-9 - _ . ~ ! $ & ' ( ) * + , ; = @
 	tokenEOF
 )
 
@@ -153,25 +154,36 @@ func (l *lexer) errShort() error {
 	return status.Errorf(codes.InvalidArgument, "path: %v:%v short read %q", l.pos-l.width, l.pos, r)
 }
 
-func isValue(r rune) bool {
+func isIdent(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsNumber(r) || r == '_' || r == '-'
 }
 
-func isPath(r rune) bool {
-	return isValue(r) || r == '.' || r == '~' || r == '!' || r == '$' ||
-		r == '&' || r == '\'' || r == '(' || r == ')' || r == '*' ||
-		r == '+' || r == ',' || r == ';' || r == '=' || r == '@'
+func isLiteral(r rune) bool {
+	return isIdent(r) || r == '.'
 }
 
-func lexValue(l *lexer) error {
-	if i := l.acceptRun(isValue); i == 0 {
+func isPath(r rune) bool {
+	return isLiteral(r) || r == '~' || r == '!' || r == '$' || r == '&' ||
+		r == '\'' || r == '(' || r == ')' || r == '*' || r == '+' ||
+		r == ',' || r == ';' || r == '=' || r == '@'
+}
+
+func lexIdent(l *lexer) error {
+	if i := l.acceptRun(isIdent); i == 0 {
 		return l.errShort()
 	}
-	return l.emit(tokenValue)
+	return l.emit(tokenIdent)
+}
+
+func lexLiteral(l *lexer) error {
+	if i := l.acceptRun(isLiteral); i == 0 {
+		return l.errShort()
+	}
+	return l.emit(tokenLiteral)
 }
 
 func lexFieldPath(l *lexer) error {
-	if err := lexValue(l); err != nil {
+	if err := lexIdent(l); err != nil {
 		return err
 	}
 	for {
@@ -182,14 +194,14 @@ func lexFieldPath(l *lexer) error {
 		if err := l.emit(tokenDot); err != nil {
 			return err
 		}
-		if err := lexValue(l); err != nil {
+		if err := lexIdent(l); err != nil {
 			return err
 		}
 	}
 }
 
 func lexVerb(l *lexer) error {
-	if err := lexValue(l); err != nil {
+	if err := lexLiteral(l); err != nil {
 		return err
 	}
 	if r := l.next(); r == eof {
@@ -232,10 +244,7 @@ func lexSegment(l *lexer) error {
 	r := l.next()
 	switch {
 	case unicode.IsLetter(r):
-		if i := l.acceptRun(isValue); i == 0 {
-			return l.errShort()
-		}
-		return l.emit(tokenValue)
+		return lexLiteral(l)
 	case r == '*':
 		rn := l.next()
 		if rn == '*' {
