@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -24,9 +26,9 @@ type streamHTTP struct {
 	wCodec      Codec // nilable
 	wHeader     http.Header
 	rmu         sync.Mutex
-	rbuf        []byte
-	r           io.Reader
-	rCodec      Codec // nilable
+	rbuf        []byte    // stream read buffer
+	r           io.Reader //
+	rCodec      Codec     // nilable
 	rHeader     http.Header
 	header      metadata.MD
 	trailer     metadata.MD
@@ -151,7 +153,7 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 	var err error
 	b, err = s.wCodec.MarshalAppend(b, msg)
 	if err != nil {
-		return err
+		return status.Errorf(codes.Internal, "%s: error while marshaling: %v", s.wCodec.Name(), err)
 	}
 	if _, err := s.writeMsg(b, s.contentType); err != nil {
 		return err
@@ -170,11 +172,11 @@ func (s *streamHTTP) readMsg(b []byte) (int, []byte, error) {
 	count := s.recvCount
 	s.recvCount += 1
 	if s.method.desc.IsStreamingClient() {
-		b = append(b, s.rbuf...)
 		codec, ok := s.rCodec.(SizeCodec)
 		if !ok {
 			return -1, nil, fmt.Errorf("codec %s does not support streaming", codec.Name())
 		}
+		b = append(b, s.rbuf...)
 		b, n, err := codec.SizeRead(b, s.r, s.opts.maxReceiveMessageSize)
 		if err != nil {
 			return -1, nil, err
@@ -231,7 +233,7 @@ func (s *streamHTTP) decodeRequestArgs(args proto.Message) (int, error) {
 		return count, fmt.Errorf("unknown content-type encoding: %s", s.contentType)
 	}
 	if err := s.rCodec.Unmarshal(b, msg); err != nil {
-		return count, err
+		return count, status.Errorf(codes.Internal, "%s: error while unmarshaling: %v", s.wCodec.Name(), err)
 	}
 	if stats := s.opts.statsHandler; stats != nil {
 		// TODO: raw payload stats.
@@ -247,7 +249,7 @@ func (s *streamHTTP) RecvMsg(m interface{}) error {
 		count int
 		err   error
 	)
-	if s.method.hasBody {
+	if s.method.hasBody && s.hasBody {
 		count, err = s.decodeRequestArgs(args)
 		if err != nil {
 			return err

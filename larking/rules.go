@@ -294,7 +294,7 @@ func (p *path) addRule(
 			cursor = v.next
 
 		// Literal
-		case tokenValue:
+		case tokenLiteral:
 			cursor = cursor.addPath(tok, val)
 
 		// Variable
@@ -516,83 +516,84 @@ func parseParam(fds []protoreflect.FieldDescriptor, raw []byte) (param, error) {
 	case protoreflect.MessageKind:
 		// Well known JSON scalars are decoded to message types.
 		md := fd.Message()
-		switch md.FullName() {
-		case "google.protobuf.Timestamp":
-			var msg timestamppb.Timestamp
-			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
-				return param{}, err
+		name := string(md.FullName())
+		if strings.HasPrefix(name, "google.protobuf.") {
+			switch md.FullName()[16:] {
+			case "Timestamp":
+				var msg timestamppb.Timestamp
+				if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
+					return param{}, err
+				}
+				return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			case "Duration":
+				var msg durationpb.Duration
+				if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
+					return param{}, err
+				}
+				return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			case "BoolValue":
+				var msg wrapperspb.BoolValue
+				if err := protojson.Unmarshal(raw, &msg); err != nil {
+					return param{}, err
+				}
+				return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			case "Int32Value":
+				var msg wrapperspb.Int32Value
+				if err := protojson.Unmarshal(raw, &msg); err != nil {
+					return param{}, err
+				}
+				return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			case "Int64Value":
+				var msg wrapperspb.Int64Value
+				if err := protojson.Unmarshal(raw, &msg); err != nil {
+					return param{}, err
+				}
+				return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			case "UInt32Value":
+				var msg wrapperspb.UInt32Value
+				if err := protojson.Unmarshal(raw, &msg); err != nil {
+					return param{}, err
+				}
+				return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			case "UInt64Value":
+				var msg wrapperspb.UInt64Value
+				if err := protojson.Unmarshal(raw, &msg); err != nil {
+					return param{}, err
+				}
+				return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			case "FloatValue":
+				var msg wrapperspb.FloatValue
+				if err := protojson.Unmarshal(raw, &msg); err != nil {
+					return param{}, err
+				}
+				return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			case "DoubleValue":
+				var msg wrapperspb.DoubleValue
+				if err := protojson.Unmarshal(raw, &msg); err != nil {
+					return param{}, err
+				}
+				return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			case "BytesValue":
+				var msg wrapperspb.BytesValue
+				if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
+					return param{}, err
+				}
+				return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			case "StringValue":
+				var msg wrapperspb.StringValue
+				if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
+					return param{}, err
+				}
+				return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
+			case "FieldMask":
+				var msg fieldmaskpb.FieldMask
+				if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
+					return param{}, err
+				}
+				return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
 			}
-			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
-		case "google.protobuf.Duration":
-			var msg durationpb.Duration
-			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
-				return param{}, err
-			}
-			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
-		case "google.protobuf.BoolValue":
-			var msg wrapperspb.BoolValue
-			if err := protojson.Unmarshal(raw, &msg); err != nil {
-				return param{}, err
-			}
-			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
-		case "google.protobuf.Int32Value":
-			var msg wrapperspb.Int32Value
-			if err := protojson.Unmarshal(raw, &msg); err != nil {
-				return param{}, err
-			}
-			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
-		case "google.protobuf.Int64Value":
-			var msg wrapperspb.Int64Value
-			if err := protojson.Unmarshal(raw, &msg); err != nil {
-				return param{}, err
-			}
-			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
-		case "google.protobuf.UInt32Value":
-			var msg wrapperspb.UInt32Value
-			if err := protojson.Unmarshal(raw, &msg); err != nil {
-				return param{}, err
-			}
-			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
-		case "google.protobuf.UInt64Value":
-			var msg wrapperspb.UInt64Value
-			if err := protojson.Unmarshal(raw, &msg); err != nil {
-				return param{}, err
-			}
-			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
-		case "google.protobuf.FloatValue":
-			var msg wrapperspb.FloatValue
-			if err := protojson.Unmarshal(raw, &msg); err != nil {
-				return param{}, err
-			}
-			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
-		case "google.protobuf.DoubleValue":
-			var msg wrapperspb.DoubleValue
-			if err := protojson.Unmarshal(raw, &msg); err != nil {
-				return param{}, err
-			}
-			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
-		case "google.protobuf.BytesValue":
-			var msg wrapperspb.BytesValue
-			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
-				return param{}, err
-			}
-			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
-		case "google.protobuf.StringValue":
-			var msg wrapperspb.StringValue
-			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
-				return param{}, err
-			}
-			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
-
-		case "google.protobuf.FieldMask":
-			var msg fieldmaskpb.FieldMask
-			if err := protojson.Unmarshal(quote(raw), &msg); err != nil {
-				return param{}, err
-			}
-			return param{fds: fds, val: protoreflect.ValueOfMessage(msg.ProtoReflect())}, nil
-		default:
-			return param{}, fmt.Errorf("unexpected message type %s", md.FullName())
 		}
+		return param{}, fmt.Errorf("unexpected message type %s", name)
 
 	default:
 		return param{}, fmt.Errorf("unknown param type %s", kind)
@@ -683,7 +684,7 @@ func (v *variable) index(toks tokens) int {
 				i = n // EOL
 			}
 
-		case tokenValue:
+		case tokenLiteral:
 			// TODO: tokenPath != tokenValue
 			if toks[i].typ != tokenPath || tok.val != toks[i].val {
 				return -1

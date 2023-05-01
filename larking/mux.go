@@ -329,12 +329,28 @@ func (r *resolver) FindDescriptorByName(fullname protoreflect.FullName) (protore
 }
 
 func (s *state) appendHandler(
-	rule *annotations.HttpRule,
 	desc protoreflect.MethodDescriptor,
 	h *handler,
 ) error {
-	if err := s.path.addRule(rule, desc, h.method); err != nil {
-		return fmt.Errorf("[%s] invalid rule %s: %w", desc.FullName(), rule.String(), err)
+	// Add an implicit rule for the method.
+	implicitRule := &annotations.HttpRule{
+		Pattern: &annotations.HttpRule_Custom{
+			Custom: &annotations.CustomHttpPattern{
+				Kind: "*",
+				Path: h.method,
+			},
+		},
+		Body: "*",
+	}
+	if err := s.path.addRule(implicitRule, desc, h.method); err != nil {
+		panic(fmt.Sprintf("bug: %v", err))
+	}
+
+	// Add all annotated rules.
+	if rule := getExtensionHTTP(desc.Options()); rule != nil {
+		if err := s.path.addRule(rule, desc, h.method); err != nil {
+			return fmt.Errorf("[%s] invalid rule %s: %w", desc.FullName(), rule.String(), err)
+		}
 	}
 	s.handlers[h.method] = append(s.handlers[h.method], h)
 	return nil
@@ -610,17 +626,8 @@ func (s *state) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor)
 		mds := sd.Methods()
 		for j := 0; j < mds.Len(); j++ {
 			md := mds.Get(j)
-
-			opts := md.Options() // TODO: nil check fails?
-
-			rule := getExtensionHTTP(opts)
-			if rule == nil {
-				continue
-			}
-
 			hd := createConnHandler(cc, sd, md)
-
-			if err := s.appendHandler(rule, md, hd); err != nil {
+			if err := s.appendHandler(md, hd); err != nil {
 				return nil, err
 			}
 			handlers = append(handlers, hd)

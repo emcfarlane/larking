@@ -736,6 +736,38 @@ func TestMessageServer(t *testing.T) {
 				Title: "Lord of the Rings",
 			},
 		},
+	}, {
+		name: "book_name_get_implicit_GET",
+		req: httptest.NewRequest(http.MethodGet, "/larking.testpb.Messaging/GetBook?"+url.Values{
+			"name": []string{"shelves/shelf1/books/book2"},
+		}.Encode(), nil),
+		in: in{
+			method: "/larking.testpb.Messaging/GetBook",
+			msg:    &testpb.GetBookRequest{Name: "shelves/shelf1/books/book2"},
+		},
+		out: out{
+			msg: &testpb.Book{Name: "shelves/shelf1/books/book2"},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &testpb.Book{Name: "shelves/shelf1/books/book2"},
+		},
+	}, {
+		name: "book_name_get_implicit_POST",
+		req: httptest.NewRequest(http.MethodPost, "/larking.testpb.Messaging/GetBook", strings.NewReader(
+			`{ "name": "shelves/shelf1/books/book2" }`,
+		)),
+		in: in{
+			method: "/larking.testpb.Messaging/GetBook",
+			msg:    &testpb.GetBookRequest{Name: "shelves/shelf1/books/book2"},
+		},
+		out: out{
+			msg: &testpb.Book{Name: "shelves/shelf1/books/book2"},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &testpb.Book{Name: "shelves/shelf1/books/book2"},
+		},
 	}}
 
 	opts := cmp.Options{protocmp.Transform()}
@@ -756,6 +788,7 @@ func TestMessageServer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			t.Log(w.Code, w.Body.String())
 
 			if sc := tt.want.statusCode; sc != resp.StatusCode {
 				t.Errorf("expected %d got %d", tt.want.statusCode, resp.StatusCode)
