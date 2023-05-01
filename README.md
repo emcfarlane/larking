@@ -124,7 +124,9 @@ curl http://domain/v1/shelves/1/books/2
 See the reference docs for [google.api.HttpRule](https://cloud.google.com/endpoints/docs/grpc-service-config/reference/rpc/google.api#google.api.HttpRule) type for all features.
 
 ### Extensions
-It aims to be a superset of the gRPC transcoding spec with better support for streaming.
+It aims to be a superset of the gRPC transcoding spec with better support for streaming. The implementation also aims to be simple and fast.
+API's should be easy to use and have low overhead.
+See the `benchmarks/` for details and comparisons.
 
 #### Arbitrary Content
 

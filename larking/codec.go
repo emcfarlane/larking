@@ -150,9 +150,7 @@ func (c CodecJSON) MarshalAppend(b []byte, v interface{}) ([]byte, error) {
 	if !ok {
 		return nil, errInvalidType(v)
 	}
-	// TODO: implement MarshalAppend
-	b2, err := c.MarshalOptions.Marshal(m)
-	return append(b, b2...), err
+	return c.MarshalOptions.MarshalAppend(b, m)
 }
 
 func (c CodecJSON) Unmarshal(data []byte, v interface{}) error {
