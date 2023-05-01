@@ -19,7 +19,7 @@ type handlerFunc func(*muxOptions, grpc.ServerStream) error
 type handler struct {
 	descriptor protoreflect.MethodDescriptor
 	handler    handlerFunc
-	method     string
+	method     string // /Service/Method
 }
 
 // TODO: use grpclog?
