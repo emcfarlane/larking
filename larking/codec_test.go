@@ -24,6 +24,7 @@ func TestSizeCodecs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	jsonescape := []byte(`{"text":"hello, json} \" }}"}`)
 
 	tests := []struct {
 		name    string
@@ -96,6 +97,11 @@ func TestSizeCodecs(t *testing.T) {
 		input: jsonb[:2],
 		extra: jsonb[2:],
 		want:  jsonb,
+	}, {
+		name:  "json escape",
+		codec: CodecJSON{},
+		input: jsonescape,
+		want:  jsonescape,
 	}}
 
 	for _, tt := range tests {
@@ -119,7 +125,7 @@ func TestSizeCodecs(t *testing.T) {
 
 			got := b[:n]
 			if !bytes.Equal(got, tt.want) {
-				t.Errorf("got %v, want %v", got, tt.want)
+				t.Errorf("got %s, want %s", got, tt.want)
 			}
 
 			var msg testpb.Message
