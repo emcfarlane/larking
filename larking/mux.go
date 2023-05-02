@@ -797,8 +797,6 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	}
 	contentEncoding := r.Header.Get("Content-Encoding")
 
-	defer r.Body.Close()
-
 	var body io.ReadCloser
 	switch contentEncoding {
 	case "gzip":
@@ -812,7 +810,7 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		body = r.Body
 	}
 
-	accept := negotiateContentType(r.Header, m.opts.contentTypeOffers, "application/json")
+	accept := negotiateContentType(r.Header, m.opts.contentTypeOffers, contentType)
 	acceptEncoding := negotiateContentEncoding(r.Header, encodingOffers)
 
 	if fRsp, ok := w.(http.Flusher); ok {

@@ -127,8 +127,11 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 	})
 	h2s := &http2.Server{}
 	hs := &http.Server{
-		Handler:   h2c.NewHandler(index, h2s),
-		TLSConfig: svrOpts.tlsConfig,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		MaxHeaderBytes: 1 << 20, // 1 MB
+		Handler:        h2c.NewHandler(index, h2s),
+		TLSConfig:      svrOpts.tlsConfig,
 	}
 	if err := http2.ConfigureServer(hs, h2s); err != nil {
 		return nil, err
