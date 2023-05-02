@@ -3,6 +3,12 @@
 Comparisons against other popular services. See `bench.txt` for results.
 Benchmarks should be taken with a grain of salt, please add more if you'd like to expand the test cases!
 
+## Larking
+Larking serves both JSON and Protobuf encoded requests, tests marked with `+pb` are protobuf encoded.
+
+### Optimisations
+- https://www.emcfarlane.com/blog/2023-04-18-profile-lexer
+
 ## gRPC-Gateway
 
 [gRPC-Gateway](https://github.com/grpc-ecosystem/grpc-gateway)
@@ -26,9 +32,3 @@ Compares speed with writing the annotations binding by hand, useful for compairs
 ## Twirp
 
 [Twirp](https://github.com/twitchtv/twirp) is a simple RPC protocol based on HTTP and Protocol Buffers (proto).
-
-
-### Optimisations
-
-- https://www.emcfarlane.com/blog/2023-04-18-profile-lexer
-
