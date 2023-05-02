@@ -91,6 +91,7 @@ func doRequest(b *testing.B, method, url string, in, out proto.Message, isProto 
 		contentType = "application/protobuf"
 	}
 	r.Header.Set("Content-Type", contentType)
+	r.Header.Set("Accept-Encoding", "identity")
 
 	w, err := http.DefaultClient.Do(r)
 	if err != nil {
@@ -214,31 +215,19 @@ func BenchmarkLarking(b *testing.B) {
 	b.Run("HTTP_GetBook", func(b *testing.B) {
 		benchHTTP_GetBook(b, lis.Addr().String(), false)
 	})
-	b.Run("HTTP_GetBook+proto", func(b *testing.B) {
-		benchHTTP_GetBook(b, lis.Addr().String(), true)
-	})
-	//b.Run("HTTP_GetBook", func(b *testing.B) {
-	//	b.ReportAllocs()
-	//	b.ResetTimer()
-	//	addr := lis.Addr().String()
-	//	b.RunParallel(func(pb *testing.PB) {
-	//		for pb.Next() {
-	//			out := &librarypb.Book{}
-	//			doRequest(b, http.MethodGet, "http://"+addr+"/v1/shelves/1/books/1", nil, out)
-	//		}
-	//	})
-	//	b.StopTimer()
-	//})
 	b.Run("HTTP_UpdateBook", func(b *testing.B) {
 		benchHTTP_UpdateBook(b, lis.Addr().String(), false)
-	})
-	b.Run("HTTP_UpdateBook+proto", func(b *testing.B) {
-		benchHTTP_UpdateBook(b, lis.Addr().String(), true)
 	})
 	b.Run("HTTP_DeleteBook", func(b *testing.B) {
 		benchHTTP_DeleteBook(b, lis.Addr().String(), false)
 	})
-	b.Run("HTTP_DeleteBook+proto", func(b *testing.B) {
+	b.Run("HTTP_GetBook+pb", func(b *testing.B) {
+		benchHTTP_GetBook(b, lis.Addr().String(), true)
+	})
+	b.Run("HTTP_UpdateBook+pb", func(b *testing.B) {
+		benchHTTP_UpdateBook(b, lis.Addr().String(), true)
+	})
+	b.Run("HTTP_DeleteBook+pb", func(b *testing.B) {
 		benchHTTP_DeleteBook(b, lis.Addr().String(), true)
 	})
 }
