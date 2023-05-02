@@ -184,6 +184,8 @@ func (c CodecJSON) SizeRead(b []byte, r io.Reader, limit int) ([]byte, int, erro
 		}
 
 		switch {
+		case isEscaped:
+			isEscaped = false
 		case isString:
 			switch b[i] {
 			case '\\':
@@ -191,8 +193,6 @@ func (c CodecJSON) SizeRead(b []byte, r io.Reader, limit int) ([]byte, int, erro
 			case '"':
 				isString = false
 			}
-		case isEscaped:
-			isEscaped = false
 		default:
 			switch b[i] {
 			case '{':
