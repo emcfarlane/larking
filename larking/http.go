@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -21,10 +20,8 @@ type streamHTTP struct {
 	opts        muxOptions
 	ctx         context.Context
 	method      *method
-	wmu         sync.Mutex
 	w           io.Writer
 	wHeader     http.Header
-	rmu         sync.Mutex
 	rbuf        []byte    // stream read buffer
 	r           io.Reader //
 	rHeader     http.Header
@@ -41,9 +38,6 @@ type streamHTTP struct {
 }
 
 func (s *streamHTTP) SetHeader(md metadata.MD) error {
-	s.wmu.Lock()
-	defer s.wmu.Unlock()
-
 	if s.sentHeader {
 		return fmt.Errorf("already sent headers")
 	}
@@ -51,9 +45,6 @@ func (s *streamHTTP) SetHeader(md metadata.MD) error {
 	return nil
 }
 func (s *streamHTTP) SendHeader(md metadata.MD) error {
-	s.wmu.Lock()
-	defer s.wmu.Unlock()
-
 	if s.sentHeader {
 		return fmt.Errorf("already sent headers")
 	}
@@ -72,9 +63,6 @@ func (s *streamHTTP) SendHeader(md metadata.MD) error {
 }
 
 func (s *streamHTTP) SetTrailer(md metadata.MD) {
-	s.wmu.Lock()
-	defer s.wmu.Unlock()
-
 	s.trailer = metadata.Join(s.trailer, md)
 }
 
@@ -84,9 +72,6 @@ func (s *streamHTTP) Context() context.Context {
 }
 
 func (s *streamHTTP) writeMsg(c Codec, b []byte, contentType string) (int, error) {
-	s.wmu.Lock()
-	defer s.wmu.Unlock()
-
 	count := s.sendCount
 	if count == 0 {
 		s.wHeader.Set("Content-Type", contentType)
@@ -160,9 +145,6 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 }
 
 func (s *streamHTTP) readMsg(c Codec, b []byte) (int, []byte, error) {
-	s.rmu.Lock()
-	defer s.rmu.Unlock()
-
 	if s.rEOF {
 		return s.recvCount, nil, io.EOF
 	}
@@ -180,7 +162,7 @@ func (s *streamHTTP) readMsg(c Codec, b []byte) (int, []byte, error) {
 			s.rEOF, err = true, nil
 		}
 		s.rbuf = append(s.rbuf[:0], b[n:]...)
-		return count, b[:n], nil
+		return count, b[:n], err
 
 	}
 	b, err := s.opts.readAll(b, s.r)
@@ -256,20 +238,20 @@ func (s *streamHTTP) decodeRequestArgs(args proto.Message) (int, error) {
 func (s *streamHTTP) RecvMsg(m interface{}) error {
 	args := m.(proto.Message)
 
-	var (
-		count int
-		err   error
-	)
+	var count int
 	if s.method.hasBody && s.hasBody {
+		var err error
 		count, err = s.decodeRequestArgs(args)
 		if err != nil {
 			return err
 		}
 	} else {
-		s.rmu.Lock()
 		count = s.recvCount
 		s.recvCount += 1
-		s.rmu.Unlock()
+		if s.rEOF {
+			return io.EOF
+		}
+		s.rEOF = true
 	}
 	if count == 0 {
 		if err := s.params.set(args); err != nil {
