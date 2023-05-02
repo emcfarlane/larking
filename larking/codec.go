@@ -219,3 +219,42 @@ func (c CodecJSON) SizeWrite(w io.Writer, b []byte) (int, error) {
 }
 
 func (CodecJSON) Name() string { return "json" }
+
+type codecHTTPBody struct{}
+
+func (codecHTTPBody) Marshal(v interface{}) ([]byte, error) {
+	panic("not implemented")
+}
+
+func (codecHTTPBody) MarshalAppend(b []byte, v interface{}) ([]byte, error) {
+	panic("not implemented")
+}
+
+func (codecHTTPBody) Unmarshal(data []byte, v interface{}) error {
+	panic("not implemented")
+}
+
+func (codecHTTPBody) Name() string { return "body" }
+
+func (codecHTTPBody) SizeRead(b []byte, r io.Reader, limit int) ([]byte, int, error) {
+	var total int
+	for {
+		if len(b) == cap(b) {
+			// Add more capacity (let append pick how much).
+			b = append(b, 0)[:len(b)]
+		}
+		n, err := r.Read(b[len(b):cap(b)])
+		b = b[:len(b)+n]
+		total += int(n)
+		if total > limit {
+			total = limit
+		}
+		if err != nil || total == limit {
+			return b, total, err
+		}
+	}
+}
+
+func (codecHTTPBody) SizeWrite(w io.Writer, b []byte) (int, error) {
+	return w.Write(b)
+}

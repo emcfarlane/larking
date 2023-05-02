@@ -102,9 +102,6 @@ func (o *muxOptions) readAll(b []byte, r io.Reader) ([]byte, error) {
 			return nil, fmt.Errorf("max receive message size reached")
 		}
 		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
 			return b, err
 		}
 	}
@@ -152,6 +149,7 @@ var (
 		"application/json":         CodecJSON{},
 		"application/protobuf":     CodecProto{},
 		"application/octet-stream": CodecProto{},
+		"google.api.HttpBody":      codecHTTPBody{},
 	}
 )
 
@@ -503,8 +501,6 @@ func createConnHandler(
 			ctx := stream.Context()
 
 			args := dynamicpb.NewMessage(argsDesc)
-			reply := dynamicpb.NewMessage(replyDesc)
-
 			if err := stream.RecvMsg(args); err != nil {
 				return err
 			}
@@ -527,6 +523,7 @@ func createConnHandler(
 				wg.Add(1)
 				go func() {
 					for {
+						args := dynamicpb.NewMessage(argsDesc)
 						if inErr = stream.RecvMsg(args); inErr != nil {
 							break
 						}
@@ -540,6 +537,7 @@ func createConnHandler(
 			}
 			var outErr error
 			for {
+				reply := dynamicpb.NewMessage(replyDesc)
 				if outErr = clientStream.RecvMsg(reply); outErr != nil {
 					break
 				}
@@ -835,12 +833,10 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		// write
 		w:       resp,
 		wHeader: w.Header(),
-		wCodec:  m.opts.codecs[accept],
 
 		// read
 		r:       body,
 		rHeader: r.Header,
-		rCodec:  m.opts.codecs[contentType],
 
 		accept:      accept,
 		contentType: contentType,
