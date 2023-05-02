@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ import (
 
 	connect_go "github.com/bufbuild/connect-go"
 	"github.com/gorilla/mux"
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	gwruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/soheilhy/cmux"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -29,10 +30,20 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"larking.io/benchmarks/api/librarypb"
-	"larking.io/benchmarks/api/librarypb/librarypbconnect"
 	cpb "larking.io/benchmarks/api/librarypb/librarypbconnect"
 	"larking.io/larking"
 )
+
+const procs = 8
+
+var client = &http.Client{
+	Transport: &http.Transport{
+		// just what default client uses
+		Proxy: http.ProxyFromEnvironment,
+		// this leads to more stable numbers
+		MaxIdleConnsPerHost: procs * runtime.GOMAXPROCS(0),
+	},
+}
 
 func benchGRPC_GetBook(b *testing.B, client librarypb.LibraryServiceClient) {
 	ctx := context.Background()
@@ -50,12 +61,22 @@ func benchGRPC_GetBook(b *testing.B, client librarypb.LibraryServiceClient) {
 	_ = rsp
 }
 
-func doRequest(b *testing.B, method, url string, in, out proto.Message) {
+var (
+	jsonCodec  = larking.CodecJSON{}
+	protoCodec = larking.CodecProto{}
+)
+
+func doRequest(b *testing.B, method, url string, in, out proto.Message, isProto bool) {
 	b.Helper()
+
+	var codec larking.Codec = &jsonCodec
+	if isProto {
+		codec = &protoCodec
+	}
 
 	var body io.Reader
 	if in != nil {
-		p, err := protojson.Marshal(in)
+		p, err := codec.Marshal(in)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -65,7 +86,12 @@ func doRequest(b *testing.B, method, url string, in, out proto.Message) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	r.Header.Set("Content-Type", "application/json")
+	contentType := "application/json"
+	if isProto {
+		contentType = "application/protobuf"
+	}
+	r.Header.Set("Content-Type", contentType)
+	r.Header.Set("Accept-Encoding", "identity")
 
 	w, err := http.DefaultClient.Do(r)
 	if err != nil {
@@ -84,22 +110,22 @@ func doRequest(b *testing.B, method, url string, in, out proto.Message) {
 		b.Logf("body: %s", buf)
 		b.Fatalf("status code: %d", w.StatusCode)
 	}
-	if err := protojson.Unmarshal(buf, out); err != nil {
+	if err := codec.Unmarshal(buf, out); err != nil {
 		b.Fatal(err)
 	}
 }
 
-func benchHTTP_GetBook(b *testing.B, addr string) {
+func benchHTTP_GetBook(b *testing.B, addr string, isProto bool) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		out := &librarypb.Book{}
-		doRequest(b, http.MethodGet, "http://"+addr+"/v1/shelves/1/books/1", nil, out)
+		doRequest(b, http.MethodGet, "http://"+addr+"/v1/shelves/1/books/1", nil, out, isProto)
 	}
 	b.StopTimer()
 }
 
-func benchHTTP_UpdateBook(b *testing.B, addr string) {
+func benchHTTP_UpdateBook(b *testing.B, addr string, isProto bool) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -109,18 +135,18 @@ func benchHTTP_UpdateBook(b *testing.B, addr string) {
 		}
 		out := &librarypb.Book{}
 
-		doRequest(b, http.MethodPatch, "http://"+addr+"/v1/shelves/1/books/1?update_mask=book.title", in, out)
+		doRequest(b, http.MethodPatch, "http://"+addr+"/v1/shelves/1/books/1?update_mask=book.title", in, out, isProto)
 	}
 	b.StopTimer()
 }
 
-func benchHTTP_DeleteBook(b *testing.B, addr string) {
+func benchHTTP_DeleteBook(b *testing.B, addr string, isProto bool) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		out := &emptypb.Empty{}
 
-		doRequest(b, http.MethodDelete, "http://"+addr+"/v1/shelves/1/books/1", nil, out)
+		doRequest(b, http.MethodDelete, "http://"+addr+"/v1/shelves/1/books/1", nil, out, isProto)
 	}
 	b.StopTimer()
 }
@@ -187,13 +213,22 @@ func BenchmarkLarking(b *testing.B) {
 		benchGRPC_GetBook(b, client)
 	})
 	b.Run("HTTP_GetBook", func(b *testing.B) {
-		benchHTTP_GetBook(b, lis.Addr().String())
+		benchHTTP_GetBook(b, lis.Addr().String(), false)
 	})
 	b.Run("HTTP_UpdateBook", func(b *testing.B) {
-		benchHTTP_UpdateBook(b, lis.Addr().String())
+		benchHTTP_UpdateBook(b, lis.Addr().String(), false)
 	})
 	b.Run("HTTP_DeleteBook", func(b *testing.B) {
-		benchHTTP_DeleteBook(b, lis.Addr().String())
+		benchHTTP_DeleteBook(b, lis.Addr().String(), false)
+	})
+	b.Run("HTTP_GetBook+pb", func(b *testing.B) {
+		benchHTTP_GetBook(b, lis.Addr().String(), true)
+	})
+	b.Run("HTTP_UpdateBook+pb", func(b *testing.B) {
+		benchHTTP_UpdateBook(b, lis.Addr().String(), true)
+	})
+	b.Run("HTTP_DeleteBook+pb", func(b *testing.B) {
+		benchHTTP_DeleteBook(b, lis.Addr().String(), true)
 	})
 }
 
@@ -204,7 +239,7 @@ func BenchmarkGRPCGateway(b *testing.B) {
 	gs := grpc.NewServer(grpc.Creds(insecure.NewCredentials()))
 	librarypb.RegisterLibraryServiceServer(gs, svc)
 
-	mux := runtime.NewServeMux()
+	mux := gwruntime.NewServeMux()
 	if err := librarypb.RegisterLibraryServiceHandlerServer(ctx, mux, svc); err != nil {
 		b.Fatal(err)
 	}
@@ -255,13 +290,13 @@ func BenchmarkGRPCGateway(b *testing.B) {
 		benchGRPC_GetBook(b, client)
 	})
 	b.Run("HTTP_GetBook", func(b *testing.B) {
-		benchHTTP_GetBook(b, lis.Addr().String())
+		benchHTTP_GetBook(b, lis.Addr().String(), false)
 	})
 	b.Run("HTTP_UpdateBook", func(b *testing.B) {
-		benchHTTP_UpdateBook(b, lis.Addr().String())
+		benchHTTP_UpdateBook(b, lis.Addr().String(), false)
 	})
 	b.Run("HTTP_DeleteBook", func(b *testing.B) {
-		benchHTTP_DeleteBook(b, lis.Addr().String())
+		benchHTTP_DeleteBook(b, lis.Addr().String(), false)
 	})
 }
 
@@ -332,13 +367,13 @@ func BenchmarkEnvoyGRPC(b *testing.B) {
 		benchGRPC_GetBook(b, client)
 	})
 	b.Run("HTTP_GetBook", func(b *testing.B) {
-		benchHTTP_GetBook(b, envoyAddr)
+		benchHTTP_GetBook(b, envoyAddr, false)
 	})
 	b.Run("HTTP_UpdateBook", func(b *testing.B) {
-		benchHTTP_UpdateBook(b, envoyAddr)
+		benchHTTP_UpdateBook(b, envoyAddr, false)
 	})
 	b.Run("HTTP_DeleteBook", func(b *testing.B) {
-		benchHTTP_DeleteBook(b, envoyAddr)
+		benchHTTP_DeleteBook(b, envoyAddr, false)
 	})
 }
 
@@ -493,13 +528,13 @@ func BenchmarkGorillaMux(b *testing.B) {
 	}()
 
 	b.Run("HTTP_GetBook", func(b *testing.B) {
-		benchHTTP_GetBook(b, lis.Addr().String())
+		benchHTTP_GetBook(b, lis.Addr().String(), false)
 	})
 	b.Run("HTTP_UpdateBook", func(b *testing.B) {
-		benchHTTP_UpdateBook(b, lis.Addr().String())
+		benchHTTP_UpdateBook(b, lis.Addr().String(), false)
 	})
 	b.Run("HTTP_DeleteBook", func(b *testing.B) {
-		benchHTTP_DeleteBook(b, lis.Addr().String())
+		benchHTTP_DeleteBook(b, lis.Addr().String(), false)
 	})
 }
 
@@ -508,7 +543,7 @@ func BenchmarkConnectGo(b *testing.B) {
 	svc := &testConnectService{}
 
 	mux := http.NewServeMux()
-	path, handler := librarypbconnect.NewLibraryServiceHandler(svc)
+	path, handler := cpb.NewLibraryServiceHandler(svc)
 	mux.Handle(path, handler)
 
 	lis, err := net.Listen("tcp", "localhost:0")
@@ -540,7 +575,7 @@ func BenchmarkConnectGo(b *testing.B) {
 	defer cc.Close()
 	client := librarypb.NewLibraryServiceClient(cc)
 
-	ccc := librarypbconnect.NewLibraryServiceClient(
+	ccc := cpb.NewLibraryServiceClient(
 		http.DefaultClient,
 		"http://"+lis.Addr().String(),
 	)
@@ -557,7 +592,7 @@ func BenchmarkConnectGo(b *testing.B) {
 				Name: "shelves/1/books/1",
 			}
 			out := &librarypb.Book{}
-			doRequest(b, http.MethodPost, "http://"+addr+cpb.LibraryServiceGetBookProcedure, in, out)
+			doRequest(b, http.MethodPost, "http://"+addr+cpb.LibraryServiceGetBookProcedure, in, out, false)
 		}
 		b.StopTimer()
 	})
@@ -576,7 +611,7 @@ func BenchmarkConnectGo(b *testing.B) {
 				},
 			}
 			out := &librarypb.Book{}
-			doRequest(b, http.MethodPost, "http://"+addr+cpb.LibraryServiceUpdateBookProcedure, in, out)
+			doRequest(b, http.MethodPost, "http://"+addr+cpb.LibraryServiceUpdateBookProcedure, in, out, false)
 		}
 		b.StopTimer()
 	})
@@ -589,7 +624,7 @@ func BenchmarkConnectGo(b *testing.B) {
 				Name: "shelves/1/books/1",
 			}
 			out := &emptypb.Empty{}
-			doRequest(b, http.MethodPost, "http://"+addr+cpb.LibraryServiceDeleteBookProcedure, in, out)
+			doRequest(b, http.MethodPost, "http://"+addr+cpb.LibraryServiceDeleteBookProcedure, in, out, false)
 		}
 		b.StopTimer()
 	})

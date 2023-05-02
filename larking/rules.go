@@ -698,6 +698,11 @@ func (v *variable) index(toks tokens) int {
 	return i
 }
 
+var (
+	errNotFound = status.Error(codes.NotFound, "not found")
+	errMethod   = status.Error(codes.InvalidArgument, "method not allowed")
+)
+
 // Depth first search preferring path segments over variables.
 // Variables split the search tree:
 //
@@ -710,14 +715,14 @@ func (p *path) search(toks tokens, verb string) (*method, params, error) {
 		if m := p.methodAll; m != nil {
 			return m, nil, nil
 		}
-		return nil, nil, status.Error(codes.NotFound, "not found")
+		return nil, nil, errMethod
 	}
 
 	// capture path segment
 	segment := toks[0].val + toks[1].val
 	if next, ok := p.segments[segment]; ok {
 		if m, ps, err := next.search(toks[2:], verb); err == nil {
-			return m, ps, err
+			return m, ps, nil
 		}
 	}
 
@@ -737,16 +742,16 @@ func (p *path) search(toks tokens, verb string) (*method, params, error) {
 		p := param{fds: fds}
 		if len(fds) > 0 {
 			capture := []byte(toks[1:l].String())
+
 			p, err = parseParam(fds, capture)
 			if err != nil {
 				return nil, nil, err
 			}
 		}
 		ps = append(ps, p)
-
-		return m, ps, err
+		return m, ps, nil
 	}
-	return nil, nil, status.Error(codes.NotFound, "not found")
+	return nil, nil, errNotFound
 }
 
 // match the route to a method.

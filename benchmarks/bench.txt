@@ -1,30 +1,33 @@
 goos: darwin
 goarch: arm64
 pkg: larking.io/benchmarks
-BenchmarkLarking/GRPC_GetBook-8         	   16256	     72781 ns/op	   25555 B/op	     230 allocs/op
-BenchmarkLarking/HTTP_GetBook-8         	   25232	     45916 ns/op	    9759 B/op	     153 allocs/op
-BenchmarkLarking/HTTP_UpdateBook-8      	   25011	     48041 ns/op	   11802 B/op	     181 allocs/op
-BenchmarkLarking/HTTP_DeleteBook-8      	   31350	     38386 ns/op	    8537 B/op	     105 allocs/op
-BenchmarkGRPCGateway/GRPC_GetBook-8     	   31588	     36576 ns/op	    9496 B/op	     178 allocs/op
-BenchmarkGRPCGateway/HTTP_GetBook-8     	   24872	     48045 ns/op	   11580 B/op	     181 allocs/op
-BenchmarkGRPCGateway/HTTP_UpdateBook-8  	   22833	     53141 ns/op	   17126 B/op	     232 allocs/op
-BenchmarkGRPCGateway/HTTP_DeleteBook-8  	   31066	     38464 ns/op	    9533 B/op	     121 allocs/op
-BenchmarkEnvoyGRPC/GRPC_GetBook-8       	    9052	    129369 ns/op	   10960 B/op	     177 allocs/op
-BenchmarkEnvoyGRPC/HTTP_GetBook-8       	    8388	    147250 ns/op	   10355 B/op	     165 allocs/op
-BenchmarkEnvoyGRPC/HTTP_UpdateBook-8    	    7737	    151628 ns/op	   11030 B/op	     168 allocs/op
-BenchmarkEnvoyGRPC/HTTP_DeleteBook-8    	    8863	    133185 ns/op	    9409 B/op	     128 allocs/op
-BenchmarkGorillaMux/HTTP_GetBook-8      	   26037	     45355 ns/op	   10313 B/op	     148 allocs/op
-BenchmarkGorillaMux/HTTP_UpdateBook-8   	   26238	     45774 ns/op	   12255 B/op	     172 allocs/op
-BenchmarkGorillaMux/HTTP_DeleteBook-8   	   32294	     36920 ns/op	    8591 B/op	      94 allocs/op
-BenchmarkConnectGo/GRPC_GetBook-8       	   18604	     64446 ns/op	   13435 B/op	     194 allocs/op
-BenchmarkConnectGo/HTTP_GetBook-8       	   13309	     91250 ns/op	  104145 B/op	     191 allocs/op
-BenchmarkConnectGo/HTTP_UpdateBook-8    	   15798	     75265 ns/op	  101316 B/op	     198 allocs/op
-BenchmarkConnectGo/HTTP_DeleteBook-8    	   18294	     66669 ns/op	   93924 B/op	     137 allocs/op
-BenchmarkConnectGo/Connect_GetBook-8    	   14974	     79593 ns/op	   78726 B/op	     151 allocs/op
-BenchmarkConnectGo/Connect_UpdateBook-8 	   16456	     73063 ns/op	   76250 B/op	     151 allocs/op
-BenchmarkConnectGo/Connect_DeleteBook-8 	   18034	     67387 ns/op	   68268 B/op	     140 allocs/op
-BenchmarkTwirp/HTTP_GetBook-8           	   23220	     51537 ns/op	   12699 B/op	     196 allocs/op
-BenchmarkTwirp/HTTP_UpdateBook-8        	   22778	     52396 ns/op	   13430 B/op	     214 allocs/op
-BenchmarkTwirp/HTTP_DeleteBook-8        	   28396	     41913 ns/op	   10760 B/op	     140 allocs/op
+BenchmarkLarking/GRPC_GetBook-8         	   16065	     73217 ns/op	   25753 B/op	     234 allocs/op
+BenchmarkLarking/HTTP_GetBook-8         	   25358	     47049 ns/op	    9179 B/op	     146 allocs/op
+BenchmarkLarking/HTTP_UpdateBook-8      	   24842	     48419 ns/op	   11191 B/op	     174 allocs/op
+BenchmarkLarking/HTTP_DeleteBook-8      	   30992	     38817 ns/op	    7958 B/op	      98 allocs/op
+BenchmarkLarking/HTTP_GetBook+pb-8      	   30486	     39433 ns/op	    8302 B/op	     104 allocs/op
+BenchmarkLarking/HTTP_UpdateBook+pb-8   	   26541	     44876 ns/op	    9898 B/op	     135 allocs/op
+BenchmarkLarking/HTTP_DeleteBook+pb-8   	   31981	     38090 ns/op	    7721 B/op	      95 allocs/op
+BenchmarkGRPCGateway/GRPC_GetBook-8     	   32599	     36980 ns/op	    9495 B/op	     178 allocs/op
+BenchmarkGRPCGateway/HTTP_GetBook-8     	   24849	     48138 ns/op	   11202 B/op	     179 allocs/op
+BenchmarkGRPCGateway/HTTP_UpdateBook-8  	   22648	     53060 ns/op	   16661 B/op	     230 allocs/op
+BenchmarkGRPCGateway/HTTP_DeleteBook-8  	   30973	     38945 ns/op	    9158 B/op	     119 allocs/op
+BenchmarkEnvoyGRPC/GRPC_GetBook-8       	    8965	    133720 ns/op	   10959 B/op	     177 allocs/op
+BenchmarkEnvoyGRPC/HTTP_GetBook-8       	    7647	    148356 ns/op	    9968 B/op	     163 allocs/op
+BenchmarkEnvoyGRPC/HTTP_UpdateBook-8    	    7760	    155771 ns/op	   10648 B/op	     166 allocs/op
+BenchmarkEnvoyGRPC/HTTP_DeleteBook-8    	    8828	    133543 ns/op	    9023 B/op	     126 allocs/op
+BenchmarkGorillaMux/HTTP_GetBook-8      	   26178	     45236 ns/op	    9940 B/op	     146 allocs/op
+BenchmarkGorillaMux/HTTP_UpdateBook-8   	   25618	     45267 ns/op	   11880 B/op	     170 allocs/op
+BenchmarkGorillaMux/HTTP_DeleteBook-8   	   32311	     36810 ns/op	    8209 B/op	      92 allocs/op
+BenchmarkConnectGo/GRPC_GetBook-8       	   18517	     64640 ns/op	   13419 B/op	     194 allocs/op
+BenchmarkConnectGo/HTTP_GetBook-8       	   24274	     50934 ns/op	   10994 B/op	     176 allocs/op
+BenchmarkConnectGo/HTTP_UpdateBook-8    	   25250	     47564 ns/op	   11234 B/op	     183 allocs/op
+BenchmarkConnectGo/HTTP_DeleteBook-8    	   28860	     41592 ns/op	    9294 B/op	     122 allocs/op
+BenchmarkConnectGo/Connect_GetBook-8    	   15196	     80045 ns/op	   67857 B/op	     150 allocs/op
+BenchmarkConnectGo/Connect_UpdateBook-8 	   16398	     73632 ns/op	   72733 B/op	     150 allocs/op
+BenchmarkConnectGo/Connect_DeleteBook-8 	   17664	     66962 ns/op	   66902 B/op	     140 allocs/op
+BenchmarkTwirp/HTTP_GetBook-8           	   23032	     51052 ns/op	   12680 B/op	     196 allocs/op
+BenchmarkTwirp/HTTP_UpdateBook-8        	   22718	     52466 ns/op	   13436 B/op	     214 allocs/op
+BenchmarkTwirp/HTTP_DeleteBook-8        	   28699	     41943 ns/op	   10755 B/op	     140 allocs/op
 PASS
-ok  	larking.io/benchmarks	43.538s
+ok  	larking.io/benchmarks	47.466s
