@@ -8,6 +8,7 @@ Larking serves both JSON and Protobuf encoded requests, tests marked with `+pb` 
 
 ### Optimisations
 - https://www.emcfarlane.com/blog/2023-04-18-profile-lexer
+- https://www.emcfarlane.com/blog/2023-05-01-bufferless-append
 
 ## gRPC-Gateway
 
