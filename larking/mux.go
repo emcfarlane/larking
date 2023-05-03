@@ -9,6 +9,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -22,6 +23,7 @@ import (
 	"github.com/gobwas/ws"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/genproto/googleapis/api/httpbody"
+	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -674,14 +676,40 @@ func isWebsocketRequest(r *http.Request) bool {
 	return false
 }
 
+type twirpError struct {
+	Code    string            `json:"code"`
+	Message string            `json:"msg"`
+	Meta    map[string]string `json:"meta"`
+}
+
 func (m *Mux) encError(w http.ResponseWriter, r *http.Request, err error) {
 	s, _ := status.FromError(err)
+	if isTwirp := r.Header.Get("Twirp-Version") != ""; isTwirp {
+		accept := "application/json"
+
+		w.Header().Set("Content-Type", accept)
+		w.WriteHeader(HTTPStatusCode(s.Code()))
+
+		codeStr := strings.ToLower(code.Code_name[int32(s.Code())])
+
+		terr := &twirpError{
+			Code:    codeStr,
+			Message: s.Message(),
+		}
+		b, err := json.Marshal(terr)
+		if err != nil {
+			panic(err) // ...
+		}
+		w.Write(b) //nolint
+		return
+
+	}
 
 	accept := negotiateContentType(r.Header, m.opts.contentTypeOffers, "application/json")
+	c := m.opts.codecs[accept]
+
 	w.Header().Set("Content-Type", accept)
 	w.WriteHeader(HTTPStatusCode(s.Code()))
-
-	c := m.opts.codecs[accept]
 
 	b, err := c.Marshal(s.Proto())
 	if err != nil {
@@ -811,10 +839,6 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	accept := negotiateContentType(r.Header, m.opts.contentTypeOffers, contentType)
 	acceptEncoding := negotiateContentEncoding(r.Header, encodingOffers)
 
-	if fRsp, ok := w.(http.Flusher); ok {
-		defer fRsp.Flush()
-	}
-
 	var resp io.Writer = w
 	switch acceptEncoding {
 	case "gzip":
@@ -838,9 +862,10 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		r:       body,
 		rHeader: r.Header,
 
-		accept:      accept,
-		contentType: contentType,
-		hasBody:     r.ContentLength > 0 || r.ContentLength == -1,
+		contentType:    contentType,
+		accept:         accept,
+		acceptEncoding: acceptEncoding,
+		hasBody:        r.ContentLength > 0 || r.ContentLength == -1,
 	}
 	herr := hd.handler(&m.opts, stream)
 	// Handle stats.
@@ -857,10 +882,16 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 			Client:    false,
 			BeginTime: beginTime,
 			EndTime:   endTime,
-			Error:     err,
+			Error:     herr,
 		})
 	}
-	return herr
+	if herr != nil {
+		if !stream.sentHeader {
+			w.Header().Set("Content-Encoding", "identity") // try to avoid gzip
+		}
+		m.encError(w, r, herr)
+	}
+	return nil
 }
 
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {

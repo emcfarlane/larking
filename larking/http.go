@@ -17,24 +17,25 @@ import (
 )
 
 type streamHTTP struct {
-	opts        muxOptions
-	ctx         context.Context
-	method      *method
-	w           io.Writer
-	wHeader     http.Header
-	rbuf        []byte    // stream read buffer
-	r           io.Reader //
-	rHeader     http.Header
-	header      metadata.MD
-	trailer     metadata.MD
-	params      params
-	accept      string
-	contentType string
-	recvCount   int
-	sendCount   int
-	sentHeader  bool
-	hasBody     bool // HTTP method has a body
-	rEOF        bool // stream read EOF
+	opts           muxOptions
+	ctx            context.Context
+	method         *method
+	w              io.Writer
+	wHeader        http.Header
+	rbuf           []byte    // stream read buffer
+	r              io.Reader //
+	rHeader        http.Header
+	header         metadata.MD
+	trailer        metadata.MD
+	params         params
+	contentType    string
+	accept         string
+	acceptEncoding string
+	recvCount      int
+	sendCount      int
+	sentHeader     bool
+	hasBody        bool // HTTP method has a body
+	rEOF           bool // stream read EOF
 }
 
 func (s *streamHTTP) SetHeader(md metadata.MD) error {
@@ -76,6 +77,7 @@ func (s *streamHTTP) writeMsg(c Codec, b []byte, contentType string) (int, error
 	if count == 0 {
 		s.wHeader.Set("Content-Type", contentType)
 		setOutgoingHeader(s.wHeader, s.header, s.trailer)
+		s.sentHeader = true
 	}
 	s.sendCount += 1
 	if s.method.desc.IsStreamingServer() {
