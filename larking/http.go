@@ -57,7 +57,7 @@ func (s *streamHTTP) SendHeader(md metadata.MD) error {
 	if sh := s.opts.statsHandler; sh != nil {
 		sh.HandleRPC(s.ctx, &stats.OutHeader{
 			Header:      s.header.Copy(),
-			Compression: s.rHeader.Get("Accept-Encoding"),
+			Compression: s.acceptEncoding,
 		})
 	}
 	return nil
