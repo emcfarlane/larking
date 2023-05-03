@@ -6,11 +6,24 @@
 ```
 [![Go Reference](https://pkg.go.dev/badge/larking.io.svg)](https://pkg.go.dev/larking.io/larking)
 
-Larking is a reflective gRPC transcoding handler. Easily serve REST api's from gRPC services. Proxy other language servers using gRPC reflection. See the examples for details!
+Larking is a [protoreflect](https://pkg.go.dev/google.golang.org/protobuf/reflect/protoreflect) gRPC-transcoding implementation. 
+Bind [`google.api.http`](https://github.com/googleapis/googleapis/blob/master/google/api/http.proto) annotations to gRPC services without code generation.
+Works with existing go-protobuf generators 
+[`protoc-gen-go`](https://pkg.go.dev/google.golang.org/protobuf@v1.30.0/cmd/protoc-gen-go) and 
+[`protoc-gen-go-grpc`](https://pkg.go.dev/google.golang.org/grpc/cmd/protoc-gen-go-grpc).
+Bind to local services or proxy to other gRPC servers using gRPC server reflection.
+Use Google's [API design guide](https://cloud.google.com/apis/design) to design beautiful RESTful APIs with gRPC services.
 
-- [Transcoding protobuf descriptors REST/HTTP to gRPC](https://cloud.google.com/endpoints/docs/grpc/transcoding)
-- [Follows Google API Design principles](https://cloud.google.com/apis/design)
-- [Dynamically load descriptors via gRPC server reflection](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md)
+- Supports [gRPC](https://grpc.io) clients
+- Supports [gRPC-transcoding](https://cloud.google.com/endpoints/docs/grpc/transcoding) clients
+- Supports [gRPC-web](https://github.com/grpc/grpc-web) clients
+- Supports [twirp](https://github.com/twitchtv/twirp) clients
+- Proxy gRPC servers with gRPC [server reflection](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md)
+- Implicit `/GRPC_SERVICE_FULL_NAME/METHOD_NAME` for all methods
+- Websocket streaming with `websocket` kind annotations
+- Content streaming with `google.api.HttpBody`
+- Streaming support with [SizeCodec](https://github.com/emcfarlane/larking#streaming-codecs)
+- Fast with low allocations: see [benchmarks](https://github.com/emcfarlane/larking/tree/main/benchmarks)
 
 <div align="center">
 <img src="docs/larking.svg" />
@@ -166,7 +179,7 @@ message UploadFileRequest {
 
 
 #### Websockets Annotations
-Annotate a custom method kind `websocket` to enable clients to upgrade connections. This enables streams to be duplexed.
+Annotate a custom method kind `websocket` to enable clients to upgrade connections. This enables streams to be bidirectional over a websocket connection.
 ```protobuf
 // Chatroom shows the websocket extension.
 service ChatRoom {
