@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -21,14 +20,10 @@ type streamHTTP struct {
 	opts        muxOptions
 	ctx         context.Context
 	method      *method
-	wmu         sync.Mutex
 	w           io.Writer
-	wCodec      Codec // nilable
 	wHeader     http.Header
-	rmu         sync.Mutex
 	rbuf        []byte    // stream read buffer
 	r           io.Reader //
-	rCodec      Codec     // nilable
 	rHeader     http.Header
 	header      metadata.MD
 	trailer     metadata.MD
@@ -39,12 +34,10 @@ type streamHTTP struct {
 	sendCount   int
 	sentHeader  bool
 	hasBody     bool // HTTP method has a body
+	rEOF        bool // stream read EOF
 }
 
 func (s *streamHTTP) SetHeader(md metadata.MD) error {
-	s.wmu.Lock()
-	defer s.wmu.Unlock()
-
 	if s.sentHeader {
 		return fmt.Errorf("already sent headers")
 	}
@@ -52,9 +45,6 @@ func (s *streamHTTP) SetHeader(md metadata.MD) error {
 	return nil
 }
 func (s *streamHTTP) SendHeader(md metadata.MD) error {
-	s.wmu.Lock()
-	defer s.wmu.Unlock()
-
 	if s.sentHeader {
 		return fmt.Errorf("already sent headers")
 	}
@@ -73,9 +63,6 @@ func (s *streamHTTP) SendHeader(md metadata.MD) error {
 }
 
 func (s *streamHTTP) SetTrailer(md metadata.MD) {
-	s.wmu.Lock()
-	defer s.wmu.Unlock()
-
 	s.trailer = metadata.Join(s.trailer, md)
 }
 
@@ -84,10 +71,7 @@ func (s *streamHTTP) Context() context.Context {
 	return grpc.NewContextWithServerTransportStream(s.ctx, sts)
 }
 
-func (s *streamHTTP) writeMsg(b []byte, contentType string) (int, error) {
-	s.wmu.Lock()
-	defer s.wmu.Unlock()
-
+func (s *streamHTTP) writeMsg(c Codec, b []byte, contentType string) (int, error) {
 	count := s.sendCount
 	if count == 0 {
 		s.wHeader.Set("Content-Type", contentType)
@@ -95,13 +79,12 @@ func (s *streamHTTP) writeMsg(b []byte, contentType string) (int, error) {
 	}
 	s.sendCount += 1
 	if s.method.desc.IsStreamingServer() {
-		codec, ok := s.wCodec.(SizeCodec)
+		codec, ok := c.(SizeCodec)
 		if !ok {
-			return -1, fmt.Errorf("codec %s does not support streaming", codec.Name())
+			return count, fmt.Errorf("codec %s does not support streaming", codec.Name())
 		}
-		if _, err := codec.SizeWrite(s.w, b); err != nil {
-			return -1, err
-		}
+		_, err := codec.SizeWrite(s.w, b)
+		return count, err
 	}
 	return count, s.opts.writeAll(s.w, b)
 }
@@ -119,26 +102,10 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 	}
 	msg := cur.Interface()
 
-	if cur.Descriptor().FullName() == "google.api.HttpBody" {
-		fds := cur.Descriptor().Fields()
-		fdContentType := fds.ByName(protoreflect.Name("content_type"))
-		fdData := fds.ByName(protoreflect.Name("data"))
-		pContentType := cur.Get(fdContentType)
-		pData := cur.Get(fdData)
-
-		b := pData.Bytes()
-		if _, err := s.writeMsg(b, pContentType.String()); err != nil {
-			return err
-		}
-		if stats := s.opts.statsHandler; stats != nil {
-			// TODO: raw payload stats.
-			stats.HandleRPC(s.ctx, outPayload(false, m, b, b, time.Now()))
-		}
-		return nil
-	}
-
-	if s.wCodec == nil {
-		return fmt.Errorf("unknown accept encoding: %s", s.accept)
+	contentType := s.accept
+	c, err := s.getCodec(contentType, cur)
+	if err != nil {
+		return err
 	}
 
 	bytes := bytesPool.Get().(*[]byte)
@@ -150,12 +117,24 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 		}
 	}()
 
-	var err error
-	b, err = s.wCodec.MarshalAppend(b, msg)
-	if err != nil {
-		return status.Errorf(codes.Internal, "%s: error while marshaling: %v", s.wCodec.Name(), err)
+	if cur.Descriptor().FullName() == "google.api.HttpBody" {
+		fds := cur.Descriptor().Fields()
+		fdContentType := fds.ByName(protoreflect.Name("content_type"))
+		fdData := fds.ByName(protoreflect.Name("data"))
+		pContentType := cur.Get(fdContentType)
+		pData := cur.Get(fdData)
+
+		b = append(b, pData.Bytes()...)
+		contentType = pContentType.String()
+	} else {
+		var err error
+		b, err = c.MarshalAppend(b, msg)
+		if err != nil {
+			return status.Errorf(codes.Internal, "%s: error while marshaling: %v", c.Name(), err)
+		}
 	}
-	if _, err := s.writeMsg(b, s.contentType); err != nil {
+
+	if _, err := s.writeMsg(c, b, contentType); err != nil {
 		return err
 	}
 	if stats := s.opts.statsHandler; stats != nil {
@@ -165,28 +144,44 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 	return nil
 }
 
-func (s *streamHTTP) readMsg(b []byte) (int, []byte, error) {
-	s.rmu.Lock()
-	defer s.rmu.Unlock()
+func (s *streamHTTP) readMsg(c Codec, b []byte) (int, []byte, error) {
+	if s.rEOF {
+		return s.recvCount, nil, io.EOF
+	}
 
 	count := s.recvCount
 	s.recvCount += 1
 	if s.method.desc.IsStreamingClient() {
-		codec, ok := s.rCodec.(SizeCodec)
+		codec, ok := c.(SizeCodec)
 		if !ok {
-			return -1, nil, fmt.Errorf("codec %s does not support streaming", codec.Name())
+			return count, nil, fmt.Errorf("codec %q does not support streaming", codec.Name())
 		}
 		b = append(b, s.rbuf...)
 		b, n, err := codec.SizeRead(b, s.r, s.opts.maxReceiveMessageSize)
-		if err != nil {
-			return -1, nil, err
+		if err == io.EOF {
+			s.rEOF, err = true, nil
 		}
 		s.rbuf = append(s.rbuf[:0], b[n:]...)
-		return count, b[:n], nil
+		return count, b[:n], err
 
 	}
 	b, err := s.opts.readAll(b, s.r)
+	if err == io.EOF {
+		s.rEOF, err = true, nil
+	}
 	return count, b, err
+}
+
+func (s *streamHTTP) getCodec(mediaType string, cur protoreflect.Message) (Codec, error) {
+	codecType := string(cur.Descriptor().FullName())
+	if c, ok := s.opts.codecs[codecType]; ok {
+		return c, nil
+	}
+	codecType = mediaType
+	if c, ok := s.opts.codecs[codecType]; ok {
+		return c, nil
+	}
+	return nil, status.Errorf(codes.Internal, "no codec registered for content-type %q", mediaType)
 }
 
 func (s *streamHTTP) decodeRequestArgs(args proto.Message) (int, error) {
@@ -199,20 +194,24 @@ func (s *streamHTTP) decodeRequestArgs(args proto.Message) (int, error) {
 		}
 	}()
 
-	var (
-		count int
-		err   error
-	)
-	count, b, err = s.readMsg(b)
-	if err != nil {
-		return count, err
-	}
-
 	cur := args.ProtoReflect()
 	for _, fd := range s.method.body {
 		cur = cur.Mutable(fd).Message()
 	}
 	msg := cur.Interface()
+
+	c, err := s.getCodec(s.contentType, cur)
+	if err != nil {
+		return -1, err
+	}
+
+	var (
+		count int
+	)
+	count, b, err = s.readMsg(c, b)
+	if err != nil {
+		return count, err
+	}
 
 	if cur.Descriptor().FullName() == "google.api.HttpBody" {
 		rfl := msg.ProtoReflect()
@@ -220,20 +219,14 @@ func (s *streamHTTP) decodeRequestArgs(args proto.Message) (int, error) {
 		fdContentType := fds.ByName(protoreflect.Name("content_type"))
 		fdData := fds.ByName(protoreflect.Name("data"))
 		rfl.Set(fdContentType, protoreflect.ValueOfString(s.contentType))
-		rfl.Set(fdData, protoreflect.ValueOfBytes(b))
 
-		if stats := s.opts.statsHandler; stats != nil {
-			// TODO: raw payload stats.
-			stats.HandleRPC(s.ctx, inPayload(false, msg, b, b, time.Now()))
+		cpy := make([]byte, len(b))
+		copy(cpy, b)
+		rfl.Set(fdData, protoreflect.ValueOfBytes(cpy))
+	} else {
+		if err := c.Unmarshal(b, msg); err != nil {
+			return count, status.Errorf(codes.Internal, "%s: error while unmarshaling: %v", c.Name(), err)
 		}
-		return count, nil
-	}
-
-	if s.rCodec == nil {
-		return count, fmt.Errorf("unknown content-type encoding: %s", s.contentType)
-	}
-	if err := s.rCodec.Unmarshal(b, msg); err != nil {
-		return count, status.Errorf(codes.Internal, "%s: error while unmarshaling: %v", s.wCodec.Name(), err)
 	}
 	if stats := s.opts.statsHandler; stats != nil {
 		// TODO: raw payload stats.
@@ -245,20 +238,20 @@ func (s *streamHTTP) decodeRequestArgs(args proto.Message) (int, error) {
 func (s *streamHTTP) RecvMsg(m interface{}) error {
 	args := m.(proto.Message)
 
-	var (
-		count int
-		err   error
-	)
+	var count int
 	if s.method.hasBody && s.hasBody {
+		var err error
 		count, err = s.decodeRequestArgs(args)
 		if err != nil {
 			return err
 		}
 	} else {
-		s.rmu.Lock()
 		count = s.recvCount
 		s.recvCount += 1
-		s.rmu.Unlock()
+		if s.rEOF {
+			return io.EOF
+		}
+		s.rEOF = true
 	}
 	if count == 0 {
 		if err := s.params.set(args); err != nil {

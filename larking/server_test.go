@@ -29,7 +29,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 
 	"larking.io/api/healthpb"
@@ -128,8 +127,6 @@ func TestServer(t *testing.T) {
 		desc   *grpc.StreamDesc
 		method string
 		inouts []interface{}
-		//ins    []in
-		//outs   []out
 	}{{
 		name:   "unary_message",
 		desc:   unaryStreamDesc,
@@ -159,7 +156,7 @@ func TestServer(t *testing.T) {
 						t.Fatal(err)
 					}
 				case out:
-					out := proto.Clone(typ.msg)
+					out := typ.msg.ProtoReflect().New().Interface()
 					if err := s.RecvMsg(out); err != nil {
 						t.Fatal(err)
 					}

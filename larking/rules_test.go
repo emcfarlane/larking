@@ -104,10 +104,6 @@ func (o *overrides) stream() grpc.StreamServerInterceptor {
 		for i, v := range o.inouts {
 			switch v := v.(type) {
 			case in:
-				//if v.method != "" && info.FullMethod != v.method {
-				//	return fmt.Errorf("grpc expected %s, got %s", v.method, info.FullMethod)
-				//}
-
 				msg := v.msg.ProtoReflect().New().Interface()
 				if err := stream.RecvMsg(msg); err != nil {
 					o.Log(err)
@@ -195,7 +191,11 @@ func TestMessageServer(t *testing.T) {
 	}
 	defer conn.Close()
 
-	h, err := NewMux()
+	maxSize := 128
+	h, err := NewMux(
+		MaxReceiveMessageSizeOption(maxSize),
+		MaxSendMessageSizeOption(maxSize+2),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,20 +211,21 @@ func TestMessageServer(t *testing.T) {
 
 	// TODO: compare http.Response output
 	tests := []struct {
-		want want
-		in   in
-		out  out
-		req  *http.Request
-		name string
+		want   want
+		inouts []any
+		req    *http.Request
+		name   string
 	}{{
 		name: "first",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/messages/name/hello", nil),
-		in: in{
-			method: "/larking.testpb.Messaging/GetMessageOne",
-			msg:    &testpb.GetMessageRequestOne{Name: "name/hello"},
-		},
-		out: out{
-			msg: &testpb.Message{Text: "hello, world!"},
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/GetMessageOne",
+				msg:    &testpb.GetMessageRequestOne{Name: "name/hello"},
+			},
+			out{
+				msg: &testpb.Message{Text: "hello, world!"},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -233,18 +234,20 @@ func TestMessageServer(t *testing.T) {
 	}, {
 		name: "sub.subfield",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/messages/123456?revision=2&sub.subfield=foo", nil),
-		in: in{
-			method: "/larking.testpb.Messaging/GetMessageTwo",
-			msg: &testpb.GetMessageRequestTwo{
-				MessageId: "123456",
-				Revision:  2,
-				Sub: &testpb.GetMessageRequestTwo_SubMessage{
-					Subfield: "foo",
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/GetMessageTwo",
+				msg: &testpb.GetMessageRequestTwo{
+					MessageId: "123456",
+					Revision:  2,
+					Sub: &testpb.GetMessageRequestTwo_SubMessage{
+						Subfield: "foo",
+					},
 				},
 			},
-		},
-		out: out{
-			msg: &testpb.Message{Text: "hello, query params!"},
+			out{
+				msg: &testpb.Message{Text: "hello, query params!"},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -253,16 +256,18 @@ func TestMessageServer(t *testing.T) {
 	}, {
 		name: "additional_bindings1",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/users/usr_123/messages?message_id=msg_123&revision=2", nil),
-		in: in{
-			method: "/larking.testpb.Messaging/GetMessageTwo",
-			msg: &testpb.GetMessageRequestTwo{
-				MessageId: "msg_123",
-				Revision:  2,
-				UserId:    "usr_123",
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/GetMessageTwo",
+				msg: &testpb.GetMessageRequestTwo{
+					MessageId: "msg_123",
+					Revision:  2,
+					UserId:    "usr_123",
+				},
 			},
-		},
-		out: out{
-			msg: &testpb.Message{Text: "hello, additional bindings!"},
+			out{
+				msg: &testpb.Message{Text: "hello, additional bindings!"},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -271,7 +276,7 @@ func TestMessageServer(t *testing.T) {
 	}, {
 		name: "additional_bindings2",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/users/usr_123/messages/msg_123?revision=2", nil),
-		in: in{
+		inouts: []any{in{
 			method: "/larking.testpb.Messaging/GetMessageTwo",
 			msg: &testpb.GetMessageRequestTwo{
 				MessageId: "msg_123",
@@ -279,8 +284,9 @@ func TestMessageServer(t *testing.T) {
 				UserId:    "usr_123",
 			},
 		},
-		out: out{
-			msg: &testpb.Message{Text: "hello, additional bindings!"},
+			out{
+				msg: &testpb.Message{Text: "hello, additional bindings!"},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -291,17 +297,19 @@ func TestMessageServer(t *testing.T) {
 		req: httptest.NewRequest(http.MethodPatch, "/v1/messages/msg_123", strings.NewReader(
 			`{ "text": "Hi!" }`,
 		)),
-		in: in{
-			method: "/larking.testpb.Messaging/UpdateMessage",
-			msg: &testpb.UpdateMessageRequestOne{
-				MessageId: "msg_123",
-				Message: &testpb.Message{
-					Text: "Hi!",
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/UpdateMessage",
+				msg: &testpb.UpdateMessageRequestOne{
+					MessageId: "msg_123",
+					Message: &testpb.Message{
+						Text: "Hi!",
+					},
 				},
 			},
-		},
-		out: out{
-			msg: &testpb.Message{Text: "hello, patch!"},
+			out{
+				msg: &testpb.Message{Text: "hello, patch!"},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -312,12 +320,15 @@ func TestMessageServer(t *testing.T) {
 		req: httptest.NewRequest(http.MethodPost, "/v1/action:cancel", strings.NewReader(
 			`{ "message_id": "123" }`,
 		)),
-		in: in{
-			method: "/larking.testpb.Messaging/Action",
-			msg:    &testpb.Message{MessageId: "123", Text: "action"},
-		},
-		out: out{
-			msg: &emptypb.Empty{},
+		inouts: []any{
+
+			in{
+				method: "/larking.testpb.Messaging/Action",
+				msg:    &testpb.Message{MessageId: "123", Text: "action"},
+			},
+			out{
+				msg: &emptypb.Empty{},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -328,12 +339,14 @@ func TestMessageServer(t *testing.T) {
 		req: httptest.NewRequest(http.MethodPost, "/v1/name:clear", strings.NewReader(
 			`{ "message_id": "123" }`,
 		)),
-		in: in{
-			method: "/larking.testpb.Messaging/ActionSegment",
-			msg:    &testpb.Message{MessageId: "123", Text: "name"},
-		},
-		out: out{
-			msg: &emptypb.Empty{},
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/ActionSegment",
+				msg:    &testpb.Message{MessageId: "123", Text: "name"},
+			},
+			out{
+				msg: &emptypb.Empty{},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -342,12 +355,14 @@ func TestMessageServer(t *testing.T) {
 	}, {
 		name: "actionResource",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/actions/123:fetch", nil),
-		in: in{
-			method: "/larking.testpb.Messaging/ActionResource",
-			msg:    &testpb.Message{Text: "actions/123"},
-		},
-		out: out{
-			msg: &emptypb.Empty{},
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/ActionResource",
+				msg:    &testpb.Message{Text: "actions/123"},
+			},
+			out{
+				msg: &emptypb.Empty{},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -358,12 +373,14 @@ func TestMessageServer(t *testing.T) {
 		req: httptest.NewRequest(http.MethodPost, "/v1/name/id:watch", strings.NewReader(
 			`{ "message_id": "123" }`,
 		)),
-		in: in{
-			method: "/larking.testpb.Messaging/ActionSegments",
-			msg:    &testpb.Message{MessageId: "123", Text: "name/id"},
-		},
-		out: out{
-			msg: &emptypb.Empty{},
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/ActionSegments",
+				msg:    &testpb.Message{MessageId: "123", Text: "name/id"},
+			},
+			out{
+				msg: &emptypb.Empty{},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -374,12 +391,14 @@ func TestMessageServer(t *testing.T) {
 		req: httptest.NewRequest(http.MethodGet, "/v3/events:batchGet", strings.NewReader(
 			`{}`,
 		)),
-		in: in{
-			method: "/larking.testpb.Messaging/BatchGet",
-			msg:    &emptypb.Empty{},
-		},
-		out: out{
-			msg: &emptypb.Empty{},
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/BatchGet",
+				msg:    &emptypb.Empty{},
+			},
+			out{
+				msg: &emptypb.Empty{},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -402,28 +421,29 @@ func TestMessageServer(t *testing.T) {
 			r.Header.Set("Content-Type", "image/jpeg")
 			return r
 		}(),
-		in: in{
-			method: "/larking.testpb.Files/UploadDownload",
-			msg: &testpb.UploadFileRequest{
-				Filename: "cat.jpg",
-				File: &httpbody.HttpBody{
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Files/UploadDownload",
+				msg: &testpb.UploadFileRequest{
+					Filename: "cat.jpg",
+					File: &httpbody.HttpBody{
+						ContentType: "image/jpeg",
+						Data:        []byte("cat"),
+					},
+				},
+			},
+			out{
+				msg: &httpbody.HttpBody{
 					ContentType: "image/jpeg",
 					Data:        []byte("cat"),
 				},
-			},
-		},
-		out: out{
-			msg: &httpbody.HttpBody{
-				ContentType: "image/jpeg",
-				Data:        []byte("cat"),
 			},
 		},
 		want: want{
 			statusCode: 200,
 			body:       []byte("cat"),
 		},
-
-		/*}, {
+	}, {
 		name: "large_cat.jpg",
 		req: func() *http.Request {
 			r := httptest.NewRequest(
@@ -433,26 +453,74 @@ func TestMessageServer(t *testing.T) {
 			r.Header.Set("Content-Type", "image/jpeg")
 			return r
 		}(),
-		in: in{
-			method: "/larking.testpb.Files/UploadDownload",
-			msg: &testpb.UploadFileRequest{
-				Filename: "cat.jpg",
-				File: &httpbody.HttpBody{
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Files/LargeUploadDownload",
+				msg: &testpb.UploadFileRequest{
+					Filename: "cat.jpg",
+					File: &httpbody.HttpBody{
+						ContentType: "image/jpeg",
+						Data:        []byte("cat"),
+					},
+				},
+			},
+			out{
+				msg: &httpbody.HttpBody{
 					ContentType: "image/jpeg",
 					Data:        []byte("cat"),
 				},
 			},
 		},
-		out: out{
-			msg: &httpbody.HttpBody{
-				ContentType: "image/jpeg",
-				Data:        []byte("cat"),
+		want: want{
+			statusCode: 200,
+			body:       []byte("cat"),
+		},
+	}, {
+		name: "huge_cat.jpg",
+		req: func() *http.Request {
+			r := httptest.NewRequest(
+				http.MethodPost, "/files/large/huge_cat.jpg",
+				strings.NewReader(
+					"c"+strings.Repeat("a", maxSize)+"t",
+				),
+			)
+			r.Header.Set("Content-Type", "image/jpeg")
+			return r
+		}(),
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Files/LargeUploadDownload",
+				msg: &testpb.UploadFileRequest{
+					Filename: "huge_cat.jpg",
+					File: &httpbody.HttpBody{
+						ContentType: "image/jpeg",
+						Data: []byte(
+							"c" + strings.Repeat("a", maxSize-1),
+						),
+					},
+				},
+			},
+			in{
+				msg: &testpb.UploadFileRequest{
+					File: &httpbody.HttpBody{
+						ContentType: "image/jpeg",
+						Data:        []byte("at"),
+					},
+				},
+			},
+			out{
+				msg: &httpbody.HttpBody{
+					ContentType: "image/jpeg",
+					Data: []byte(
+						"c" + strings.Repeat("a", maxSize) + "t",
+					),
+				},
 			},
 		},
 		want: want{
 			statusCode: 200,
-			body:       []byte("cat"),
-		},*/
+			body:       []byte("c" + strings.Repeat("a", maxSize) + "t"),
+		},
 	}, {
 		name: "wellknown_scalars",
 		req: httptest.NewRequest(
@@ -474,36 +542,38 @@ func TestMessageServer(t *testing.T) {
 				}.Encode(),
 			nil,
 		),
-		in: in{
-			method: "/larking.testpb.WellKnown/Check",
-			msg: &testpb.Scalars{
-				Timestamp: &timestamppb.Timestamp{
-					Seconds: 1484443815,
-					Nanos:   10000000,
-				},
-				Duration: &durationpb.Duration{
-					Seconds: 3,
-					Nanos:   1000,
-				},
-				BoolValue:   &wrapperspb.BoolValue{Value: true},
-				Int32Value:  &wrapperspb.Int32Value{Value: 1},
-				Int64Value:  &wrapperspb.Int64Value{Value: 2},
-				Uint32Value: &wrapperspb.UInt32Value{Value: 3},
-				Uint64Value: &wrapperspb.UInt64Value{Value: 4},
-				FloatValue:  &wrapperspb.FloatValue{Value: 5.5},
-				DoubleValue: &wrapperspb.DoubleValue{Value: 6.6},
-				BytesValue:  &wrapperspb.BytesValue{Value: []byte("hello")},
-				StringValue: &wrapperspb.StringValue{Value: "hello"},
-				FieldMask: &fieldmaskpb.FieldMask{
-					Paths: []string{
-						"user.display_name", // JSON name converted to field name
-						"photo",
+		inouts: []any{
+			in{
+				method: "/larking.testpb.WellKnown/Check",
+				msg: &testpb.Scalars{
+					Timestamp: &timestamppb.Timestamp{
+						Seconds: 1484443815,
+						Nanos:   10000000,
+					},
+					Duration: &durationpb.Duration{
+						Seconds: 3,
+						Nanos:   1000,
+					},
+					BoolValue:   &wrapperspb.BoolValue{Value: true},
+					Int32Value:  &wrapperspb.Int32Value{Value: 1},
+					Int64Value:  &wrapperspb.Int64Value{Value: 2},
+					Uint32Value: &wrapperspb.UInt32Value{Value: 3},
+					Uint64Value: &wrapperspb.UInt64Value{Value: 4},
+					FloatValue:  &wrapperspb.FloatValue{Value: 5.5},
+					DoubleValue: &wrapperspb.DoubleValue{Value: 6.6},
+					BytesValue:  &wrapperspb.BytesValue{Value: []byte("hello")},
+					StringValue: &wrapperspb.StringValue{Value: "hello"},
+					FieldMask: &fieldmaskpb.FieldMask{
+						Paths: []string{
+							"user.display_name", // JSON name converted to field name
+							"photo",
+						},
 					},
 				},
 			},
-		},
-		out: out{
-			msg: &emptypb.Empty{},
+			out{
+				msg: &emptypb.Empty{},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -537,33 +607,35 @@ func TestMessageServer(t *testing.T) {
 				}.Encode(),
 			nil,
 		),
-		in: in{
-			method: "/larking.testpb.Complex/Check",
-			msg: &testpb.ComplexRequest{
-				Int32Value: 1,
-				Int64Value: 2,
-				Int32List: []int32{
-					1, 2,
-				},
-				StringList: []string{
-					"hello",
-					"world",
-				},
-				EnumValue: testpb.ComplexRequest_ENUM_VALUE,
-				Nested: &testpb.ComplexRequest_Nested{
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Complex/Check",
+				msg: &testpb.ComplexRequest{
 					Int32Value: 1,
-					EnumValue:  testpb.ComplexRequest_Nested_ENUM_VALUE,
-				},
-				Oneof: &testpb.ComplexRequest_OneofTimestamp{
-					OneofTimestamp: &timestamppb.Timestamp{
-						Seconds: 1484443815,
-						Nanos:   10000000,
+					Int64Value: 2,
+					Int32List: []int32{
+						1, 2,
+					},
+					StringList: []string{
+						"hello",
+						"world",
+					},
+					EnumValue: testpb.ComplexRequest_ENUM_VALUE,
+					Nested: &testpb.ComplexRequest_Nested{
+						Int32Value: 1,
+						EnumValue:  testpb.ComplexRequest_Nested_ENUM_VALUE,
+					},
+					Oneof: &testpb.ComplexRequest_OneofTimestamp{
+						OneofTimestamp: &timestamppb.Timestamp{
+							Seconds: 1484443815,
+							Nanos:   10000000,
+						},
 					},
 				},
 			},
-		},
-		out: out{
-			msg: &emptypb.Empty{},
+			out{
+				msg: &emptypb.Empty{},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -576,14 +648,16 @@ func TestMessageServer(t *testing.T) {
 			"/v1/complex/2.1/star/one",
 			nil,
 		),
-		in: in{
-			method: "/larking.testpb.Complex/Check",
-			msg: &testpb.ComplexRequest{
-				DoubleValue: 2.1,
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Complex/Check",
+				msg: &testpb.ComplexRequest{
+					DoubleValue: 2.1,
+				},
 			},
-		},
-		out: out{
-			msg: &emptypb.Empty{},
+			out{
+				msg: &emptypb.Empty{},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -596,13 +670,15 @@ func TestMessageServer(t *testing.T) {
 			"/v1/complex/2.1/star/one/two/three",
 			nil,
 		),
-		in: in{
-			method: "/larking.testpb.Complex/Check",
-			msg: &testpb.ComplexRequest{
-				DoubleValue: 2.1,
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Complex/Check",
+				msg: &testpb.ComplexRequest{
+					DoubleValue: 2.1,
+				},
 			},
+			out{},
 		},
-		out: out{},
 		want: want{
 			statusCode: 404,
 		},
@@ -613,14 +689,16 @@ func TestMessageServer(t *testing.T) {
 			"/v1/complex/2.1/starstar/one/two/three",
 			nil,
 		),
-		in: in{
-			method: "/larking.testpb.Complex/Check",
-			msg: &testpb.ComplexRequest{
-				DoubleValue: 2.1,
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Complex/Check",
+				msg: &testpb.ComplexRequest{
+					DoubleValue: 2.1,
+				},
 			},
-		},
-		out: out{
-			msg: &emptypb.Empty{},
+			out{
+				msg: &emptypb.Empty{},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -629,12 +707,14 @@ func TestMessageServer(t *testing.T) {
 	}, {
 		name: "variable_one",
 		req:  httptest.NewRequest(http.MethodGet, "/version/one", nil),
-		in: in{
-			method: "/larking.testpb.Messaging/VariableOne",
-			msg:    &testpb.Message{Text: "version"},
-		},
-		out: out{
-			msg: &emptypb.Empty{},
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/VariableOne",
+				msg:    &testpb.Message{Text: "version"},
+			},
+			out{
+				msg: &emptypb.Empty{},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -643,12 +723,14 @@ func TestMessageServer(t *testing.T) {
 	}, {
 		name: "variable_two",
 		req:  httptest.NewRequest(http.MethodGet, "/version/two", nil),
-		in: in{
-			method: "/larking.testpb.Messaging/VariableTwo",
-			msg:    &testpb.Message{Text: "version"},
-		},
-		out: out{
-			msg: &emptypb.Empty{},
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/VariableTwo",
+				msg:    &testpb.Message{Text: "version"},
+			},
+			out{
+				msg: &emptypb.Empty{},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -657,12 +739,14 @@ func TestMessageServer(t *testing.T) {
 	}, {
 		name: "shelf_name_get",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/shelves/shelf1", nil),
-		in: in{
-			method: "/larking.testpb.Messaging/GetShelf",
-			msg:    &testpb.GetShelfRequest{Name: "shelves/shelf1"},
-		},
-		out: out{
-			msg: &testpb.Shelf{Name: "shelves/shelf1"},
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/GetShelf",
+				msg:    &testpb.GetShelfRequest{Name: "shelves/shelf1"},
+			},
+			out{
+				msg: &testpb.Shelf{Name: "shelves/shelf1"},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -671,12 +755,14 @@ func TestMessageServer(t *testing.T) {
 	}, {
 		name: "book_name_get",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/shelves/shelf1/books/book2", nil),
-		in: in{
-			method: "/larking.testpb.Messaging/GetBook",
-			msg:    &testpb.GetBookRequest{Name: "shelves/shelf1/books/book2"},
-		},
-		out: out{
-			msg: &testpb.Book{Name: "shelves/shelf1/books/book2"},
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/GetBook",
+				msg:    &testpb.GetBookRequest{Name: "shelves/shelf1/books/book2"},
+			},
+			out{
+				msg: &testpb.Book{Name: "shelves/shelf1/books/book2"},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -687,17 +773,19 @@ func TestMessageServer(t *testing.T) {
 		req: httptest.NewRequest(http.MethodPost, "/v1/shelves/shelf1/books", strings.NewReader(
 			`{ "name": "book3" }`,
 		)),
-		in: in{
-			method: "/larking.testpb.Messaging/CreateBook",
-			msg: &testpb.CreateBookRequest{
-				Parent: "shelves/shelf1",
-				Book: &testpb.Book{
-					Name: "book3",
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/CreateBook",
+				msg: &testpb.CreateBookRequest{
+					Parent: "shelves/shelf1",
+					Book: &testpb.Book{
+						Name: "book3",
+					},
 				},
 			},
-		},
-		out: out{
-			msg: &testpb.Book{Name: "book3"},
+			out{
+				msg: &testpb.Book{Name: "book3"},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -708,25 +796,27 @@ func TestMessageServer(t *testing.T) {
 		req: httptest.NewRequest(http.MethodPatch, `/v1/shelves/shelf1/books/book2?update_mask="name,title"`, strings.NewReader(
 			`{ "title": "Lord of the Rings" }`,
 		)),
-		in: in{
-			method: "/larking.testpb.Messaging/UpdateBook",
-			msg: &testpb.UpdateBookRequest{
-				Book: &testpb.Book{
-					Name:  "shelves/shelf1/books/book2",
-					Title: "Lord of the Rings",
-				},
-				UpdateMask: &fieldmaskpb.FieldMask{
-					Paths: []string{
-						"name",
-						"title",
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/UpdateBook",
+				msg: &testpb.UpdateBookRequest{
+					Book: &testpb.Book{
+						Name:  "shelves/shelf1/books/book2",
+						Title: "Lord of the Rings",
+					},
+					UpdateMask: &fieldmaskpb.FieldMask{
+						Paths: []string{
+							"name",
+							"title",
+						},
 					},
 				},
 			},
-		},
-		out: out{
-			msg: &testpb.Book{
-				Name:  "shelves/shelf1/books/book2",
-				Title: "Lord of the Rings",
+			out{
+				msg: &testpb.Book{
+					Name:  "shelves/shelf1/books/book2",
+					Title: "Lord of the Rings",
+				},
 			},
 		},
 		want: want{
@@ -741,12 +831,14 @@ func TestMessageServer(t *testing.T) {
 		req: httptest.NewRequest(http.MethodGet, "/larking.testpb.Messaging/GetBook?"+url.Values{
 			"name": []string{"shelves/shelf1/books/book2"},
 		}.Encode(), nil),
-		in: in{
-			method: "/larking.testpb.Messaging/GetBook",
-			msg:    &testpb.GetBookRequest{Name: "shelves/shelf1/books/book2"},
-		},
-		out: out{
-			msg: &testpb.Book{Name: "shelves/shelf1/books/book2"},
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/GetBook",
+				msg:    &testpb.GetBookRequest{Name: "shelves/shelf1/books/book2"},
+			},
+			out{
+				msg: &testpb.Book{Name: "shelves/shelf1/books/book2"},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -757,12 +849,14 @@ func TestMessageServer(t *testing.T) {
 		req: httptest.NewRequest(http.MethodPost, "/larking.testpb.Messaging/GetBook", strings.NewReader(
 			`{ "name": "shelves/shelf1/books/book2" }`,
 		)),
-		in: in{
-			method: "/larking.testpb.Messaging/GetBook",
-			msg:    &testpb.GetBookRequest{Name: "shelves/shelf1/books/book2"},
-		},
-		out: out{
-			msg: &testpb.Book{Name: "shelves/shelf1/books/book2"},
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/GetBook",
+				msg:    &testpb.GetBookRequest{Name: "shelves/shelf1/books/book2"},
+			},
+			out{
+				msg: &testpb.Book{Name: "shelves/shelf1/books/book2"},
+			},
 		},
 		want: want{
 			statusCode: 200,
@@ -774,15 +868,19 @@ func TestMessageServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			o.reset(t, "http-test", []interface{}{tt.in, tt.out})
+			o.reset(t, "http-test", tt.inouts)
 
 			req := tt.req
-			req.Header["test"] = []string{tt.in.method}
+			if len(tt.inouts) > 0 {
+				req.Header["test"] = []string{tt.inouts[0].(in).method}
+			}
 			t.Log(req.Method, req.URL.String())
 
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, req)
 			resp := w.Result()
+
+			t.Log(w.Body.String())
 
 			b, err := io.ReadAll(resp.Body)
 			if err != nil {
@@ -809,7 +907,7 @@ func TestMessageServer(t *testing.T) {
 			}
 
 			if tt.want.msg != nil {
-				msg := proto.Clone(tt.want.msg)
+				msg := tt.want.msg.ProtoReflect().New().Interface()
 				if err := protojson.Unmarshal(b, msg); err != nil {
 					t.Error(err, string(b))
 					return
