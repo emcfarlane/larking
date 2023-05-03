@@ -209,11 +209,10 @@ This will split into two messages.
 Protobuf messages require the length to be encoded before the message `[4 byte length]<binary encoded>`.
 
 #### Twirp
-The Twirp protocol is very similar to the implicit transcoding requests.
+Twirp is supported through gRPC-transcoding with the implicit methods.
 The implicit methods cover `POST /package.Service/Method/` matching the content types for both `application/json` and `application/proto`.
 Before the [v7 spec](https://twitchtv.github.io/twirp/docs/spec_v7.html) the URL required the `/twirp` prefix.
 We can encode the server to use a ServerOption:
-
 ```go
 svr, _ := larking.NewServer(mux,
 		larking.MuxHandleOption("/", "/twirp"), // Serve mux on '/' and '/twirp'
