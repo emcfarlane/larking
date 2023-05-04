@@ -20,6 +20,7 @@ Use Google's [API design guide](https://cloud.google.com/apis/design) to design 
 - Supports [twirp](https://github.com/twitchtv/twirp) clients
 - Proxy gRPC servers with gRPC [server reflection](https://github.com/grpc/grpc/blob/master/doc/server-reflection.md)
 - Implicit `/GRPC_SERVICE_FULL_NAME/METHOD_NAME` for all methods
+- Google API service configuration [syntax](https://cloud.google.com/endpoints/docs/grpc-service-config/reference/rpc/google.api#using-grpc-api-service-configuration)
 - Websocket streaming with `websocket` kind annotations
 - Content streaming with `google.api.HttpBody`
 - Streaming support with [SizeCodec](https://github.com/emcfarlane/larking#streaming-codecs)
@@ -215,7 +216,7 @@ Before the [v7 spec](https://twitchtv.github.io/twirp/docs/spec_v7.html) the URL
 We can encode the server to use a ServerOption:
 ```go
 svr, _ := larking.NewServer(mux,
-		larking.MuxHandleOption("/", "/twirp"), // Serve mux on '/' and '/twirp'
+  larking.MuxHandleOption("/", "/twirp"), // Serve mux on '/' and '/twirp'
 )
 ```
 
@@ -223,3 +224,12 @@ Twirp [errors](https://twitchtv.github.io/twirp/docs/errors.html) are created fr
 Code enums are mapped to twirp error strings and messages. Currently meta fields aren't supported.
 Errors will only be converted to twirp errors when the header `Twirp-Version` is set.
 This is used to identify a twirp request.
+
+#### External Configuration
+Mux can be configured with external rules using [`*serviceconfig.Service`](https://pkg.go.dev/google.golang.org/genproto/googleapis/api/serviceconfig). Load the file from yaml defintions or declare in Go.
+
+```go
+mux, _ := larking.NewMux(
+  larking.ServiceConfigOption(sc), // sc type of *serviceconfig.Service
+)
+```

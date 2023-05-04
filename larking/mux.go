@@ -23,6 +23,7 @@ import (
 	"github.com/gobwas/ws"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/genproto/googleapis/api/httpbody"
+	"google.golang.org/genproto/googleapis/api/serviceconfig"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -76,13 +77,88 @@ func (s *state) clone() *state {
 	}
 }
 
+// https://cloud.google.com/service-infrastructure/docs/service-management/reference/rpc/google.api#google.api.DocumentationRule.FIELDS.string.google.api.DocumentationRule.selector
+// The selector is a comma-separated list of patterns for any element such as a
+// method, a field, an enum value. Each pattern is a qualified name of the
+// element which may end in "*", indicating a wildcard. Wildcards are only
+// allowed at the end and for a whole component of the qualified name, i.e.
+// "foo.*" is ok, but not "foo.b*" or "foo.*.bar". A wildcard will match one
+// or more components. To specify a default for all applicable elements, the
+// whole pattern "*" is used.
+type ruleSelector struct {
+	path  map[string]*ruleSelector
+	rules []*annotations.HttpRule
+}
+
+func (r *ruleSelector) write(w io.Writer, indent string) {
+	for key, rs := range r.path {
+		fmt.Fprintf(w, "%s%s: \n", indent, key)
+		rs.write(w, indent+"  ")
+	}
+	fmt.Fprintf(w, "%srules: %v\n", indent, r.rules)
+}
+
+// String returns the string representation of the ruleSelector.
+func (r *ruleSelector) String() string {
+	buf := strings.Builder{}
+	r.write(&buf, "")
+	return buf.String()
+}
+
+func (r *ruleSelector) getRules(name string) (rules []*annotations.HttpRule) {
+	rules = append(rules, r.rules...)
+	if name == "" {
+		return rules
+	}
+	tag, name, _ := strings.Cut(name, ".")
+	if r = r.path[tag]; r != nil {
+		return append(rules, r.getRules(name)...)
+	}
+	return rules
+}
+
+func (r *ruleSelector) setRules(rules []*annotations.HttpRule) {
+	*r = ruleSelector{} // reset
+
+	var set func(r *ruleSelector, selector string)
+	for _, rule := range rules {
+		set = func(r *ruleSelector, selector string) {
+			tag, name, _ := strings.Cut(selector, ".")
+			switch tag {
+			case "*":
+				if name != "" {
+					panic(fmt.Errorf("invalid selector %q", rule.GetSelector()))
+				}
+				r.rules = append(r.rules, rule)
+			case "":
+				r.rules = append(r.rules, rule)
+			default:
+				rs := r.path[tag]
+				if rs == nil {
+					rs = &ruleSelector{}
+				}
+				if r.path == nil {
+					r.path = make(map[string]*ruleSelector)
+				}
+				r.path[tag] = rs
+				r = rs
+				set(r, name)
+			}
+		}
+
+		set(r, rule.GetSelector())
+	}
+}
+
 type muxOptions struct {
 	types                 protoregistry.MessageTypeResolver
 	statsHandler          stats.Handler
 	files                 *protoregistry.Files
+	serviceConfig         *serviceconfig.Service
 	unaryInterceptor      grpc.UnaryServerInterceptor
 	streamInterceptor     grpc.StreamServerInterceptor
 	codecs                map[string]Codec
+	httprules             ruleSelector
 	contentTypeOffers     []string
 	maxReceiveMessageSize int
 	maxSendMessageSize    int
@@ -193,6 +269,17 @@ func CodecOption(contentType string, c Codec) MuxOption {
 	}
 }
 
+// ServiceConfigOption sets the service config for the mux.
+// Currently only  http rules will be used to annotate services.
+func ServiceConfigOption(sc *serviceconfig.Service) MuxOption {
+	return func(opts *muxOptions) {
+		opts.serviceConfig = sc
+		opts.httprules = ruleSelector{}
+		opts.httprules.setRules(sc.Http.GetRules())
+
+	}
+}
+
 type Mux struct {
 	opts     muxOptions
 	state    atomic.Value
@@ -241,7 +328,7 @@ func (m *Mux) RegisterConn(ctx context.Context, cc *grpc.ClientConn) error {
 	defer m.mu.Unlock()
 	s := m.loadState().clone()
 
-	if err := s.addConnHandler(cc, stream); err != nil {
+	if err := s.addConnHandler(m.opts, cc, stream); err != nil {
 		return err
 	}
 
@@ -329,6 +416,7 @@ func (r *resolver) FindDescriptorByName(fullname protoreflect.FullName) (protore
 }
 
 func (s *state) appendHandler(
+	opts muxOptions,
 	desc protoreflect.MethodDescriptor,
 	h *handler,
 ) error {
@@ -344,6 +432,14 @@ func (s *state) appendHandler(
 	}
 	if err := s.path.addRule(implicitRule, desc, h.method); err != nil {
 		panic(fmt.Sprintf("bug: %v", err))
+	}
+
+	// Add all ServiceConfig.http rules.
+	name := string(desc.FullName())
+	for _, rule := range opts.httprules.getRules(name) {
+		if err := s.path.addRule(rule, desc, h.method); err != nil {
+			return fmt.Errorf("[%s] invalid ServiceConfig.http rule %s: %w", desc.FullName(), rule.String(), err)
+		}
 	}
 
 	// Add all annotated rules.
@@ -386,6 +482,7 @@ func (s *state) removeHandler(cc *grpc.ClientConn) bool {
 }
 
 func (s *state) addConnHandler(
+	opts muxOptions,
 	cc *grpc.ClientConn,
 	stream rpb.ServerReflection_ServerReflectionInfoClient,
 ) error {
@@ -460,7 +557,7 @@ func (s *state) addConnHandler(
 			return err
 		}
 
-		hs, err := s.processFile(cc, file)
+		hs, err := s.processFile(opts, cc, file)
 		if err != nil {
 			return err
 		}
@@ -616,7 +713,7 @@ func createConnHandler(
 	}
 }
 
-func (s *state) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor) ([]*handler, error) {
+func (s *state) processFile(opts muxOptions, cc *grpc.ClientConn, fd protoreflect.FileDescriptor) ([]*handler, error) {
 	var handlers []*handler
 
 	sds := fd.Services()
@@ -627,7 +724,7 @@ func (s *state) processFile(cc *grpc.ClientConn, fd protoreflect.FileDescriptor)
 		for j := 0; j < mds.Len(); j++ {
 			md := mds.Get(j)
 			hd := createConnHandler(cc, sd, md)
-			if err := s.appendHandler(md, hd); err != nil {
+			if err := s.appendHandler(opts, md, hd); err != nil {
 				return nil, err
 			}
 			handlers = append(handlers, hd)
