@@ -18,7 +18,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/genproto/googleapis/api/httpbody"
+	"google.golang.org/genproto/googleapis/api/serviceconfig"
 	"google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -195,6 +197,14 @@ func TestMessageServer(t *testing.T) {
 	h, err := NewMux(
 		MaxReceiveMessageSizeOption(maxSize),
 		MaxSendMessageSizeOption(maxSize+2),
+		ServiceConfigOption(&serviceconfig.Service{
+			Http: &annotations.Http{Rules: []*annotations.HttpRule{{
+				Selector: "larking.testpb.Messaging.GetMessageOne",
+				Pattern: &annotations.HttpRule_Patch{
+					Patch: "/v1/messages/{name=*}:serviceConfig",
+				},
+			}}},
+		}),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -222,6 +232,22 @@ func TestMessageServer(t *testing.T) {
 			in{
 				method: "/larking.testpb.Messaging/GetMessageOne",
 				msg:    &testpb.GetMessageRequestOne{Name: "name/hello"},
+			},
+			out{
+				msg: &testpb.Message{Text: "hello, world!"},
+			},
+		},
+		want: want{
+			statusCode: 200,
+			msg:        &testpb.Message{Text: "hello, world!"},
+		},
+	}, {
+		name: "serviceConfig",
+		req:  httptest.NewRequest(http.MethodPatch, "/v1/messages/hello:serviceConfig", nil),
+		inouts: []any{
+			in{
+				method: "/larking.testpb.Messaging/GetMessageOne",
+				msg:    &testpb.GetMessageRequestOne{Name: "hello"},
 			},
 			out{
 				msg: &testpb.Message{Text: "hello, world!"},

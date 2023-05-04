@@ -88,7 +88,7 @@ func (m *Mux) registerService(gsd *grpc.ServiceDesc, ss interface{}) error {
 			},
 		}
 
-		if err := s.appendHandler(md, h); err != nil {
+		if err := s.appendHandler(m.opts, md, h); err != nil {
 			return err
 		}
 	}
@@ -113,7 +113,7 @@ func (m *Mux) registerService(gsd *grpc.ServiceDesc, ss interface{}) error {
 				return opts.stream(ss, stream, info, d.Handler)
 			},
 		}
-		if err := s.appendHandler(md, h); err != nil {
+		if err := s.appendHandler(m.opts, md, h); err != nil {
 			return err
 		}
 	}
