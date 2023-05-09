@@ -49,39 +49,11 @@ import (
 	"log"
 	"net"
 
-	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/genproto/googleapis/api/serviceconfig"
-	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"larking.io/health"
 	"larking.io/larking"
 )
-
-// ServiceConfig can be used to add extra HTTP annotations to gRPC methods.
-// Let's add convience methods to Check and Watch methods so we can call them
-// using /v1/healthz endpoint
-var serviceConfig = &serviceconfig.Service{
-	Http: &annotations.Http{Rules: []*annotations.HttpRule{{
-		// Selector is the gRPC method name.
-		Selector: "grpc.health.v1.Health.Check",
-		// Pattern is the HTTP pattern to map to.
-		Pattern: &annotations.HttpRule_Get{
-			// Get is a HTTP GET.
-			Get: "/v1/healthz",
-		},
-	}, {
-		// Watch is a gRPC streaming method.
-		Selector: "grpc.health.v1.Health.Watch",
-		Pattern: &annotations.HttpRule_Custom{
-			// Custom is a custom pattern.
-			Custom: &annotations.CustomHttpPattern{
-				// Kind "WEBSOCKET" is a HTTP WebSocket.
-				Kind: "WEBSOCKET",
-				// Path is the same as above.
-				Path: "/v1/healthz",
-			},
-		},
-	}}},
-}
 
 func main() {
 	// Create the health service.
@@ -89,7 +61,14 @@ func main() {
 	healthSvc.SetServingStatus("example.up.Service", healthpb.HealthCheckResponse_SERVING)
 	healthSvc.SetServingStatus("example.down.Service", healthpb.HealthCheckResponse_NOT_SERVING)
 
-	// Mux implements http.Handler, use by itself to sever only HTTP endpoints.
+	serviceConfig := &serviceconfig.Service{}
+	// AddHealthz adds a /v1/healthz endpoint to the service binding to the
+	// grpc.health.v1.Health service:
+	//   - get /v1/healthz -> grpc.health.v1.Health.Check
+	//   - websocket /v1/healthz -> grpc.health.v1.Health.Watch
+	health.AddHealthz(serviceConfig)
+
+	// Mux implements http.Handler, use by itself to serve only HTTP endpoints.
 	mux, err := larking.NewMux(
 		larking.ServiceConfigOption(serviceConfig),
 	)
@@ -121,19 +100,19 @@ func main() {
 }
 ```
 
-Running the service, call with curl
+Running the service we can check the health endpoints with curl:
 ```sh
 > curl localhost:8080/grpc.health.v1.Health/Check
 {"status":"SERVING"}
 ```
 
-To filter a service you can post the body `{"service": "example.down.Service"}` or use query params:
+To filter by service you can post the body `{"service": "example.down.Service"}` or use query params:
 ```sh
 > curl 'localhost:8080/grpc.health.v1.Health/Check?service=example.down.Service'
 {"status":"NOT_SERVING"}
 ```
 
-We can also use our custom HTTP annotations:
+We can also use the `/v1/healthz` endpoint added by `health.AddHealthz`:
 ```sh
 > curl 'localhost:8080/v1/healthz?service=example.up.Service'
 {"status":"SERVING"}
