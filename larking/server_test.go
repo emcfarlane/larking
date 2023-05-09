@@ -23,15 +23,16 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/genproto/googleapis/api/serviceconfig"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
 
-	"larking.io/api/healthpb"
 	"larking.io/api/testpb"
 	"larking.io/health"
 )
@@ -171,7 +172,12 @@ func TestServer(t *testing.T) {
 }
 
 func TestMuxHandleOption(t *testing.T) {
-	mux, err := NewMux()
+	serviceConfig := &serviceconfig.Service{}
+	health.AddHealthz(serviceConfig)
+
+	mux, err := NewMux(
+		ServiceConfigOption(serviceConfig),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,11 +224,11 @@ func TestMuxHandleOption(t *testing.T) {
 		path string
 		okay bool
 	}{
-		{"/v1/health", true},
-		{"/api/v1/health", true},
-		{"/pfx/v1/health", true},
-		{"/bad/v1/health", false},
-		{"/v1/health/bad", false},
+		{"/v1/healthz", true},
+		{"/api/v1/healthz", true},
+		{"/pfx/v1/healthz", true},
+		{"/bad/v1/healthz", false},
+		{"/v1/healthz/bad", false},
 	} {
 		t.Run(tt.path, func(t *testing.T) {
 			rsp, err := http.Get("http://" + lis.Addr().String() + tt.path)
@@ -386,8 +392,11 @@ func TestTLSServer(t *testing.T) {
 		//	}
 		return nil
 	}
+	serviceConfig := &serviceconfig.Service{}
+	health.AddHealthz(serviceConfig)
 
 	mux, err := NewMux(
+		ServiceConfigOption(serviceConfig),
 		UnaryServerInterceptorOption(
 			func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 				if err := verfiyPeer(ctx); err != nil {
@@ -449,7 +458,7 @@ func TestTLSServer(t *testing.T) {
 				TLSClientConfig: tlsConfig,
 			},
 		}
-		rsp, err := client.Get("https://" + l.Addr().String() + "/v1/health")
+		rsp, err := client.Get("https://" + l.Addr().String() + "/v1/healthz")
 		if err != nil {
 			t.Fatal(err)
 		}
