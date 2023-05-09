@@ -995,6 +995,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(r.URL.Path, "/") {
 		r.URL.Path = "/" + r.URL.Path
 	}
+	r.URL.Path = strings.TrimSuffix(r.URL.Path, "/")
 	if err := m.serveHTTP(w, r); err != nil {
 		m.encError(w, r, err)
 	}

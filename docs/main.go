@@ -11,41 +11,41 @@ import (
 	"larking.io/larking"
 )
 
+// ServiceConfig can be used to add extra HTTP annotations to gRPC methods.
+// Let's add convience methods to Check and Watch methods.
+var serviceConfig = &serviceconfig.Service{
+	Http: &annotations.Http{Rules: []*annotations.HttpRule{{
+		// Selector is the gRPC method name.
+		Selector: "grpc.health.v1.Health.Check",
+		// Pattern is the HTTP pattern to map to.
+		Pattern: &annotations.HttpRule_Get{
+			// Get is a HTTP GET.
+			Get: "/v1/healthz",
+		},
+	}, {
+		// Watch is a gRPC streaming method.
+		Selector: "grpc.health.v1.Health.Watch",
+		Pattern: &annotations.HttpRule_Custom{
+			// Custom is a custom pattern.
+			Custom: &annotations.CustomHttpPattern{
+				// Kind "WEBSOCKET" is a HTTP WebSocket.
+				Kind: "WEBSOCKET",
+				// Path is the same as above.
+				Path: "/v1/healthz",
+			},
+		},
+	}}},
+}
+
 func main() {
 	// Create the health service.
 	healthSvc := health.NewServer()
 	healthSvc.SetServingStatus("example.up.Service", healthpb.HealthCheckResponse_SERVING)
 	healthSvc.SetServingStatus("example.down.Service", healthpb.HealthCheckResponse_NOT_SERVING)
 
-	// ServiceConfigOption is used to add extra HTTP annotations to gPRC Methods.
-	// This is used to add HTTP endpoints to the HealthServer.
-	sc := &serviceconfig.Service{
-		Http: &annotations.Http{Rules: []*annotations.HttpRule{{
-			// Selector is the gRPC method name.
-			Selector: "grpc.health.v1.Health.Check",
-			// Pattern is the HTTP pattern to map to.
-			Pattern: &annotations.HttpRule_Get{
-				// Get is a HTTP GET.
-				Get: "/v1/healthz",
-			},
-		}, {
-			// Watch is a gRPC streaming method.
-			Selector: "grpc.health.v1.Health.Watch",
-			Pattern: &annotations.HttpRule_Custom{
-				// Custom is a custom pattern.
-				Custom: &annotations.CustomHttpPattern{
-					// Kind "WEBSOCKET" is a HTTP WebSocket.
-					Kind: "WEBSOCKET",
-					// Path is the same as above.
-					Path: "/v1/healthz",
-				},
-			},
-		}}},
-	}
-
 	// Mux implements http.Handler, use by itself to sever only HTTP endpoints.
 	mux, err := larking.NewMux(
-		larking.ServiceConfigOption(sc),
+		larking.ServiceConfigOption(serviceConfig),
 	)
 	if err != nil {
 		log.Fatal(err)
