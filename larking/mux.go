@@ -47,10 +47,10 @@ type connList struct {
 }
 
 type state struct {
-	path          *path
-	conns         map[*grpc.ClientConn]connList
-	handlers      map[string][]*handler
-	graphqlSchema *graphql.Schema
+	path      *path
+	conns     map[*grpc.ClientConn]connList
+	handlers  map[string][]*handler
+	gqlSchema graphql.Schema
 }
 
 func (s *state) clone() *state {
@@ -450,6 +450,14 @@ func (s *state) appendHandler(
 			return fmt.Errorf("[%s] invalid rule %s: %w", desc.FullName(), rule.String(), err)
 		}
 	}
+
+	// Add graphql rules.
+	if rule := getExtensionGraphQL(desc.Options()); rule != nil {
+		if err := s.addGraphQLRule(opts, rule, desc, h.method); err != nil {
+			return fmt.Errorf("[%s] invalid graphQL rule %s: %w", desc.FullName(), rule.String(), err)
+		}
+	}
+
 	s.handlers[h.method] = append(s.handlers[h.method], h)
 	return nil
 }

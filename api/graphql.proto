@@ -22,7 +22,7 @@ option go_package = "larking.io/api/graphqlpb;graphqlpb";
 
 extend google.protobuf.MethodOptions {
   // Adds a method to the GraphQL query root.
-  GraphQLRule relay = 72222228;
+  Rule graphql = 72222228;
 }
 
 extend google.protobuf.FieldOptions {
@@ -30,8 +30,8 @@ extend google.protobuf.FieldOptions {
   optional bool relay_id = 70000;
 }
 
-// GraphQL bindings.
-message GraphQLRule {
+// Rule implements GraphQL bindings.
+message Rule {
   oneof pattern {
     string query = 1;
     string mutation = 2;
@@ -47,10 +47,17 @@ message GraphQLRule {
   // Additional GraphQL bindings for the selector. Nested bindings must
   // not contain an `additional_bindings` field themselves (that is,
   // the nesting may only be one level deep).
-  repeated GraphQLRule additional_bindings = 6;
+  repeated Rule additional_bindings = 6;
 }
 
-extend google.protobuf.MessageOptions { MessageConnection connection = 70000; }
+extend google.protobuf.MessageOptions { Edge edge = 70001; }
+
+message Edge {
+  string name = 1;
+  string method = 2;
+}
+
+extend google.protobuf.MessageOptions { MessageConnection connection = 70002; }
 
 message Arg {
   string name = 1;
@@ -101,10 +108,15 @@ message Response {
   repeated Error errors = 2;
 }
 
+message SourceLocation {
+  int32 line = 1;
+  int32 column = 2;
+}
+
 message Error {
   string message = 1;
-  repeated string path = 2;
-  google.protobuf.Struct extensions = 3;
+  repeated SourceLocation locations = 2;
+  repeated string path = 3;
 }
 
 service GraphQL {
@@ -117,10 +129,10 @@ service GraphQL {
   // TODO: Subscriptions
 }
 
-message GetRelayNodeRequest { string id = 1; }
-
-// Relay service is a client required service for GraphQL options.
-service Relay {
-  // GetRelayNode exposes ID! querying capabilities to the GraphQL service.
-  rpc GetRelayNode(GetRelayNodeRequest) returns (google.protobuf.Any);
-}
+// message GetRelayNodeRequest { string id = 1; }
+//
+//// Relay service is a client required service for GraphQL options.
+// service Relay {
+//   // GetRelayNode exposes ID! querying capabilities to the GraphQL service.
+//   rpc GetRelayNode(GetRelayNodeRequest) returns (google.protobuf.Any);
+// }

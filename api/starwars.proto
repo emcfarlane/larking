@@ -34,15 +34,10 @@ message Faction {
   // arg "page_size:{first}
   // query_arg { name : "after" field_path: "
 
-  // option (larking.api.relay).connection = {
-  //  name : "ships"
-  //  method : "/larking.testpb.StarWars/ListShips/"
-  //  args {
-  //    "{name}" : "parent",
-  //    "first" : "page_size",
-  //    "after" : "page_token",
-  //  }
-  //};
+  option (larking.api.edge) = {
+    name : "ships"
+    method : "/larking.api.StarWars/ListShips"
+  };
 }
 
 message GetFactionRequest { string name = 1; }
@@ -52,7 +47,7 @@ message Ship {
   //  rpc : "larking.testpb.StarWars.GetShip(id : id)"
   //};
 
-  string name = 1 [ (larking.api.relay_id) = true ];
+  string name = 1; //[ (larking.api.relay_id) = true ];
   string display_name = 2;
 }
 
@@ -81,7 +76,7 @@ message ListShipsResponse {
 service StarWars {
 
   rpc GetFaction(GetFactionRequest) returns (Faction) {
-    option (larking.api.relay) = {
+    option (larking.api.graphql) = {
       query : "faction"
       args {name : "id" field : "name"}
       node_id : "{name=factions/*}"

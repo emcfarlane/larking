@@ -9,12 +9,15 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/structpb"
 	"larking.io/api/graphqlpb"
 	"larking.io/api/starwarspb"
 )
 
 type starWarsServer struct {
+	starwarspb.UnimplementedStarWarsServer
+
 	factions     map[string]*starwarspb.Faction
 	ships        map[string]*starwarspb.Ship
 	factionShips map[string][]*starwarspb.Ship
@@ -146,8 +149,8 @@ func TestGraphQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	//starwarspb.RegisterStarWarsServer(m, &starwarsServer{})
+	svr := newStarWarsServer(t)
+	starwarspb.RegisterStarWarsServer(m, svr)
 
 	toStruct := func(str string) *structpb.Struct {
 		var s structpb.Struct
@@ -160,27 +163,29 @@ func TestGraphQL(t *testing.T) {
 	//t.Skip("TODO")
 	tests := []struct {
 		name string
-		req  *graphqlpb.GraphQLRequest
-		rsp  *graphqlpb.GraphQLResponse
+		req  *graphqlpb.Request
+		rsp  *graphqlpb.Response
 		err  error
 	}{{
 		name: "hero",
-		req: &graphqlpb.GraphQLRequest{
+		req: &graphqlpb.Request{
 			Query: `{
-				rebels {
-					id
+				faction(name: "factions/rebels") {
 					name
+					displayName
 				}
 			}`,
 		},
-		rsp: &graphqlpb.GraphQLResponse{
+		rsp: &graphqlpb.Response{
 			Data: toStruct(`{
-				"hero": {
-					"name": "R2-D2"
+				"faction": {
+					"name": "factions/rebels",
+					"displayName": "Alliance to Restore the Republic"
 				}
 			}`),
 		},
 	}}
+	cmpOpts := cmp.Options{protocmp.Transform()}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -191,7 +196,7 @@ func TestGraphQL(t *testing.T) {
 				}
 				t.Fatal(err)
 			}
-			if diff := cmp.Diff(tt.rsp, rsp); diff != "" {
+			if diff := cmp.Diff(tt.rsp, rsp, cmpOpts...); diff != "" {
 				t.Errorf("diff: %s", diff)
 			}
 		})
