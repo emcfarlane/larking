@@ -7,12 +7,11 @@ syntax = "proto3";
 package larking.api;
 
 import "google/api/annotations.proto";
-import "google/api/httpbody.proto";
 import "google/protobuf/any.proto";
 import "google/protobuf/descriptor.proto";
 import "google/protobuf/struct.proto";
 
-option go_package = "github.com/emcfarlane/larking/api;api";
+option go_package = "larking.io/api/graphqlpb;graphqlpb";
 
 // Relay GraphQL implementation
 // https://relay.dev/docs/guides/graphql-server-specification/
@@ -91,17 +90,31 @@ message Connection {
   PageInfo page_info = 2;
 }
 
-message GraphQLResponse {
+message Request {
+  string query = 1;
+  string operation_name = 2;
+  google.protobuf.Struct variables = 3;
+}
+
+message Response {
   google.protobuf.Struct data = 1;
-  repeated google.protobuf.Any errors = 2;
+  repeated Error errors = 2;
+}
+
+message Error {
+  string message = 1;
+  repeated string path = 2;
+  google.protobuf.Struct extensions = 3;
 }
 
 service GraphQL {
-  rpc Query(google.api.HttpBody) returns (stream GraphQLResponse) {
+  rpc Query(Request) returns (Response) {
     option (google.api.http) = {
       post : "/graphql"
+      additional_bindings {get : "/graphql"}
     };
   }
+  // TODO: Subscriptions
 }
 
 message GetRelayNodeRequest { string id = 1; }

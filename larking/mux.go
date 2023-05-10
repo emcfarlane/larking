@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/gobwas/ws"
+	"github.com/graphql-go/graphql"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/genproto/googleapis/api/serviceconfig"
@@ -46,9 +47,10 @@ type connList struct {
 }
 
 type state struct {
-	path     *path
-	conns    map[*grpc.ClientConn]connList
-	handlers map[string][]*handler
+	path          *path
+	conns         map[*grpc.ClientConn]connList
+	handlers      map[string][]*handler
+	graphqlSchema *graphql.Schema
 }
 
 func (s *state) clone() *state {

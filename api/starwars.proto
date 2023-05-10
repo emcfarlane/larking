@@ -1,16 +1,16 @@
-// Copyright 2021 Edward McFarlane. All rights reserved.
+// Copyright 2023 Edward McFarlane. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
 syntax = "proto3";
 
-package larking.testpb;
+package larking.api;
 
 import "google/api/annotations.proto";
-import "api/graphql.proto";
+import "larking/api/graphql.proto";
 // import "google/protobuf/empty.proto";
 
-option go_package = "github.com/emcfarlane/larking/testpb;testpb";
+option go_package = "larking.io/api/starwarspb;starwarspb";
 
 message Faction {
   // option (larking.api.relay).node = {
