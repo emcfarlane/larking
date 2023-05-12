@@ -81,11 +81,11 @@ func (s *streamHTTP) writeMsg(c Codec, b []byte, contentType string) (int, error
 	}
 	s.sendCount += 1
 	if s.method.desc.IsStreamingServer() {
-		codec, ok := c.(SizeCodec)
+		codec, ok := c.(StreamCodec)
 		if !ok {
 			return count, fmt.Errorf("codec %s does not support streaming", codec.Name())
 		}
-		_, err := codec.SizeWrite(s.w, b)
+		_, err := codec.WriteNext(s.w, b)
 		return count, err
 	}
 	return count, s.opts.writeAll(s.w, b)
@@ -154,12 +154,12 @@ func (s *streamHTTP) readMsg(c Codec, b []byte) (int, []byte, error) {
 	count := s.recvCount
 	s.recvCount += 1
 	if s.method.desc.IsStreamingClient() {
-		codec, ok := c.(SizeCodec)
+		codec, ok := c.(StreamCodec)
 		if !ok {
 			return count, nil, fmt.Errorf("codec %q does not support streaming", codec.Name())
 		}
 		b = append(b, s.rbuf...)
-		b, n, err := codec.SizeRead(b, s.r, s.opts.maxReceiveMessageSize)
+		b, n, err := codec.ReadNext(b, s.r, s.opts.maxReceiveMessageSize)
 		if err == io.EOF {
 			s.rEOF, err = true, nil
 		}
