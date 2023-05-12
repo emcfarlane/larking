@@ -6,7 +6,6 @@ package larking
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -158,8 +157,10 @@ type muxOptions struct {
 	unaryInterceptor      grpc.UnaryServerInterceptor
 	streamInterceptor     grpc.StreamServerInterceptor
 	codecs                map[string]Codec
+	compressors           map[string]Compressor
 	httprules             ruleSelector
 	contentTypeOffers     []string
+	encodingTypeOffers    []string
 	maxReceiveMessageSize int
 	maxSendMessageSize    int
 	connectionTimeout     time.Duration
@@ -229,6 +230,11 @@ var (
 		"application/octet-stream": CodecProto{},
 		"google.api.HttpBody":      codecHTTPBody{},
 	}
+
+	defaultCompressors = map[string]Compressor{
+		"gzip":     &CompressorGzip{},
+		"identity": nil,
+	}
 )
 
 func UnaryServerInterceptorOption(interceptor grpc.UnaryServerInterceptor) MuxOption {
@@ -266,6 +272,16 @@ func CodecOption(contentType string, c Codec) MuxOption {
 			opts.codecs = make(map[string]Codec)
 		}
 		opts.codecs[contentType] = c
+	}
+}
+
+// CompressorOption registers a compressor for the given content encoding.
+func CompressorOption(contentEncoding string, c Compressor) MuxOption {
+	return func(opts *muxOptions) {
+		if opts.compressors == nil {
+			opts.compressors = make(map[string]Compressor)
+		}
+		opts.compressors[contentEncoding] = c
 	}
 }
 
@@ -307,6 +323,20 @@ func NewMux(opts ...MuxOption) (*Mux, error) {
 		muxOpts.contentTypeOffers = append(muxOpts.contentTypeOffers, k)
 	}
 	sort.Strings(muxOpts.contentTypeOffers)
+
+	// Ensure compressors are set.
+	if muxOpts.compressors == nil {
+		muxOpts.compressors = make(map[string]Compressor)
+	}
+	for k, v := range defaultCompressors {
+		if _, ok := muxOpts.compressors[k]; !ok {
+			muxOpts.compressors[k] = v
+		}
+	}
+	for k := range muxOpts.codecs {
+		muxOpts.encodingTypeOffers = append(muxOpts.encodingTypeOffers, k)
+	}
+	sort.Strings(muxOpts.encodingTypeOffers)
 
 	return &Mux{
 		opts: muxOpts,
@@ -757,13 +787,6 @@ func (s *state) match(route, verb string) (*method, params, error) {
 	return s.path.match(route, verb)
 }
 
-var (
-	encodingOffers = []string{
-		"gzip",
-		"identity",
-	}
-)
-
 func isWebsocketRequest(r *http.Request) bool {
 	for _, header := range r.Header["Upgrade"] {
 		if header == "websocket" {
@@ -920,29 +943,28 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	}
 	contentEncoding := r.Header.Get("Content-Encoding")
 
-	var body io.ReadCloser
-	switch contentEncoding {
-	case "gzip":
-		var err error
-		body, err = gzip.NewReader(r.Body)
+	var body io.ReadCloser = r.Body
+	if cz := m.opts.compressors[contentEncoding]; cz != nil {
+		z, err := cz.Decompress(r.Body)
 		if err != nil {
 			return err
 		}
-		defer body.Close()
-	default:
-		body = r.Body
+		defer z.Close()
+		body = z
 	}
 
 	accept := negotiateContentType(r.Header, m.opts.contentTypeOffers, contentType)
-	acceptEncoding := negotiateContentEncoding(r.Header, encodingOffers)
+	acceptEncoding := negotiateContentEncoding(r.Header, m.opts.encodingTypeOffers)
 
 	var resp io.Writer = w
-	switch acceptEncoding {
-	case "gzip":
-		w.Header().Set("Content-Encoding", "gzip")
-		gRsp := gzip.NewWriter(w)
-		defer gRsp.Close()
-		resp = gRsp
+	if cz := m.opts.compressors[acceptEncoding]; cz != nil {
+		w.Header().Set("Content-Encoding", acceptEncoding)
+		z, err := cz.Compress(w)
+		if err != nil {
+			return err
+		}
+		defer z.Close()
+		resp = z
 	}
 
 	stream := &streamHTTP{
