@@ -4,23 +4,14 @@ import (
 	"compress/gzip"
 	"io"
 	"sync"
+
+	"google.golang.org/grpc/encoding"
 )
 
 // Compressor is used to compress and decompress messages.
 // Based on grpc/encoding.
 type Compressor interface {
-	// Compress writes the data written to wc to w after compressing it.  If an
-	// error occurs while initializing the compressor, that error is returned
-	// instead.
-	Compress(w io.Writer) (io.WriteCloser, error)
-	// Decompress reads data from r, decompresses it, and provides the
-	// uncompressed data via the returned io.Reader.  If an error occurs while
-	// initializing the decompressor, that error is returned instead.
-	Decompress(r io.Reader) (io.ReadCloser, error)
-	// Name is the name of the compression codec and is used to set the content
-	// coding header.  The result must be static; the result cannot change
-	// between calls.
-	Name() string
+	encoding.Compressor
 }
 
 // CompressorGzip implements the Compressor interface.
@@ -68,7 +59,7 @@ type gzipReader struct {
 }
 
 // Decompress implements the Compressor interface.
-func (c *CompressorGzip) Decompress(r io.Reader) (io.ReadCloser, error) {
+func (c *CompressorGzip) Decompress(r io.Reader) (io.Reader, error) {
 	z, ok := c.poolDecompressor.Get().(*gzipReader)
 	if !ok {
 		newZ, err := gzip.NewReader(r)
@@ -84,7 +75,10 @@ func (c *CompressorGzip) Decompress(r io.Reader) (io.ReadCloser, error) {
 	return z, nil
 }
 
-func (z *gzipReader) Close() error {
-	defer z.pool.Put(z)
-	return z.Reader.Close()
+func (z *gzipReader) Read(p []byte) (n int, err error) {
+	n, err = z.Reader.Read(p)
+	if err == io.EOF {
+		z.pool.Put(z)
+	}
+	return n, err
 }

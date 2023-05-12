@@ -943,13 +943,12 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	}
 	contentEncoding := r.Header.Get("Content-Encoding")
 
-	var body io.ReadCloser = r.Body
+	var body io.Reader = r.Body
 	if cz := m.opts.compressors[contentEncoding]; cz != nil {
 		z, err := cz.Decompress(r.Body)
 		if err != nil {
 			return err
 		}
-		defer z.Close()
 		body = z
 	}
 

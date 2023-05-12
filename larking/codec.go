@@ -69,11 +69,6 @@ type StreamCodec interface {
 	WriteNext(w io.Writer, src []byte) (n int, err error)
 }
 
-func init() {
-	encoding.RegisterCodec(CodecProto{})
-	encoding.RegisterCodec(CodecJSON{})
-}
-
 func errInvalidType(v any) error {
 	return fmt.Errorf("marshal invalid type %T", v)
 }

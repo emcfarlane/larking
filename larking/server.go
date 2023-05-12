@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding"
 )
 
 // NewOSSignalContext tries to gracefully handle OS closure.
@@ -56,6 +57,8 @@ type Server struct {
 }
 
 // NewServer creates a new Proxy server.
+// The server is configured with the given options.
+// Codecs and Compressors are registered with the grpc.Server.
 func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 	if mux == nil {
 		return nil, fmt.Errorf("invalid mux must not be nil")
@@ -103,6 +106,17 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 	}
 	if h := mux.opts.statsHandler; h != nil {
 		grpcOpts = append(grpcOpts, grpc.StatsHandler(h))
+	}
+
+	// Register codecs
+	for _, c := range mux.opts.codecs {
+		encoding.RegisterCodec(c)
+	}
+	// Register compressors
+	for _, c := range mux.opts.compressors {
+		if c != nil {
+			encoding.RegisterCompressor(c)
+		}
 	}
 
 	// TLS termination controlled by listeners in Serve.
