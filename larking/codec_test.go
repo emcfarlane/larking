@@ -2,18 +2,24 @@ package larking
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"larking.io/api/testpb"
 )
 
-func TestSizeCodecs(t *testing.T) {
+func TestStreamCodecs(t *testing.T) {
 
 	protob, err := proto.Marshal(&testpb.Message{
 		Text: "hello, protobuf",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	protobig, err := proto.Marshal(&testpb.Message{
+		Text: string(bytes.Repeat([]byte{'a'}, 1<<20)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -37,9 +43,9 @@ func TestSizeCodecs(t *testing.T) {
 		name:  "proto buffered",
 		codec: CodecProto{},
 		input: func() []byte {
-			var buf [4]byte
-			binary.BigEndian.PutUint32(buf[:], uint32(len(protob)))
-			return append(buf[:], protob...)
+			b := protowire.AppendVarint(nil, uint64(len(protob)))
+			t.Log("len(b)=", len(b))
+			return append(b, protob...)
 		}(),
 		want: protob,
 	}, {
@@ -47,39 +53,50 @@ func TestSizeCodecs(t *testing.T) {
 		codec: CodecProto{},
 		input: make([]byte, 0, 4+len(protob)),
 		extra: func() []byte {
-			var buf [4]byte
-			binary.BigEndian.PutUint32(buf[:], uint32(len(protob)))
-			return append(buf[:], protob...)
+			b := protowire.AppendVarint(nil, uint64(len(protob)))
+			return append(b, protob...)
 		}(),
 		want: protob,
 	}, {
 		name:  "proto partial size",
 		codec: CodecProto{},
 		input: func() []byte {
-			var buf [4]byte
-			binary.BigEndian.PutUint32(buf[:], uint32(len(protob)))
-			return append(buf[:], protob...)[:2]
+			b := protowire.AppendVarint(nil, uint64(len(protob)))
+			return append(b, protob...)[:1]
 		}(),
 		extra: func() []byte {
-			var buf [4]byte
-			binary.BigEndian.PutUint32(buf[:], uint32(len(protob)))
-			return append(buf[:], protob...)[2:]
+			b := protowire.AppendVarint(nil, uint64(len(protob)))
+			return append(b, protob...)[1:]
 		}(),
 		want: protob,
 	}, {
 		name:  "proto partial message",
 		codec: CodecProto{},
 		input: func() []byte {
-			var buf [4]byte
-			binary.BigEndian.PutUint32(buf[:], uint32(len(protob)))
-			return append(buf[:], protob...)[:6]
+			b := protowire.AppendVarint(nil, uint64(len(protob)))
+			return append(b, protob...)[:6]
 		}(),
 		extra: func() []byte {
-			var buf [4]byte
-			binary.BigEndian.PutUint32(buf[:], uint32(len(protob)))
-			return append(buf[:], protob...)[6:]
+			b := protowire.AppendVarint(nil, uint64(len(protob)))
+			return append(b, protob...)[6:]
 		}(),
 		want: protob,
+	}, {
+		name:  "proto zero size",
+		codec: CodecProto{},
+		extra: func() []byte {
+			b := protowire.AppendVarint(nil, 0)
+			return b
+		}(),
+		want: []byte{},
+	}, {
+		name:  "proto big size",
+		codec: CodecProto{},
+		extra: func() []byte {
+			b := protowire.AppendVarint(nil, uint64(len(protobig)))
+			return append(b, protobig...)
+		}(),
+		want: protobig,
 	}, {
 		name:  "json buffered",
 		codec: CodecJSON{},
@@ -106,10 +123,10 @@ func TestSizeCodecs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			codec := tt.codec.(SizeCodec)
+			codec := tt.codec.(StreamCodec)
 
 			r := bytes.NewReader(tt.extra)
-			b, n, err := codec.SizeRead(tt.input, r, len(tt.want))
+			b, n, err := codec.ReadNext(tt.input, r, len(tt.want))
 			if err != nil {
 				if tt.wantErr != nil {
 					if !errors.Is(err, tt.wantErr) {
@@ -139,7 +156,7 @@ func TestSizeCodecs(t *testing.T) {
 			}
 
 			var buf bytes.Buffer
-			if _, err := codec.SizeWrite(&buf, b); err != nil {
+			if _, err := codec.WriteNext(&buf, b); err != nil {
 				t.Fatal(err)
 			}
 
