@@ -23,7 +23,7 @@ Use Google's [API design guide](https://cloud.google.com/apis/design) to design 
 - Google API service configuration [syntax](https://cloud.google.com/endpoints/docs/grpc-service-config/reference/rpc/google.api#using-grpc-api-service-configuration)
 - Websocket streaming with `websocket` kind annotations
 - Content streaming with `google.api.HttpBody`
-- Streaming support with [SizeCodec](https://github.com/emcfarlane/larking#streaming-codecs)
+- Streaming support with [StreamCodec](https://github.com/emcfarlane/larking#streaming-codecs)
 - Fast with low allocations: see [benchmarks](https://github.com/emcfarlane/larking/tree/main/benchmarks)
 
 <div align="center">
@@ -227,20 +227,23 @@ service ChatRoom {
 ```
 
 #### Streaming Codecs
-Streaming requests servers will upgrade the codec interface to read and write 
-marshalled messages to the stream. 
-This allows codecs to control framing on the wire.
-For other protocols like `websockets` framing is controlled by the protocol and this isn't needed. Unlike gRPC encoding where compressions is _per message_, compression is based on the stream so only a method to delimiter messages is required.
+Streaming requests will upgrade the codec interface to read and write marshalled messages to the stream.
+Control of framing is given to the application on a per content type basis.
+If the underlying protocol has it's own message framing, like 'websockets', streaming codecs won't be used.
+Unlike gRPC streams where compression is _per message_ here the compression is per _stream_ so only a message delimiter is needed.
+See the [StreamCodec](https://pkg.go.dev/larking.io/larking#StreamCodec) docs for implementation details.
+- Protobuf messages use a varint delimiter encoding: `<varint><binary-message>`.
+- JSON messages are delimited on the outer JSON braces `{<fields>}`.
+- Arbitrary content is delimited by the message size limit, chunking into bytes slices of length limit.
 
-For example JSON messages are delimited based on the outer JSON braces `{...}`.
-This makes it easy to append payloads to the stream. 
-To curl a streaming client method with two messages we can append all the JSON messages in the body:
+To stream json we can append payloads together as a single payload:
 ```
-curl http://larking.io/v1/streaming -d '{"message":"one"}{"message":"two"}'
+curl -XPOST http://larking.io/v1/streaming -d '{"message":"one"}{"message":"two"}'
 ```
-This will split into two messages.
+The above creates an input stream of two messages.
+(N.B. when using HTTP/1 fully bidirectional streaming is not possible. All stream messages must be written before receiving a response)
 
-Protobuf messages require the length to be encoded before the message `[4 byte length]<binary encoded>`.
+To stream protobuf we can use [protodelim](https://pkg.go.dev/google.golang.org/protobuf@v1.30.0/encoding/protodelim) to read and write varint streams of messages. Similar libraries are found in other [languages](https://github.com/protocolbuffers/protobuf/issues/10229).
 
 #### Twirp
 Twirp is supported through gRPC-transcoding with the implicit methods.

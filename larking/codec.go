@@ -107,8 +107,7 @@ func (CodecProto) Unmarshal(data []byte, v interface{}) error {
 	return proto.Unmarshal(data, m)
 }
 
-// ReadNext reads the length of the message encoded as 4 byte unsigned integer
-// and then reads the message from r.
+// ReadNext reads a varint size-delimited wire-format message from r.
 func (c CodecProto) ReadNext(b []byte, r io.Reader, limit int) ([]byte, int, error) {
 	for i := 0; i < binary.MaxVarintLen64; i++ {
 		for i >= len(b) {
