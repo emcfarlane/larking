@@ -7,6 +7,7 @@ package larking
 import (
 	"context"
 	"net"
+	"net/http"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -42,7 +43,9 @@ func TestGRPCProxy(t *testing.T) {
 	var g errgroup.Group
 	defer func() {
 		if err := g.Wait(); err != nil {
-			t.Fatal(err)
+			if err != http.ErrServerClosed {
+				t.Fatal(err)
+			}
 		}
 	}()
 
@@ -75,20 +78,18 @@ func TestGRPCProxy(t *testing.T) {
 	}
 	defer lisProxy.Close()
 
-	ts := grpc.NewServer(
-		grpc.UnknownServiceHandler(h.StreamHandler()),
-	)
+	ts, err := NewServer(h)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	g.Go(func() error {
 		return ts.Serve(lisProxy)
 	})
-	defer ts.Stop()
+	defer ts.Close()
 
 	cc, err := grpc.Dial(
 		lisProxy.Addr().String(),
-		//grpc.WithTransportCredentials(
-		//	credentials.NewTLS(transport.TLSClientConfig),
-		//),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {

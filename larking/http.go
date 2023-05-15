@@ -50,7 +50,9 @@ func (s *streamHTTP) SendHeader(md metadata.MD) error {
 		return fmt.Errorf("already sent headers")
 	}
 	s.header = metadata.Join(s.header, md)
-	setOutgoingHeader(s.wHeader, s.header)
+
+	h := s.wHeader
+	setOutgoingHeader(h, s.header)
 	// don't write the header code, wait for the body.
 	s.sentHeader = true
 
@@ -75,9 +77,13 @@ func (s *streamHTTP) Context() context.Context {
 func (s *streamHTTP) writeMsg(c Codec, b []byte, contentType string) (int, error) {
 	count := s.sendCount
 	if count == 0 {
-		s.wHeader.Set("Content-Type", contentType)
-		setOutgoingHeader(s.wHeader, s.header, s.trailer)
-		s.sentHeader = true
+		h := s.wHeader
+		h.Set("Content-Type", contentType)
+		if !s.sentHeader {
+			if err := s.SendHeader(nil); err != nil {
+				return count, err
+			}
+		}
 	}
 	s.sendCount += 1
 	if s.method.desc.IsStreamingServer() {

@@ -24,7 +24,7 @@ func main() {
 	//   - websocket /v1/healthz -> grpc.health.v1.Health.Watch
 	health.AddHealthz(serviceConfig)
 
-	// Mux implements http.Handler, use by itself to serve only HTTP endpoints.
+	// Mux impements http.Handler and serves both gRPC and HTTP connections.
 	mux, err := larking.NewMux(
 		larking.ServiceConfigOption(serviceConfig),
 	)
@@ -34,8 +34,8 @@ func main() {
 	// RegisterHealthServer registers a HealthServer to the mux.
 	healthpb.RegisterHealthServer(mux, healthSvc)
 
-	// Server is a gRPC server that serves both gRPC and HTTP endpoints.
-	svr, err := larking.NewServer(mux, larking.InsecureServerOption())
+	// Server creates a *http.Server.
+	svr, err := larking.NewServer(mux)
 	if err != nil {
 		log.Fatal(err)
 	}

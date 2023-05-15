@@ -84,7 +84,7 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ts, err := NewServer(mux, InsecureServerOption())
+	ts, err := NewServer(mux)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,6 @@ func TestMuxHandleOption(t *testing.T) {
 
 	s, err := NewServer(
 		mux,
-		InsecureServerOption(),
 		MuxHandleOption("/", "/api/", "/pfx"),
 	)
 	if err != nil {
@@ -426,7 +425,7 @@ func TestTLSServer(t *testing.T) {
 	}
 
 	g := errgroup.Group{}
-	g.Go(func() error { return s.Serve(l) })
+	g.Go(func() error { return s.ServeTLS(l, "", "") })
 	defer func() {
 		if err := s.Shutdown(ctx); err != nil {
 			t.Error(err)

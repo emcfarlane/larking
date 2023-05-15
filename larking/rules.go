@@ -6,12 +6,10 @@ package larking
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/textproto"
 	"net/url"
 	"sort"
 	"strconv"
@@ -20,7 +18,6 @@ import (
 	"google.golang.org/genproto/googleapis/api/annotations"
 	_ "google.golang.org/genproto/googleapis/api/httpbody"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -762,29 +759,4 @@ func (p *path) match(route, verb string) (*method, params, error) {
 		return nil, nil, status.Errorf(codes.NotFound, "not found: %v", err)
 	}
 	return p.search(l.tokens(), verb)
-}
-
-const httpHeaderPrefix = "http-"
-
-func newIncomingContext(ctx context.Context, header http.Header) (context.Context, metadata.MD) {
-	md := make(metadata.MD, len(header))
-	for k, vs := range header {
-		md[httpHeaderPrefix+strings.ToLower(k)] = vs
-	}
-	return metadata.NewIncomingContext(ctx, md), md
-}
-
-func setOutgoingHeader(header http.Header, mds ...metadata.MD) {
-	for _, md := range mds {
-		for k, vs := range md {
-			if !strings.HasPrefix(k, httpHeaderPrefix) {
-				continue
-			}
-			k = k[len(httpHeaderPrefix):]
-			if len(k) == 0 {
-				continue
-			}
-			header[textproto.CanonicalMIMEHeaderKey(k)] = vs
-		}
-	}
 }

@@ -16,8 +16,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-
-	"google.golang.org/grpc"
 )
 
 const (
@@ -146,34 +144,32 @@ type readCloser struct {
 	io.Closer
 }
 
-func createGRPCWebHandler(gs *grpc.Server) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		typ, enc, ok := isWebRequest(r)
-		if !ok {
-			msg := fmt.Sprintf("invalid gRPC-Web content type: %v", r.Header.Get("Content-Type"))
-			http.Error(w, msg, http.StatusBadRequest)
-			return
-		}
-		// TODO: Check for websocket request and upgrade.
-		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
-			http.Error(w, "unimplemented websocket support", http.StatusInternalServerError)
-			return
-		}
-
-		r.ProtoMajor = 2
-		r.ProtoMinor = 0
-
-		hdr := r.Header
-		hdr.Del("Content-Length")
-		hdr.Set("Content-Type", grpcBase+"+"+enc)
-
-		if typ == grpcWebText {
-			body := base64.NewDecoder(base64.StdEncoding, r.Body)
-			r.Body = readCloser{body, r.Body}
-		}
-
-		ww := newWebWriter(w, typ, enc)
-		gs.ServeHTTP(ww, r)
-		ww.flushWithTrailer()
+func (m *Mux) serveGRPCWeb(w http.ResponseWriter, r *http.Request) {
+	typ, enc, ok := isWebRequest(r)
+	if !ok {
+		msg := fmt.Sprintf("invalid gRPC-Web content type: %v", r.Header.Get("Content-Type"))
+		http.Error(w, msg, http.StatusBadRequest)
+		return
 	}
+	// TODO: Check for websocket request and upgrade.
+	if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+		http.Error(w, "unimplemented websocket support", http.StatusInternalServerError)
+		return
+	}
+
+	r.ProtoMajor = 2
+	r.ProtoMinor = 0
+
+	hdr := r.Header
+	hdr.Del("Content-Length")
+	hdr.Set("Content-Type", grpcBase+"+"+enc)
+
+	if typ == grpcWebText {
+		body := base64.NewDecoder(base64.StdEncoding, r.Body)
+		r.Body = readCloser{body, r.Body}
+	}
+
+	ww := newWebWriter(w, typ, enc)
+	m.serveGRPC(ww, r)
+	ww.flushWithTrailer()
 }

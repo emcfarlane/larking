@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"net/http"
 	"sort"
@@ -157,6 +158,7 @@ type muxOptions struct {
 	unaryInterceptor      grpc.UnaryServerInterceptor
 	streamInterceptor     grpc.StreamServerInterceptor
 	codecs                map[string]Codec
+	codecsByName          map[string]Codec
 	compressors           map[string]Compressor
 	httprules             ruleSelector
 	contentTypeOffers     []string
@@ -214,6 +216,12 @@ func (o *muxOptions) stream(srv interface{}, ss grpc.ServerStream, info *grpc.St
 
 // MuxOption is an option for a mux.
 type MuxOption func(*muxOptions)
+
+const (
+	defaultServerMaxReceiveMessageSize = 1024 * 1024 * 4
+	defaultServerMaxSendMessageSize    = math.MaxInt32
+	defaultServerConnectionTimeout     = 120 * time.Second
+)
 
 var (
 	defaultMuxOptions = muxOptions{
@@ -297,10 +305,9 @@ func ServiceConfigOption(sc *serviceconfig.Service) MuxOption {
 }
 
 type Mux struct {
-	opts     muxOptions
-	state    atomic.Value
-	services map[*grpc.ServiceDesc]interface{}
-	mu       sync.Mutex
+	opts  muxOptions
+	state atomic.Value
+	mu    sync.Mutex
 }
 
 func NewMux(opts ...MuxOption) (*Mux, error) {
@@ -318,6 +325,10 @@ func NewMux(opts ...MuxOption) (*Mux, error) {
 		if _, ok := muxOpts.codecs[k]; !ok {
 			muxOpts.codecs[k] = v
 		}
+	}
+	muxOpts.codecsByName = make(map[string]Codec)
+	for _, v := range muxOpts.codecs {
+		muxOpts.codecsByName[v.Name()] = v
 	}
 	for k := range muxOpts.codecs {
 		muxOpts.contentTypeOffers = append(muxOpts.contentTypeOffers, k)
@@ -699,9 +710,9 @@ func createConnHandler(
 		}
 
 		return &handler{
-			method:     method,
-			descriptor: md,
-			handler:    h,
+			method:  method,
+			desc:    md,
+			handler: h,
 		}
 	} else {
 		info := &grpc.UnaryServerInfo{
@@ -736,9 +747,9 @@ func createConnHandler(
 		}
 
 		return &handler{
-			method:     method,
-			descriptor: md,
-			handler:    h,
+			method:  method,
+			desc:    md,
+			handler: h,
 		}
 	}
 }
@@ -884,8 +895,8 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 			Client:                    false,
 			BeginTime:                 beginTime,
 			FailFast:                  false, // TODO
-			IsClientStream:            hd.descriptor.IsStreamingClient(),
-			IsServerStream:            hd.descriptor.IsStreamingServer(),
+			IsClientStream:            hd.desc.IsStreamingClient(),
+			IsServerStream:            hd.desc.IsStreamingServer(),
 			IsTransparentRetryAttempt: false, // TODO
 		})
 	}
@@ -1012,7 +1023,23 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// ServeHTTP implements http.Handler.
+// It supports both gRPC and HTTP requests.
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.ProtoMajor == 2 && strings.HasPrefix(
+		r.Header.Get("Content-Type"), "application/grpc",
+	) {
+		m.serveGRPC(w, r)
+		return
+	}
+
+	if strings.HasPrefix(
+		r.Header.Get("Content-Type"), "application/grpc-web",
+	) {
+		m.serveGRPCWeb(w, r)
+		return
+	}
+
 	if !strings.HasPrefix(r.URL.Path, "/") {
 		r.URL.Path = "/" + r.URL.Path
 	}

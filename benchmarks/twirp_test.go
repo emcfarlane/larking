@@ -24,7 +24,6 @@ func TestTwirp(t *testing.T) {
 	librarypb.RegisterLibraryServiceServer(mux, svc)
 
 	ts, err := larking.NewServer(mux,
-		larking.InsecureServerOption(),
 		larking.MuxHandleOption("/", "/twirp"),
 	)
 	if err != nil {
