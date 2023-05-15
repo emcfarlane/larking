@@ -14,7 +14,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/genproto/googleapis/rpc/status"
-	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -27,10 +26,15 @@ func TestWeb(t *testing.T) {
 	ms := &testpb.UnimplementedMessagingServer{}
 
 	o := new(overrides)
-	gs := grpc.NewServer(o.unaryOption(), o.streamOption())
+	m, err := NewMux(
+		UnaryServerInterceptorOption(o.unary()),
+		StreamServerInterceptorOption(o.stream()),
+	)
+	if err != nil {
+		t.Fatalf("failed to create mux: %v", err)
+	}
 
-	testpb.RegisterMessagingServer(gs, ms)
-	h := createGRPCWebHandler(gs)
+	testpb.RegisterMessagingServer(m, ms)
 
 	type want struct {
 		msg        proto.Message
@@ -95,8 +99,7 @@ func TestWeb(t *testing.T) {
 			req.Header["test"] = []string{tt.in.method}
 
 			w := httptest.NewRecorder()
-			//s.gs.ServeHTTP(w, req)
-			h.ServeHTTP(w, req)
+			m.ServeHTTP(w, req)
 			resp := w.Result()
 
 			t.Log("resp", resp)

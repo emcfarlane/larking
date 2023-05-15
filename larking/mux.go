@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"net/http"
 	"sort"
@@ -215,6 +216,12 @@ func (o *muxOptions) stream(srv interface{}, ss grpc.ServerStream, info *grpc.St
 
 // MuxOption is an option for a mux.
 type MuxOption func(*muxOptions)
+
+const (
+	defaultServerMaxReceiveMessageSize = 1024 * 1024 * 4
+	defaultServerMaxSendMessageSize    = math.MaxInt32
+	defaultServerConnectionTimeout     = 120 * time.Second
+)
 
 var (
 	defaultMuxOptions = muxOptions{
@@ -1017,7 +1024,23 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// ServeHTTP implements http.Handler.
+// It supports both gRPC and HTTP requests.
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.ProtoMajor == 2 && strings.HasPrefix(
+		r.Header.Get("Content-Type"), "application/grpc",
+	) {
+		m.serveGRPC(w, r)
+		return
+	}
+
+	if strings.HasPrefix(
+		r.Header.Get("Content-Type"), "application/grpc-web",
+	) {
+		m.serveGRPCWeb(w, r)
+		return
+	}
+
 	if !strings.HasPrefix(r.URL.Path, "/") {
 		r.URL.Path = "/" + r.URL.Path
 	}

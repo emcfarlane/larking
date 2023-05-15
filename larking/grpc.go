@@ -339,12 +339,12 @@ func (s *streamGRPC) RecvMsg(m interface{}) error {
 		return fmt.Errorf("grpc: received message larger than max (%d vs. %d)", size, s.opts.maxReceiveMessageSize)
 	}
 
-	if cap(b) < int(size) {
-		b = make([]byte, 0, growcap(cap(b), int(size)))
+	if cap(b) < int(size)+5 {
+		b = make([]byte, 0, growcap(cap(b), int(size)+5))
 	}
-	b = b[:size]
+	b = b[:size+5]
 
-	if _, err := io.ReadFull(s.r, b); err != nil {
+	if _, err := io.ReadFull(s.r, b[5:]); err != nil {
 		return err
 	}
 
@@ -356,24 +356,25 @@ func (s *streamGRPC) RecvMsg(m interface{}) error {
 
 		buf := bufPool.Get().(*bytes.Buffer)
 		buf.Reset()
-		if err := s.decompress(buf, b); err != nil {
+		if err := s.decompress(buf, b[5:]); err != nil {
 			bufPool.Put(buf)
 			return err
 		}
 		bufSize := buf.Len()
-		if bufSize > cap(b) {
-			b = make([]byte, 0, growcap(cap(b), bufSize))
+		if bufSize+5 > cap(b) {
+			b = make([]byte, 0, growcap(cap(b), bufSize+5))
 		}
-		copy(b, buf.Bytes())
-		b = b[:bufSize]
+		copy(b[5:], buf.Bytes())
+		b = b[:bufSize+5]
 		bufPool.Put(buf)
 	}
 
-	if err := s.codec.Unmarshal(b, args); err != nil {
+	if err := s.codec.Unmarshal(b[5:], args); err != nil {
 		return err
 	}
 	if stats := s.opts.statsHandler; stats != nil {
 		// TODO: raw payload stats.
+		b := b[headerLen:] // shadow
 		stats.HandleRPC(s.ctx, inPayload(false, m, b, b, time.Now()))
 	}
 	return nil
