@@ -489,7 +489,6 @@ func (m *Mux) serveGRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx, md := newIncomingContext(r.Context(), r.Header)
-	ctx, cancel := context.WithCancel(ctx)
 
 	if v := r.Header.Get("grpc-timeout"); v != "" {
 		to, err := decodeTimeout(v)
@@ -537,6 +536,7 @@ func (m *Mux) serveGRPC(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	stream := &streamGRPC{
 		ctx:     ctx,
 		handler: hd,
@@ -564,7 +564,7 @@ func (m *Mux) serveGRPC(w http.ResponseWriter, r *http.Request) {
 	herr := hd.handler(&m.opts, stream)
 	if !stream.sentHeader {
 		if err := stream.SendHeader(nil); err != nil {
-			panic(err)
+			return // ctx canceled
 		}
 	}
 	flusher.Flush()

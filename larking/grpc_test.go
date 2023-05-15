@@ -2,8 +2,10 @@ package larking
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -52,7 +54,12 @@ func TestGRPC(t *testing.T) {
 	defer lis.Close()
 
 	// Start server.
-	go hs.Serve(lis)
+	go func() {
+		if err := hs.Serve(lis); err != nil && err != http.ErrServerClosed {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	}()
 	defer hs.Close()
 
 	encoding.RegisterCompressor(&CompressorGzip{})
@@ -75,16 +82,11 @@ func TestGRPC(t *testing.T) {
 		},
 	}}
 
-	type want struct {
-		statusCode int
-	}
-
 	// https://github.com/grpc/grpc/blob/master/src/proto/grpc/testing/test.proto
 	tests := []struct {
 		name   string
 		method string
 		desc   grpc.StreamDesc
-		want   want
 		inouts []any
 	}{{
 		name:   "unary",
@@ -215,12 +217,12 @@ func TestGRPC(t *testing.T) {
 		inouts: []any{
 			in{
 				msg: &grpc_testing.StreamingInputCallRequest{
-					Payload: &grpc_testing.Payload{Body: make([]byte, 1024*1024)}, //1024*1024)},
+					Payload: &grpc_testing.Payload{Body: make([]byte, 1024)},
 				},
 			},
 			in{
 				msg: &grpc_testing.StreamingInputCallRequest{
-					Payload: &grpc_testing.Payload{Body: make([]byte, 1024*1024)}, //1024*1024)},
+					Payload: &grpc_testing.Payload{Body: make([]byte, 1024)},
 				},
 			},
 			out{
@@ -275,7 +277,6 @@ func TestGRPC(t *testing.T) {
 							}
 						}
 					}
-					t.Logf("stream: %+v", stream)
 				})
 			}
 		})

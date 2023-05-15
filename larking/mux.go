@@ -305,10 +305,9 @@ func ServiceConfigOption(sc *serviceconfig.Service) MuxOption {
 }
 
 type Mux struct {
-	opts     muxOptions
-	state    atomic.Value
-	services map[*grpc.ServiceDesc]interface{}
-	mu       sync.Mutex
+	opts  muxOptions
+	state atomic.Value
+	mu    sync.Mutex
 }
 
 func NewMux(opts ...MuxOption) (*Mux, error) {
