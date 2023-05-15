@@ -18,30 +18,10 @@ import (
 
 func isStreamError(err error) bool {
 	switch err {
-	case nil:
-		return false
-	case io.EOF:
-		return false
-	case context.Canceled:
+	case nil, io.EOF, context.Canceled:
 		return false
 	}
 	return true
-}
-
-// StreamHandler returns a gRPC stream handler to proxy gRPC requests.
-func (m *Mux) StreamHandler() grpc.StreamHandler {
-	return func(srv interface{}, stream grpc.ServerStream) error {
-		ctx := stream.Context()
-		name, _ := grpc.Method(ctx)
-		s := m.loadState()
-
-		hd, err := s.pickMethodHandler(name)
-		if err != nil {
-			return err
-		}
-
-		return hd.handler(&m.opts, stream)
-	}
 }
 
 // TODO: fetch type on a per stream basis
@@ -61,8 +41,9 @@ func (m *Mux) RegisterReflectionServer(s *grpc.Server) {
 	})
 }
 
-//nolint:unused // fileDescEncodingByFilename finds the file descriptor for given filename,
 // does marshalling on it and returns the marshalled result.
+//
+//nolint:unused // fileDescEncodingByFilename finds the file descriptor for given filename,
 func (s *serverReflectionServer) fileDescEncodingByFilename(name string) ([]byte, error) {
 	fd, err := protoregistry.GlobalFiles.FindFileByPath(name)
 	if err != nil {
@@ -71,9 +52,10 @@ func (s *serverReflectionServer) fileDescEncodingByFilename(name string) ([]byte
 	return proto.Marshal(protodesc.ToFileDescriptorProto(fd))
 }
 
-//nolint:unused // fileDescEncodingContainingSymbol finds the file descriptor containing the given symbol,
 // does marshalling on it and returns the marshalled result.
 // The given symbol can be a type, a service or a method.
+//
+//nolint:unused // fileDescEncodingContainingSymbol finds the file descriptor containing the given symbol,
 func (s *serverReflectionServer) fileDescEncodingContainingSymbol(name string) ([]byte, error) {
 	fullname := protoreflect.FullName(name)
 	d, err := protoregistry.GlobalFiles.FindDescriptorByName(fullname)
@@ -84,8 +66,9 @@ func (s *serverReflectionServer) fileDescEncodingContainingSymbol(name string) (
 	return proto.Marshal(protodesc.ToFileDescriptorProto(fd))
 }
 
-//nolint:unused // fileDescEncodingContainingExtension finds the file descriptor containing given extension,
 // does marshalling on it and returns the marshalled result.
+//
+//nolint:unused // fileDescEncodingContainingExtension finds the file descriptor containing given extension,
 func (s *serverReflectionServer) fileDescEncodingContainingExtension(typeName string, extNum int32) ([]byte, error) {
 	fullname := protoreflect.FullName(typeName)
 	fieldnumber := protoreflect.FieldNumber(extNum)

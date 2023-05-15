@@ -257,13 +257,14 @@ func (s *streamGRPC) SendMsg(m interface{}) error {
 		b = make([]byte, 0, growcap(cap(b), 5))
 	}
 	b = b[:5] // 1 byte compression flag, 4 bytes message length
-	var size uint32
 
 	var err error
 	b, err = s.codec.MarshalAppend(b, reply)
 	if err != nil {
 		return err
 	}
+
+	var size uint32
 	size = uint32(len(b) - 5)
 	if int(size) > s.opts.maxReceiveMessageSize {
 		return fmt.Errorf("grpc: received message larger than max (%d vs. %d)", size, s.opts.maxReceiveMessageSize)
@@ -271,11 +272,9 @@ func (s *streamGRPC) SendMsg(m interface{}) error {
 
 	b[0] = 0 // uncompressed
 	if s.comp != nil {
-		b[0] = 1 // compressed
-
 		buf := bufPool.Get().(*bytes.Buffer)
 		buf.Reset()
-		if err := s.compress(buf, b); err != nil {
+		if err := s.compress(buf, b[5:]); err != nil {
 			bufPool.Put(buf)
 			return err
 		}
@@ -283,8 +282,9 @@ func (s *streamGRPC) SendMsg(m interface{}) error {
 		if bufSize+5 > cap(b) {
 			b = make([]byte, 0, growcap(cap(b), bufSize+5))
 		}
-		copy(b[5:], buf.Bytes())
 		b = b[:bufSize+5]
+		b[0] = 1 // compressed
+		copy(b[5:], buf.Bytes())
 		size = uint32(bufSize)
 		bufPool.Put(buf)
 	}
@@ -351,7 +351,7 @@ func (s *streamGRPC) RecvMsg(m interface{}) error {
 	if b[0] == 1 {
 		// compressed
 		if s.comp == nil {
-			return fmt.Errorf("grpc: Decompressor is not installed for grpc-encoding %q", s.comp.Name())
+			return fmt.Errorf("grpc: Decompressor is not installed for grpc-encoding %q", s.messageEncoding)
 		}
 
 		buf := bufPool.Get().(*bytes.Buffer)
@@ -426,7 +426,7 @@ func (m *Mux) serveGRPC(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusUnsupportedMediaType)
 		return
 	}
-	messageEncoding := r.Header.Get("Message-Encoding")
+	messageEncoding := r.Header.Get("Grpc-Encoding")
 	var compressor Compressor
 	if messageEncoding != "" {
 		comp, ok := m.grpcGetCompressor(messageEncoding)

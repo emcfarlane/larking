@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding"
 	grpc_testing "google.golang.org/grpc/interop/grpc_testing"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -54,21 +55,29 @@ func TestGRPC(t *testing.T) {
 	go hs.Serve(lis)
 	defer hs.Close()
 
-	// Create client.
-	conn, err := grpc.Dial(
-		lis.Addr().String(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-		grpc.WithTimeout(5*time.Second),
-	)
-	if err != nil {
-		t.Fatalf("cannot connect to server: %v", err)
-	}
-	defer conn.Close()
+	encoding.RegisterCompressor(&CompressorGzip{})
+
+	conns := []struct {
+		name string
+		opts []grpc.DialOption
+	}{{
+		name: "insecure",
+		opts: []grpc.DialOption{
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+			grpc.WithTimeout(5 * time.Second),
+		},
+	}, {
+		name: "compressed",
+		opts: []grpc.DialOption{
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+			grpc.WithTimeout(5 * time.Second),
+			grpc.WithDefaultCallOptions(grpc.UseCompressor("gzip")),
+		},
+	}}
 
 	type want struct {
-		//msg        proto.Message
-		//body       []byte
 		statusCode int
 	}
 
@@ -202,43 +211,53 @@ func TestGRPC(t *testing.T) {
 	}}
 
 	opts := cmp.Options{protocmp.Transform()}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			o.reset(t, "test", tt.inouts)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			defer cancel()
-
-			ctx = metadata.AppendToOutgoingContext(ctx, "test", tt.method)
-
-			stream, err := conn.NewStream(ctx, &tt.desc, tt.method)
+	for _, tc := range conns {
+		t.Run(tc.name, func(t *testing.T) {
+			conn, err := grpc.Dial(lis.Addr().String(), tc.opts...)
 			if err != nil {
-				t.Fatalf("failed to create stream: %v", err)
+				t.Fatalf("failed to dial: %v", err)
 			}
+			defer conn.Close()
 
-			for i, inout := range tt.inouts {
-				t.Logf("inout[%d]: %+v", i, inout)
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					o.reset(t, "test", tt.inouts)
 
-				switch v := inout.(type) {
-				case in:
-					t.Log("stream.SendMsg", v.msg)
-					if err := stream.SendMsg(v.msg); err != nil {
-						t.Fatalf("failed to send msg: %v", err)
+					ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+					defer cancel()
+
+					ctx = metadata.AppendToOutgoingContext(ctx, "test", tt.method)
+
+					stream, err := conn.NewStream(ctx, &tt.desc, tt.method)
+					if err != nil {
+						t.Fatalf("failed to create stream: %v", err)
 					}
-				case out:
-					t.Log("stream.RecvMsg", v.msg)
-					want := v.msg
-					got := v.msg.ProtoReflect().New().Interface()
-					if err := stream.RecvMsg(got); err != nil {
-						t.Fatalf("failed to recv msg: %v", err)
+
+					for i, inout := range tt.inouts {
+						t.Logf("inout[%d]: %+v", i, inout)
+
+						switch v := inout.(type) {
+						case in:
+							t.Log("stream.SendMsg", v.msg)
+							if err := stream.SendMsg(v.msg); err != nil {
+								t.Fatalf("failed to send msg: %v", err)
+							}
+						case out:
+							t.Log("stream.RecvMsg", v.msg)
+							want := v.msg
+							got := v.msg.ProtoReflect().New().Interface()
+							if err := stream.RecvMsg(got); err != nil {
+								t.Fatalf("failed to recv msg: %v", err)
+							}
+							diff := cmp.Diff(got, want, opts...)
+							if diff != "" {
+								t.Error(diff)
+							}
+						}
 					}
-					diff := cmp.Diff(got, want, opts...)
-					if diff != "" {
-						t.Error(diff)
-					}
-				}
+					t.Logf("stream: %+v", stream)
+				})
 			}
-			t.Logf("stream: %+v", stream)
 		})
 	}
 }
