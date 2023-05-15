@@ -6,13 +6,14 @@
 ```
 [![Go Reference](https://pkg.go.dev/badge/larking.io.svg)](https://pkg.go.dev/larking.io/larking)
 
-Larking is a [protoreflect](https://pkg.go.dev/google.golang.org/protobuf/reflect/protoreflect) gRPC-transcoding implementation. 
+Larking is a [protoreflect](https://pkg.go.dev/google.golang.org/protobuf/reflect/protoreflect) gRPC-transcoding implementation with support for gRPC, gRPC-web and twirp protocols.
 Bind [`google.api.http`](https://github.com/googleapis/googleapis/blob/master/google/api/http.proto) annotations to gRPC services without code generation.
 Works with existing go-protobuf generators 
 [`protoc-gen-go`](https://pkg.go.dev/google.golang.org/protobuf@v1.30.0/cmd/protoc-gen-go) and 
-[`protoc-gen-go-grpc`](https://pkg.go.dev/google.golang.org/grpc/cmd/protoc-gen-go-grpc).
+[`protoc-gen-go-grpc`](https://pkg.go.dev/google.golang.org/grpc/cmd/protoc-gen-go-grpc)
+and Go's std library net/http stack.
 Bind to local services or proxy to other gRPC servers using gRPC server reflection.
-Use Google's [API design guide](https://cloud.google.com/apis/design) to design beautiful RESTful APIs with gRPC services.
+Use Google's [API design guide](https://cloud.google.com/apis/design) to design beautiful RESTful APIs for your gRPC services.
 
 - Supports [gRPC](https://grpc.io) clients
 - Supports [gRPC-transcoding](https://cloud.google.com/endpoints/docs/grpc/transcoding) clients
