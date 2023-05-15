@@ -70,9 +70,10 @@ func NewServer(mux *Mux, opts ...ServerOption) (*Server, error) {
 			return nil, err
 		}
 	}
-	if svrOpts.tlsConfig == nil && !svrOpts.insecure {
-		return nil, fmt.Errorf("credentials must be set")
-	}
+	// TODO: delete this
+	//if svrOpts.tlsConfig == nil && !svrOpts.insecure {
+	//	return nil, fmt.Errorf("credentials must be set")
+	//}
 
 	svrOpts.serveMux = http.NewServeMux()
 	if len(svrOpts.muxPatterns) == 0 {

@@ -120,7 +120,7 @@ func TestWebsocket(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			o.reset(t, "http-test", tt.server)
+			o.reset(t, "test", tt.server)
 
 			ctx, cancel := context.WithTimeout(testContext(t), time.Minute)
 			defer cancel()

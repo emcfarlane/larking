@@ -221,10 +221,10 @@ func TestMessageServer(t *testing.T) {
 
 	// TODO: compare http.Response output
 	tests := []struct {
-		want   want
-		inouts []any
-		req    *http.Request
 		name   string
+		inouts []any
+		want   want
+		req    *http.Request
 	}{{
 		name: "first",
 		req:  httptest.NewRequest(http.MethodGet, "/v1/messages/name/hello", nil),
@@ -894,7 +894,7 @@ func TestMessageServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			o.reset(t, "http-test", tt.inouts)
+			o.reset(t, "test", tt.inouts)
 
 			req := tt.req
 			if len(tt.inouts) > 0 {

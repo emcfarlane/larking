@@ -1,12 +1,19 @@
 package larking
 
 import (
+	"bytes"
 	"compress/gzip"
 	"io"
 	"sync"
 
 	"google.golang.org/grpc/encoding"
 )
+
+var bufPool = sync.Pool{
+	New: func() interface{} {
+		return &bytes.Buffer{}
+	},
+}
 
 // Compressor is used to compress and decompress messages.
 // Based on grpc/encoding.

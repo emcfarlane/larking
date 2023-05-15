@@ -157,6 +157,7 @@ type muxOptions struct {
 	unaryInterceptor      grpc.UnaryServerInterceptor
 	streamInterceptor     grpc.StreamServerInterceptor
 	codecs                map[string]Codec
+	codecsByName          map[string]Codec
 	compressors           map[string]Compressor
 	httprules             ruleSelector
 	contentTypeOffers     []string
@@ -318,6 +319,10 @@ func NewMux(opts ...MuxOption) (*Mux, error) {
 		if _, ok := muxOpts.codecs[k]; !ok {
 			muxOpts.codecs[k] = v
 		}
+	}
+	muxOpts.codecsByName = make(map[string]Codec)
+	for _, v := range muxOpts.codecs {
+		muxOpts.codecsByName[v.Name()] = v
 	}
 	for k := range muxOpts.codecs {
 		muxOpts.contentTypeOffers = append(muxOpts.contentTypeOffers, k)
@@ -699,9 +704,9 @@ func createConnHandler(
 		}
 
 		return &handler{
-			method:     method,
-			descriptor: md,
-			handler:    h,
+			method:  method,
+			desc:    md,
+			handler: h,
 		}
 	} else {
 		info := &grpc.UnaryServerInfo{
@@ -736,9 +741,9 @@ func createConnHandler(
 		}
 
 		return &handler{
-			method:     method,
-			descriptor: md,
-			handler:    h,
+			method:  method,
+			desc:    md,
+			handler: h,
 		}
 	}
 }
@@ -884,8 +889,8 @@ func (m *Mux) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 			Client:                    false,
 			BeginTime:                 beginTime,
 			FailFast:                  false, // TODO
-			IsClientStream:            hd.descriptor.IsStreamingClient(),
-			IsServerStream:            hd.descriptor.IsStreamingServer(),
+			IsClientStream:            hd.desc.IsStreamingClient(),
+			IsServerStream:            hd.desc.IsStreamingServer(),
 			IsTransparentRetryAttempt: false, // TODO
 		})
 	}

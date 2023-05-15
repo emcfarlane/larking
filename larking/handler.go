@@ -17,9 +17,9 @@ import (
 type handlerFunc func(*muxOptions, grpc.ServerStream) error
 
 type handler struct {
-	descriptor protoreflect.MethodDescriptor
-	handler    handlerFunc
-	method     string // /Service/Method
+	desc    protoreflect.MethodDescriptor
+	handler handlerFunc
+	method  string // /Service/Method
 }
 
 // TODO: use grpclog?
@@ -74,8 +74,8 @@ func (m *Mux) registerService(gsd *grpc.ServiceDesc, ss interface{}) error {
 		}
 
 		h := &handler{
-			method:     method,
-			descriptor: md,
+			method: method,
+			desc:   md,
 			handler: func(opts *muxOptions, stream grpc.ServerStream) error {
 				ctx := stream.Context()
 
@@ -101,8 +101,8 @@ func (m *Mux) registerService(gsd *grpc.ServiceDesc, ss interface{}) error {
 		}
 
 		h := &handler{
-			method:     method,
-			descriptor: md,
+			method: method,
+			desc:   md,
 			handler: func(opts *muxOptions, stream grpc.ServerStream) error {
 				info := &grpc.StreamServerInfo{
 					FullMethod:     method,
