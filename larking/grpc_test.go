@@ -65,14 +65,12 @@ func TestGRPC(t *testing.T) {
 		opts: []grpc.DialOption{
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
-			grpc.WithTimeout(5 * time.Second),
 		},
 	}, {
 		name: "compressed",
 		opts: []grpc.DialOption{
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
-			grpc.WithTimeout(5 * time.Second),
 			grpc.WithDefaultCallOptions(grpc.UseCompressor("gzip")),
 		},
 	}}

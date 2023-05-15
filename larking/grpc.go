@@ -603,5 +603,4 @@ func (m *Mux) serveGRPC(w http.ResponseWriter, r *http.Request) {
 			Error:     herr,
 		})
 	}
-
 }

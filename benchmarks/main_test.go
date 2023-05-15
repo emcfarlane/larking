@@ -192,12 +192,14 @@ func BenchmarkLarking(b *testing.B) {
 			b.Fatal(err)
 		}
 	}()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
-	cc, err := grpc.Dial(
+	cc, err := grpc.DialContext(
+		ctx,
 		lis.Addr().String(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
-		grpc.WithTimeout(time.Second),
 	)
 	if err != nil {
 		b.Fatal(err)
@@ -274,11 +276,14 @@ func BenchmarkGRPCGateway(b *testing.B) {
 
 	go func() { errs <- m.Serve() }()
 
-	cc, err := grpc.Dial(
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	cc, err := grpc.DialContext(
+		ctx,
 		lis.Addr().String(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
-		grpc.WithTimeout(time.Second),
 	)
 	if err != nil {
 		b.Fatal(err)
@@ -351,11 +356,11 @@ func BenchmarkEnvoyGRPC(b *testing.B) {
 	})
 	defer cancel()
 
-	cc, err := grpc.Dial(
+	cc, err := grpc.DialContext(
+		ctx,
 		envoyAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
-		grpc.WithTimeout(2*time.Second),
 	)
 	if err != nil {
 		b.Fatal(err)
@@ -563,11 +568,11 @@ func BenchmarkConnectGo(b *testing.B) {
 	go func() { errs <- hs.Serve(lis) }()
 	defer hs.Close()
 
-	cc, err := grpc.Dial(
+	cc, err := grpc.DialContext(
+		ctx,
 		lis.Addr().String(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
-		grpc.WithTimeout(time.Second),
 	)
 	if err != nil {
 		b.Fatal(err)
