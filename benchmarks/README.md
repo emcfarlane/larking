@@ -51,3 +51,5 @@ go run benchmain/main.go -benchtime=10s -workloads=all \
 ```
 go run google.golang.org/grpc/benchmark/benchresult grpc_result.bin result.bin
 ```
+
+See `grpc-bench.txt` for gRPC results.

@@ -1,0 +1,192 @@
+streaming-networkMode_Local-bufConn_false-keepalive_false-benchTime_10s-trace_false-latency_0s-kbps_0-MTU_0-maxConcurrentCalls_1-reqSize_1048576B-respSize_1B-compressor_gzip-channelz_false-preloader_false-clientReadBufferSize_-1-clientWriteBufferSize_-1-serverReadBufferSize_-1-serverWriteBufferSize_-1-
+               Title       Before        After Percentage
+            TotalOps         3132         3521    12.42%
+             SendOps            0            0      NaN%
+             RecvOps            0            0      NaN%
+            Bytes/op   9780220.69   6369158.76   -34.88%
+           Allocs/op       175.32       118.53   -32.51%
+             ReqT/op 2627312025.60 2953628876.80    12.42%
+            RespT/op      2505.60      2816.80    12.41%
+            50th-Lat   3.231875ms   2.814041ms   -12.93%
+            90th-Lat   3.322042ms   3.076375ms    -7.40%
+            99th-Lat   3.464792ms   3.193459ms    -7.83%
+             Avg-Lat   3.193236ms   2.840273ms   -11.05%
+           GoVersion     go1.20.3     go1.20.3
+         GrpcVersion   1.56.0-dev       1.54.0
+
+streaming-networkMode_Local-bufConn_false-keepalive_false-benchTime_10s-trace_false-latency_0s-kbps_0-MTU_0-maxConcurrentCalls_1-reqSize_1048576B-respSize_1048576B-compressor_gzip-channelz_false-preloader_false-clientReadBufferSize_-1-clientWriteBufferSize_-1-serverReadBufferSize_-1-serverWriteBufferSize_-1-
+               Title       Before        After Percentage
+            TotalOps         1628         1772     8.85%
+             SendOps            0            0      NaN%
+             RecvOps            0            0      NaN%
+            Bytes/op  18522984.53  13475306.02   -27.25%
+           Allocs/op       219.34       155.40   -29.18%
+             ReqT/op 1365665382.40 1486461337.60     8.85%
+            RespT/op 1365665382.40 1486461337.60     8.85%
+            50th-Lat      6.136ms   5.607667ms    -8.61%
+            90th-Lat   6.221625ms    5.95075ms    -4.35%
+            99th-Lat   6.458209ms   6.177167ms    -4.35%
+             Avg-Lat   6.142553ms   5.643576ms    -8.12%
+           GoVersion     go1.20.3     go1.20.3
+         GrpcVersion   1.56.0-dev       1.54.0
+
+streaming-networkMode_Local-bufConn_false-keepalive_false-benchTime_10s-trace_false-latency_0s-kbps_0-MTU_0-maxConcurrentCalls_1-reqSize_1B-respSize_1B-compressor_gzip-channelz_false-preloader_false-clientReadBufferSize_-1-clientWriteBufferSize_-1-serverReadBufferSize_-1-serverWriteBufferSize_-1-
+               Title       Before        After Percentage
+            TotalOps       188659       174004    -7.77%
+             SendOps            0            0      NaN%
+             RecvOps            0            0      NaN%
+            Bytes/op      3849.79      2525.08   -34.39%
+           Allocs/op        91.84        58.77   -35.93%
+             ReqT/op    150927.20    139203.20    -7.77%
+            RespT/op    150927.20    139203.20    -7.77%
+            50th-Lat     51.459µs      55.75µs     8.34%
+            90th-Lat      62.75µs     67.375µs     7.37%
+            99th-Lat     73.458µs     90.083µs    22.63%
+             Avg-Lat     52.843µs     57.307µs     8.45%
+           GoVersion     go1.20.3     go1.20.3
+         GrpcVersion   1.56.0-dev       1.54.0
+
+unconstrained-networkMode_Local-bufConn_false-keepalive_false-benchTime_10s-trace_false-latency_0s-kbps_0-MTU_0-maxConcurrentCalls_1-reqSize_1B-respSize_1B-compressor_gzip-channelz_false-preloader_false-clientReadBufferSize_-1-clientWriteBufferSize_-1-serverReadBufferSize_-1-serverWriteBufferSize_-1-
+               Title       Before        After Percentage
+            TotalOps            0            0      NaN%
+             SendOps       876580      1022098    16.60%
+             RecvOps       906289       473664   -47.74%
+            Bytes/op      4148.69      2249.00   -45.77%
+           Allocs/op        40.93        33.26   -17.10%
+             ReqT/op    701264.00    817678.40    16.60%
+            RespT/op    725031.20    378931.20   -47.74%
+            50th-Lat           0s           0s      NaN%
+            90th-Lat           0s           0s      NaN%
+            99th-Lat           0s           0s      NaN%
+             Avg-Lat           0s           0s      NaN%
+           GoVersion     go1.20.3     go1.20.3
+         GrpcVersion   1.56.0-dev       1.54.0
+
+streaming-networkMode_Local-bufConn_false-keepalive_false-benchTime_10s-trace_false-latency_0s-kbps_0-MTU_0-maxConcurrentCalls_1-reqSize_1B-respSize_1048576B-compressor_gzip-channelz_false-preloader_false-clientReadBufferSize_-1-clientWriteBufferSize_-1-serverReadBufferSize_-1-serverWriteBufferSize_-1-
+               Title       Before        After Percentage
+            TotalOps         3099         3324     7.26%
+             SendOps            0            0      NaN%
+             RecvOps            0            0      NaN%
+            Bytes/op   9951205.20   8235786.95   -17.24%
+           Allocs/op       179.59       134.60   -25.06%
+             ReqT/op      2479.20      2659.20     7.26%
+            RespT/op 2599629619.20 2788373299.20     7.26%
+            50th-Lat   3.243083ms   2.984541ms    -7.97%
+            90th-Lat   3.321083ms   3.170208ms    -4.54%
+            99th-Lat   3.490458ms   3.324458ms    -4.76%
+             Avg-Lat   3.227493ms   3.007915ms    -6.80%
+           GoVersion     go1.20.3     go1.20.3
+         GrpcVersion   1.56.0-dev       1.54.0
+
+unary-networkMode_Local-bufConn_false-keepalive_false-benchTime_10s-trace_false-latency_0s-kbps_0-MTU_0-maxConcurrentCalls_1-reqSize_1048576B-respSize_1B-compressor_gzip-channelz_false-preloader_false-clientReadBufferSize_-1-clientWriteBufferSize_-1-serverReadBufferSize_-1-serverWriteBufferSize_-1-
+               Title       Before        After Percentage
+            TotalOps         3181         3449     8.43%
+             SendOps            0            0      NaN%
+             RecvOps            0            0      NaN%
+            Bytes/op   9463415.42   6702429.34   -29.18%
+           Allocs/op       308.81       311.11     0.97%
+             ReqT/op 2668416204.80 2893230899.20     8.43%
+            RespT/op      2544.80      2759.20     8.45%
+            50th-Lat   3.091875ms   2.883917ms    -6.73%
+            90th-Lat   3.354834ms   3.146041ms    -6.22%
+            99th-Lat   3.551917ms   3.358792ms    -5.44%
+             Avg-Lat     3.1441ms   2.899666ms    -7.77%
+           GoVersion     go1.20.3     go1.20.3
+         GrpcVersion   1.56.0-dev       1.54.0
+
+unary-networkMode_Local-bufConn_false-keepalive_false-benchTime_10s-trace_false-latency_0s-kbps_0-MTU_0-maxConcurrentCalls_1-reqSize_1048576B-respSize_1048576B-compressor_gzip-channelz_false-preloader_false-clientReadBufferSize_-1-clientWriteBufferSize_-1-serverReadBufferSize_-1-serverWriteBufferSize_-1-
+               Title       Before        After Percentage
+            TotalOps         1620         1711     5.62%
+             SendOps            0            0      NaN%
+             RecvOps            0            0      NaN%
+            Bytes/op  18533065.91  15485754.44   -16.44%
+           Allocs/op       361.89       364.01     0.83%
+             ReqT/op 1358954496.00 1435290828.80     5.62%
+            RespT/op 1358954496.00 1435290828.80     5.62%
+            50th-Lat   6.173584ms   5.827625ms    -5.60%
+            90th-Lat   6.260833ms      6.137ms    -1.98%
+            99th-Lat    6.37275ms   6.402542ms     0.47%
+             Avg-Lat   6.172941ms   5.846148ms    -5.29%
+           GoVersion     go1.20.3     go1.20.3
+         GrpcVersion   1.56.0-dev       1.54.0
+
+unconstrained-networkMode_Local-bufConn_false-keepalive_false-benchTime_10s-trace_false-latency_0s-kbps_0-MTU_0-maxConcurrentCalls_1-reqSize_1048576B-respSize_1048576B-compressor_gzip-channelz_false-preloader_false-clientReadBufferSize_-1-clientWriteBufferSize_-1-serverReadBufferSize_-1-serverWriteBufferSize_-1-
+               Title       Before        After Percentage
+            TotalOps            0            0      NaN%
+             SendOps         3936         4106     4.32%
+             RecvOps         3890         4107     5.58%
+            Bytes/op  14870093.41  12176865.11   -18.11%
+           Allocs/op       176.24       145.07   -17.59%
+             ReqT/op 3301756108.80 3444362444.80     4.32%
+            RespT/op 3263168512.00 3445201305.60     5.58%
+            50th-Lat           0s           0s      NaN%
+            90th-Lat           0s           0s      NaN%
+            99th-Lat           0s           0s      NaN%
+             Avg-Lat           0s           0s      NaN%
+           GoVersion     go1.20.3     go1.20.3
+         GrpcVersion   1.56.0-dev       1.54.0
+
+unary-networkMode_Local-bufConn_false-keepalive_false-benchTime_10s-trace_false-latency_0s-kbps_0-MTU_0-maxConcurrentCalls_1-reqSize_1B-respSize_1B-compressor_gzip-channelz_false-preloader_false-clientReadBufferSize_-1-clientWriteBufferSize_-1-serverReadBufferSize_-1-serverWriteBufferSize_-1-
+               Title       Before        After Percentage
+            TotalOps       145095        92960   -35.93%
+             SendOps            0            0      NaN%
+             RecvOps            0            0      NaN%
+            Bytes/op     15360.03     17503.52    13.95%
+           Allocs/op       231.95       248.11     7.33%
+             ReqT/op    116076.00     74368.00   -35.93%
+            RespT/op    116076.00     74368.00   -35.93%
+            50th-Lat     67.708µs    102.666µs    51.63%
+            90th-Lat      80.75µs    118.584µs    46.85%
+            99th-Lat     94.583µs    204.333µs   116.04%
+             Avg-Lat     68.756µs    107.408µs    56.22%
+           GoVersion     go1.20.3     go1.20.3
+         GrpcVersion   1.56.0-dev       1.54.0
+
+unary-networkMode_Local-bufConn_false-keepalive_false-benchTime_10s-trace_false-latency_0s-kbps_0-MTU_0-maxConcurrentCalls_1-reqSize_1B-respSize_1048576B-compressor_gzip-channelz_false-preloader_false-clientReadBufferSize_-1-clientWriteBufferSize_-1-serverReadBufferSize_-1-serverWriteBufferSize_-1-
+               Title       Before        After Percentage
+            TotalOps         2997         3046     1.63%
+             SendOps            0            0      NaN%
+             RecvOps            0            0      NaN%
+            Bytes/op  10052174.55   9730336.44    -3.20%
+           Allocs/op       325.92       361.19    11.05%
+             ReqT/op      2397.60      2436.80     1.63%
+            RespT/op 2514065817.60 2555169996.80     1.63%
+            50th-Lat   3.309125ms   3.287167ms    -0.66%
+            90th-Lat   3.558791ms   3.464708ms    -2.64%
+            99th-Lat   3.696166ms   3.668708ms    -0.74%
+             Avg-Lat   3.336849ms    3.28346ms    -1.60%
+           GoVersion     go1.20.3     go1.20.3
+         GrpcVersion   1.56.0-dev       1.54.0
+
+unconstrained-networkMode_Local-bufConn_false-keepalive_false-benchTime_10s-trace_false-latency_0s-kbps_0-MTU_0-maxConcurrentCalls_1-reqSize_1B-respSize_1048576B-compressor_gzip-channelz_false-preloader_false-clientReadBufferSize_-1-clientWriteBufferSize_-1-serverReadBufferSize_-1-serverWriteBufferSize_-1-
+               Title       Before        After Percentage
+            TotalOps            0            0      NaN%
+             SendOps      1097703      1119919     2.02%
+             RecvOps         3381         3480     2.93%
+            Bytes/op     53395.47     46662.17   -12.61%
+           Allocs/op        41.74        33.85   -19.16%
+             ReqT/op    878162.40    895935.20     2.02%
+            RespT/op 2836188364.80 2919235584.00     2.93%
+            50th-Lat           0s           0s      NaN%
+            90th-Lat           0s           0s      NaN%
+            99th-Lat           0s           0s      NaN%
+             Avg-Lat           0s           0s      NaN%
+           GoVersion     go1.20.3     go1.20.3
+         GrpcVersion   1.56.0-dev       1.54.0
+
+unconstrained-networkMode_Local-bufConn_false-keepalive_false-benchTime_10s-trace_false-latency_0s-kbps_0-MTU_0-maxConcurrentCalls_1-reqSize_1048576B-respSize_1B-compressor_gzip-channelz_false-preloader_false-clientReadBufferSize_-1-clientWriteBufferSize_-1-serverReadBufferSize_-1-serverWriteBufferSize_-1-
+               Title       Before        After Percentage
+            TotalOps            0            0      NaN%
+             SendOps         3441         3609     4.88%
+             RecvOps      1231131       609195   -50.52%
+            Bytes/op     48065.87     58849.88    22.44%
+           Allocs/op        43.49        42.52    -2.30%
+             ReqT/op 2886520012.80 3027448627.20     4.88%
+            RespT/op    984904.80    487356.00   -50.52%
+            50th-Lat           0s           0s      NaN%
+            90th-Lat           0s           0s      NaN%
+            99th-Lat           0s           0s      NaN%
+             Avg-Lat           0s           0s      NaN%
+           GoVersion     go1.20.3     go1.20.3
+         GrpcVersion   1.56.0-dev       1.54.0
+
