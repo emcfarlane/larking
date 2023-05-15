@@ -7,7 +7,6 @@ package larking
 import (
 	"io"
 
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	rpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/protobuf/proto"
@@ -15,14 +14,6 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
-
-func isStreamError(err error) bool {
-	switch err {
-	case nil, io.EOF, context.Canceled:
-		return false
-	}
-	return true
-}
 
 // TODO: fetch type on a per stream basis
 type serverReflectionServer struct {

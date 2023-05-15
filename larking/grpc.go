@@ -12,14 +12,24 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
+
+func isStreamError(err error) bool {
+	switch err {
+	case nil, io.EOF, context.Canceled:
+		return false
+	}
+	return true
+}
 
 func isReservedHeader(k string) bool {
 	switch k {
@@ -165,6 +175,8 @@ func decodeTimeout(s string) (time.Duration, error) {
 type streamGRPC struct {
 	opts            muxOptions
 	ctx             context.Context
+	done            <-chan struct{} // ctx.Done()
+	wg              sync.WaitGroup
 	handler         *handler
 	codec           Codec      // both read and write
 	comp            Compressor // both read and write
@@ -178,6 +190,15 @@ type streamGRPC struct {
 	sentHeader      bool
 }
 
+func (s *streamGRPC) isDone() error {
+	select {
+	case <-s.done:
+		return status.FromContextError(s.ctx.Err()).Err()
+	default:
+		return nil
+	}
+}
+
 func (s *streamGRPC) SetHeader(md metadata.MD) error {
 	if s.sentHeader {
 		return fmt.Errorf("already sent headers")
@@ -186,6 +207,13 @@ func (s *streamGRPC) SetHeader(md metadata.MD) error {
 	return nil
 }
 func (s *streamGRPC) SendHeader(md metadata.MD) error {
+	s.wg.Add(1)
+	defer s.wg.Done()
+
+	if err := s.isDone(); err != nil {
+		return err
+	}
+
 	if s.sentHeader {
 		return fmt.Errorf("already sent headers")
 	}
@@ -238,6 +266,13 @@ func (s *streamGRPC) compress(dst *bytes.Buffer, b []byte) error {
 }
 
 func (s *streamGRPC) SendMsg(m interface{}) error {
+	s.wg.Add(1)
+	defer s.wg.Done()
+
+	if err := s.isDone(); err != nil {
+		return err
+	}
+
 	reply := m.(proto.Message)
 	if !s.sentHeader {
 		if err := s.SendHeader(nil); err != nil {
@@ -291,6 +326,10 @@ func (s *streamGRPC) SendMsg(m interface{}) error {
 
 	binary.BigEndian.PutUint32(b[1:], size)
 	if _, err := s.w.Write(b); err != nil {
+		if isStreamError(err) {
+			msg := err.Error()
+			return status.Errorf(codes.Unavailable, msg)
+		}
 		return err
 	}
 	s.w.(http.Flusher).Flush()
@@ -316,6 +355,13 @@ func (s *streamGRPC) decompress(dst *bytes.Buffer, b []byte) error {
 }
 
 func (s *streamGRPC) RecvMsg(m interface{}) error {
+	s.wg.Add(1)
+	defer s.wg.Done()
+
+	if err := s.isDone(); err != nil {
+		return err
+	}
+
 	args := m.(proto.Message)
 
 	bp := bytesPool.Get().(*[]byte)
@@ -332,23 +378,27 @@ func (s *streamGRPC) RecvMsg(m interface{}) error {
 	b = b[:5] // 1 byte compression flag, 4 bytes message length
 
 	if _, err := io.ReadFull(s.r, b); err != nil {
+		if isStreamError(err) {
+			msg := err.Error()
+			return status.Errorf(codes.Canceled, msg)
+		}
 		return err
 	}
+	isCompressed := b[0] == 1
 	size := binary.BigEndian.Uint32(b[1:])
 	if int(size) > s.opts.maxReceiveMessageSize {
 		return fmt.Errorf("grpc: received message larger than max (%d vs. %d)", size, s.opts.maxReceiveMessageSize)
 	}
 
-	if cap(b) < int(size)+5 {
-		b = make([]byte, 0, growcap(cap(b), int(size)+5))
+	if cap(b) < int(size) {
+		b = make([]byte, 0, growcap(cap(b), int(size)))
 	}
-	b = b[:size+5]
-
-	if _, err := io.ReadFull(s.r, b[5:]); err != nil {
+	b = b[:size]
+	if _, err := io.ReadFull(s.r, b); err != nil {
 		return err
 	}
 
-	if b[0] == 1 {
+	if isCompressed {
 		// compressed
 		if s.comp == nil {
 			return fmt.Errorf("grpc: Decompressor is not installed for grpc-encoding %q", s.messageEncoding)
@@ -356,20 +406,20 @@ func (s *streamGRPC) RecvMsg(m interface{}) error {
 
 		buf := bufPool.Get().(*bytes.Buffer)
 		buf.Reset()
-		if err := s.decompress(buf, b[5:]); err != nil {
+		if err := s.decompress(buf, b); err != nil {
 			bufPool.Put(buf)
 			return err
 		}
-		bufSize := buf.Len()
-		if bufSize+5 > cap(b) {
-			b = make([]byte, 0, growcap(cap(b), bufSize+5))
+		size = uint32(buf.Len())
+		if int(size) > cap(b) {
+			b = make([]byte, 0, growcap(cap(b), int(size)))
 		}
-		copy(b[5:], buf.Bytes())
-		b = b[:bufSize+5]
+		b = b[:int(size)]
+		copy(b, buf.Bytes())
 		bufPool.Put(buf)
 	}
 
-	if err := s.codec.Unmarshal(b[5:], args); err != nil {
+	if err := s.codec.Unmarshal(b, args); err != nil {
 		return err
 	}
 	if stats := s.opts.statsHandler; stats != nil {
@@ -439,6 +489,7 @@ func (m *Mux) serveGRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx, md := newIncomingContext(r.Context(), r.Header)
+	ctx, cancel := context.WithCancel(ctx)
 
 	if v := r.Header.Get("grpc-timeout"); v != "" {
 		to, err := decodeTimeout(v)
@@ -492,6 +543,7 @@ func (m *Mux) serveGRPC(w http.ResponseWriter, r *http.Request) {
 		opts:    m.opts,
 		codec:   codec,
 		comp:    compressor,
+		done:    ctx.Done(),
 
 		// write
 		w:       w,
@@ -503,6 +555,12 @@ func (m *Mux) serveGRPC(w http.ResponseWriter, r *http.Request) {
 		messageEncoding: messageEncoding,
 		//rHeader: r.Header,
 	}
+	// Sync stream return on stream methods.
+	defer func() {
+		cancel()
+		stream.wg.Wait()
+	}()
+
 	herr := hd.handler(&m.opts, stream)
 	if !stream.sentHeader {
 		if err := stream.SendHeader(nil); err != nil {
@@ -545,4 +603,5 @@ func (m *Mux) serveGRPC(w http.ResponseWriter, r *http.Request) {
 			Error:     herr,
 		})
 	}
+
 }

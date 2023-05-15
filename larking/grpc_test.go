@@ -208,6 +208,29 @@ func TestGRPC(t *testing.T) {
 				},
 			},
 		},
+	}, {
+		name:   "large_client_streaming",
+		method: "/grpc.testing.TestService/StreamingInputCall",
+		desc: grpc.StreamDesc{
+			ClientStreams: true,
+		},
+		inouts: []any{
+			in{
+				msg: &grpc_testing.StreamingInputCallRequest{
+					Payload: &grpc_testing.Payload{Body: make([]byte, 1024*1024)}, //1024*1024)},
+				},
+			},
+			in{
+				msg: &grpc_testing.StreamingInputCallRequest{
+					Payload: &grpc_testing.Payload{Body: make([]byte, 1024*1024)}, //1024*1024)},
+				},
+			},
+			out{
+				msg: &grpc_testing.StreamingInputCallResponse{
+					AggregatedPayloadSize: 2,
+				},
+			},
+		},
 	}}
 
 	opts := cmp.Options{protocmp.Transform()}
@@ -223,7 +246,7 @@ func TestGRPC(t *testing.T) {
 				t.Run(tt.name, func(t *testing.T) {
 					o.reset(t, "test", tt.inouts)
 
-					ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 					defer cancel()
 
 					ctx = metadata.AppendToOutgoingContext(ctx, "test", tt.method)
@@ -234,16 +257,15 @@ func TestGRPC(t *testing.T) {
 					}
 
 					for i, inout := range tt.inouts {
-						t.Logf("inout[%d]: %+v", i, inout)
 
 						switch v := inout.(type) {
 						case in:
-							t.Log("stream.SendMsg", v.msg)
+							t.Logf("stream.SendMsg: %d", i)
 							if err := stream.SendMsg(v.msg); err != nil {
 								t.Fatalf("failed to send msg: %v", err)
 							}
 						case out:
-							t.Log("stream.RecvMsg", v.msg)
+							t.Logf("stream.RecvMsg: %d", i)
 							want := v.msg
 							got := v.msg.ProtoReflect().New().Interface()
 							if err := stream.RecvMsg(got); err != nil {
