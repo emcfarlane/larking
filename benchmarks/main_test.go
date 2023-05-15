@@ -161,7 +161,7 @@ func BenchmarkLarking(b *testing.B) {
 	}
 	librarypb.RegisterLibraryServiceServer(mux, svc)
 
-	ts, err := larking.NewServer(mux, larking.InsecureServerOption())
+	ts, err := larking.NewServer(mux)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -389,7 +389,7 @@ func BenchmarkGorillaMux(b *testing.B) {
 	newIncomingContext := func(ctx context.Context, header http.Header) (context.Context, metadata.MD) {
 		md := make(metadata.MD, len(header))
 		for k, vs := range header {
-			md["http-"+strings.ToLower(k)] = vs
+			md[strings.ToLower(k)] = vs
 		}
 		return metadata.NewIncomingContext(ctx, md), md
 	}
