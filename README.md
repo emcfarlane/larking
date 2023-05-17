@@ -25,6 +25,7 @@ Use Google's [API design guide](https://cloud.google.com/apis/design) to design 
 - Websocket streaming with `websocket` kind annotations
 - Content streaming with `google.api.HttpBody`
 - Streaming support with [StreamCodec](https://github.com/emcfarlane/larking#streaming-codecs)
+- Supports [vtprotobuf](https://github.com/planetscale/vtprotobuf) extensions
 - Fast with low allocations: see [benchmarks](https://github.com/emcfarlane/larking/tree/main/benchmarks)
 
 <div align="center">
