@@ -555,7 +555,7 @@ func (m *Mux) serveGRPC(w http.ResponseWriter, r *http.Request) {
 		messageEncoding: messageEncoding,
 		//rHeader: r.Header,
 	}
-	// Sync stream return on stream methods.
+	// Sync handler return to stream methods.
 	defer func() {
 		cancel()
 		stream.wg.Wait()
