@@ -182,7 +182,6 @@ Send any content type with the protobuf type `google.api.HttpBody`.
 Request bodies are unmarshalled from the body with the `ContentType` header.
 Response bodies marshal to the body and set the `ContentType` header.
 For large requests streaming RPCs support chunking the file into multiple messages.
-This can be used as a way to document content APIs.
 
 ```protobuf
 import "google/api/httpbody.proto";
@@ -212,6 +211,25 @@ message UploadFileRequest {
 }
 ```
 
+To better support stream uploads use the `AsHTTPBodyReader` and `AsHTTPBodyWriter` methods.
+The returned `io.Reader` and `io.Writer` efficiently stream bytes for large messages.
+This methods only works on streaming requests or streaming responses for gRPC-transcoding streams.
+```go
+// LargeUploadDownload echoes the request body as the response body with contentType.
+func (s *asHTTPBodyServer) LargeUploadDownload(stream testpb.Files_LargeUploadDownloadServer) error {
+	var req testpb.UploadFileRequest
+	r, _ := larking.AsHTTPBodyReader(stream, &req)
+	log.Printf("got %s!", req.Filename)
+
+	rsp := httpbody.HttpBody{
+		ContentType: req.File.GetContentType(),
+	}
+	w, _ := larking.AsHTTPBodyWriter(stream, &rsp)
+
+	_, err := io.Copy(w, r)
+	return err
+}
+```
 
 #### Websockets Annotations
 Annotate a custom method kind `websocket` to enable clients to upgrade connections. This enables streams to be bidirectional over a websocket connection.

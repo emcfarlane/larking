@@ -2,6 +2,7 @@ package larking
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"math/rand"
 	"net/http/httptest"
@@ -15,6 +16,13 @@ import (
 
 type asHTTPBodyServer struct {
 	testpb.UnimplementedFilesServer
+}
+
+func (s *asHTTPBodyServer) UploadDownload(ctx context.Context, req *testpb.UploadFileRequest) (*httpbody.HttpBody, error) {
+	return &httpbody.HttpBody{
+		ContentType: req.File.GetContentType(),
+		Data:        req.File.GetData(),
+	}, nil
 }
 
 // LargeUploadDownload implements testpb.FilesServer
