@@ -283,7 +283,7 @@ func (s *streamGRPC) SendMsg(m interface{}) error {
 	bp := bytesPool.Get().(*[]byte)
 	b := (*bp)[:0]
 	defer func() {
-		if cap(b) < s.opts.maxReceiveMessageSize {
+		if cap(b) < s.opts.maxRecvMessageSize {
 			*bp = b
 			bytesPool.Put(bp)
 		}
@@ -301,16 +301,16 @@ func (s *streamGRPC) SendMsg(m interface{}) error {
 
 	var size uint32
 	size = uint32(len(b) - 5)
-	if int(size) > s.opts.maxReceiveMessageSize {
-		return fmt.Errorf("grpc: received message larger than max (%d vs. %d)", size, s.opts.maxReceiveMessageSize)
+	if int(size) > s.opts.maxRecvMessageSize {
+		return fmt.Errorf("grpc: received message larger than max (%d vs. %d)", size, s.opts.maxRecvMessageSize)
 	}
 
 	b[0] = 0 // uncompressed
 	if s.comp != nil {
-		buf := bufPool.Get().(*bytes.Buffer)
+		buf := buffers.Get()
 		buf.Reset()
 		if err := s.compress(buf, b[5:]); err != nil {
-			bufPool.Put(buf)
+			buffers.Put(buf)
 			return err
 		}
 		bufSize := buf.Len()
@@ -321,7 +321,7 @@ func (s *streamGRPC) SendMsg(m interface{}) error {
 		b[0] = 1 // compressed
 		copy(b[5:], buf.Bytes())
 		size = uint32(bufSize)
-		bufPool.Put(buf)
+		buffers.Put(buf)
 	}
 
 	binary.BigEndian.PutUint32(b[1:], size)
@@ -367,7 +367,7 @@ func (s *streamGRPC) RecvMsg(m interface{}) error {
 	bp := bytesPool.Get().(*[]byte)
 	b := (*bp)[:0]
 	defer func() {
-		if cap(b) < s.opts.maxReceiveMessageSize {
+		if cap(b) < s.opts.maxRecvMessageSize {
 			*bp = b
 			bytesPool.Put(bp)
 		}
@@ -386,8 +386,8 @@ func (s *streamGRPC) RecvMsg(m interface{}) error {
 	}
 	isCompressed := b[0] == 1
 	size := binary.BigEndian.Uint32(b[1:])
-	if int(size) > s.opts.maxReceiveMessageSize {
-		return fmt.Errorf("grpc: received message larger than max (%d vs. %d)", size, s.opts.maxReceiveMessageSize)
+	if int(size) > s.opts.maxRecvMessageSize {
+		return fmt.Errorf("grpc: received message larger than max (%d vs. %d)", size, s.opts.maxRecvMessageSize)
 	}
 
 	if cap(b) < int(size) {
@@ -404,10 +404,10 @@ func (s *streamGRPC) RecvMsg(m interface{}) error {
 			return fmt.Errorf("grpc: Decompressor is not installed for grpc-encoding %q", s.messageEncoding)
 		}
 
-		buf := bufPool.Get().(*bytes.Buffer)
+		buf := buffers.Get()
 		buf.Reset()
 		if err := s.decompress(buf, b); err != nil {
-			bufPool.Put(buf)
+			buffers.Put(buf)
 			return err
 		}
 		size = uint32(buf.Len())
@@ -416,7 +416,7 @@ func (s *streamGRPC) RecvMsg(m interface{}) error {
 		}
 		b = b[:int(size)]
 		copy(b, buf.Bytes())
-		bufPool.Put(buf)
+		buffers.Put(buf)
 	}
 
 	if err := s.codec.Unmarshal(b, args); err != nil {

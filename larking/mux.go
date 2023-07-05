@@ -148,35 +148,35 @@ func (r *ruleSelector) setRules(rules []*annotations.HttpRule) {
 }
 
 type muxOptions struct {
-	types                 protoregistry.MessageTypeResolver
-	statsHandler          stats.Handler
-	files                 *protoregistry.Files
-	serviceConfig         *serviceconfig.Service
-	unaryInterceptor      grpc.UnaryServerInterceptor
-	streamInterceptor     grpc.StreamServerInterceptor
-	codecs                map[string]Codec
-	codecsByName          map[string]Codec
-	compressors           map[string]Compressor
-	httprules             ruleSelector
-	contentTypeOffers     []string
-	encodingTypeOffers    []string
-	maxReceiveMessageSize int
-	maxSendMessageSize    int
-	connectionTimeout     time.Duration
+	types              protoregistry.MessageTypeResolver
+	statsHandler       stats.Handler
+	files              *protoregistry.Files
+	serviceConfig      *serviceconfig.Service
+	unaryInterceptor   grpc.UnaryServerInterceptor
+	streamInterceptor  grpc.StreamServerInterceptor
+	codecs             map[string]Codec
+	codecsByName       map[string]Codec
+	compressors        map[string]Compressor
+	httprules          ruleSelector
+	contentTypeOffers  []string
+	encodingTypeOffers []string
+	maxRecvMessageSize int
+	maxSendMessageSize int
+	connectionTimeout  time.Duration
 }
 
 // readAll reads from r until an error or EOF and returns the data it read.
-func (o *muxOptions) readAll(b []byte, r io.Reader) ([]byte, error) {
+func readAll(b []byte, src io.Reader, maxRecvMsgSize int) ([]byte, error) {
 	var total int64
 	for {
 		if len(b) == cap(b) {
 			// Add more capacity (let append pick how much).
 			b = append(b, 0)[:len(b)]
 		}
-		n, err := r.Read(b[len(b):cap(b)])
+		n, err := src.Read(b[len(b):cap(b)])
 		b = b[:len(b)+n]
 		total += int64(n)
-		if total > int64(o.maxReceiveMessageSize) {
+		if maxRecvMsgSize >= 0 && total > int64(maxRecvMsgSize) {
 			return nil, fmt.Errorf("max receive message size reached")
 		}
 		if err != nil {
@@ -184,8 +184,10 @@ func (o *muxOptions) readAll(b []byte, r io.Reader) ([]byte, error) {
 		}
 	}
 }
-func (o *muxOptions) writeAll(dst io.Writer, b []byte) error {
-	if len(b) > o.maxSendMessageSize {
+
+// writeAll writes b to dst, returning an error if all bytes could not be written.
+func writeAll(dst io.Writer, b []byte, maxSendMsgSize int) error {
+	if len(b) > maxSendMsgSize {
 		return fmt.Errorf("max send message size reached")
 	}
 	n, err := dst.Write(b)
@@ -215,18 +217,18 @@ func (o *muxOptions) stream(srv interface{}, ss grpc.ServerStream, info *grpc.St
 type MuxOption func(*muxOptions)
 
 const (
-	defaultServerMaxReceiveMessageSize = 1024 * 1024 * 4
-	defaultServerMaxSendMessageSize    = math.MaxInt32
-	defaultServerConnectionTimeout     = 120 * time.Second
+	defaultServerMaxRecvMessageSize = 1024 * 1024 * 4
+	defaultServerMaxSendMessageSize = math.MaxInt32
+	defaultServerConnectionTimeout  = 120 * time.Second
 )
 
 var (
 	defaultMuxOptions = muxOptions{
-		maxReceiveMessageSize: defaultServerMaxReceiveMessageSize,
-		maxSendMessageSize:    defaultServerMaxSendMessageSize,
-		connectionTimeout:     defaultServerConnectionTimeout,
-		files:                 protoregistry.GlobalFiles,
-		types:                 protoregistry.GlobalTypes,
+		maxRecvMessageSize: defaultServerMaxRecvMessageSize,
+		maxSendMessageSize: defaultServerMaxSendMessageSize,
+		connectionTimeout:  defaultServerConnectionTimeout,
+		files:              protoregistry.GlobalFiles,
+		types:              protoregistry.GlobalTypes,
 	}
 
 	defaultCodecs = map[string]Codec{
@@ -254,8 +256,8 @@ func StatsOption(h stats.Handler) MuxOption {
 	return func(opts *muxOptions) { opts.statsHandler = h }
 }
 
-func MaxReceiveMessageSizeOption(s int) MuxOption {
-	return func(opts *muxOptions) { opts.maxReceiveMessageSize = s }
+func MaxRecvMessageSizeOption(s int) MuxOption {
+	return func(opts *muxOptions) { opts.maxRecvMessageSize = s }
 }
 func MaxSendMessageSizeOption(s int) MuxOption {
 	return func(opts *muxOptions) { opts.maxSendMessageSize = s }
@@ -798,17 +800,19 @@ func (s *state) match(route, verb string) (*method, params, error) {
 // ServeHTTP implements http.Handler.
 // It supports both gRPC and HTTP requests.
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.ProtoMajor == 2 && strings.HasPrefix(
-		r.Header.Get("Content-Type"), "application/grpc",
-	) {
+	contentType := r.Header.Get("Content-Type")
+	if strings.HasPrefix(contentType, "application/grpc-web") {
+		m.serveGRPCWeb(w, r)
+		return
+	}
+
+	if strings.HasPrefix(contentType, "application/grpc") {
 		m.serveGRPC(w, r)
 		return
 	}
 
-	if strings.HasPrefix(
-		r.Header.Get("Content-Type"), "application/grpc-web",
-	) {
-		m.serveGRPCWeb(w, r)
+	if len(r.Header.Get("Connect-Protocol-Version")) > 0 {
+		m.serveConnect(w, r)
 		return
 	}
 

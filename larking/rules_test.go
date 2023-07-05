@@ -195,7 +195,7 @@ func TestMessageServer(t *testing.T) {
 
 	maxSize := 128
 	h, err := NewMux(
-		MaxReceiveMessageSizeOption(maxSize),
+		MaxRecvMessageSizeOption(maxSize),
 		MaxSendMessageSizeOption(maxSize+2),
 		ServiceConfigOption(&serviceconfig.Service{
 			Http: &annotations.Http{Rules: []*annotations.HttpRule{{

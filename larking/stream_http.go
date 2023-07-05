@@ -100,7 +100,7 @@ func (s *streamHTTP) writeMsg(c Codec, b []byte, contentType string) (int, error
 		_, err := codec.WriteNext(s.w, b)
 		return count, err
 	}
-	return count, s.opts.writeAll(s.w, b)
+	return count, writeAll(s.w, b, s.opts.maxRecvMessageSize)
 }
 
 func (s *streamHTTP) SendMsg(m interface{}) error {
@@ -125,7 +125,7 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 	bytes := bytesPool.Get().(*[]byte)
 	b := (*bytes)[:0]
 	defer func() {
-		if cap(b) < s.opts.maxReceiveMessageSize {
+		if cap(b) < s.opts.maxRecvMessageSize {
 			*bytes = b
 			bytesPool.Put(bytes)
 		}
@@ -171,7 +171,7 @@ func (s *streamHTTP) readMsg(c Codec, b []byte) (int, []byte, error) {
 			return count, nil, fmt.Errorf("codec %q does not support streaming", codec.Name())
 		}
 		b = append(b, s.rbuf...)
-		b, n, err := codec.ReadNext(b, s.r, s.opts.maxReceiveMessageSize)
+		b, n, err := codec.ReadNext(b, s.r, s.opts.maxRecvMessageSize)
 		if err == io.EOF {
 			s.rEOF, err = true, nil
 		}
@@ -179,7 +179,7 @@ func (s *streamHTTP) readMsg(c Codec, b []byte) (int, []byte, error) {
 		return count, b[:n], err
 
 	}
-	b, err := s.opts.readAll(b, s.r)
+	b, err := readAll(b, s.r, s.opts.maxRecvMessageSize)
 	if err == io.EOF {
 		s.rEOF, err = true, nil
 	}
@@ -202,7 +202,7 @@ func (s *streamHTTP) decodeRequestArgs(args proto.Message) (int, error) {
 	bytes := bytesPool.Get().(*[]byte)
 	b := (*bytes)[:0]
 	defer func() {
-		if cap(b) < s.opts.maxReceiveMessageSize {
+		if cap(b) < s.opts.maxRecvMessageSize {
 			*bytes = b
 			bytesPool.Put(bytes)
 		}

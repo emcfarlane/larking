@@ -9,10 +9,28 @@ import (
 	"google.golang.org/grpc/encoding"
 )
 
-var bufPool = sync.Pool{
-	New: func() interface{} {
-		return &bytes.Buffer{}
-	},
+type bufferPool struct {
+	pool sync.Pool
+}
+
+var buffers = &bufferPool{} // TODO: non-global pool
+
+func (p *bufferPool) Get() *bytes.Buffer {
+	if buf, ok := p.pool.Get().(*bytes.Buffer); ok {
+		buf.Reset()
+		return buf
+	}
+	return bytes.NewBuffer(make([]byte, 0, 128))
+}
+func (b *bufferPool) Put(buf *bytes.Buffer) {
+	b.pool.Put(buf)
+}
+func writeToBuffer(dst *bytes.Buffer, p []byte) {
+	if dst.Cap() >= len(p) {
+		dst.Write(p)
+	} else {
+		*dst = *bytes.NewBuffer(p)
+	}
 }
 
 // Compressor is used to compress and decompress messages.
