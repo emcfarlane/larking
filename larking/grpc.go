@@ -336,7 +336,7 @@ func (s *streamGRPC) SendMsg(m interface{}) error {
 	if stats := s.opts.statsHandler; stats != nil {
 		// TODO: raw payload stats.
 		b := b[headerLen:] // shadow
-		stats.HandleRPC(s.ctx, outPayload(false, m, b, b, time.Now()))
+		stats.HandleRPC(s.ctx, outPayload(false, m, b, time.Now()))
 	}
 	return nil
 }
@@ -425,7 +425,7 @@ func (s *streamGRPC) RecvMsg(m interface{}) error {
 	if stats := s.opts.statsHandler; stats != nil {
 		// TODO: raw payload stats.
 		b := b[headerLen:] // shadow
-		stats.HandleRPC(s.ctx, inPayload(false, m, b, b, time.Now()))
+		stats.HandleRPC(s.ctx, inPayload(false, m, b, time.Now()))
 	}
 	return nil
 }

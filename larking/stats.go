@@ -16,24 +16,22 @@ const (
 	headerLen  = payloadLen + sizeLen
 )
 
-func outPayload(client bool, msg interface{}, data, payload []byte, t time.Time) *stats.OutPayload {
+func outPayload(client bool, msg interface{}, payload []byte, t time.Time) *stats.OutPayload {
 	return &stats.OutPayload{
 		Client:     client,
 		Payload:    msg,
-		Data:       data,
-		Length:     len(data),
+		Length:     len(payload),
 		WireLength: len(payload) + headerLen,
 		SentTime:   t,
 	}
 }
 
-func inPayload(client bool, msg interface{}, data, payload []byte, t time.Time) *stats.InPayload {
+func inPayload(client bool, msg interface{}, payload []byte, t time.Time) *stats.InPayload {
 	return &stats.InPayload{
 		Client:     true,
 		RecvTime:   t,
 		Payload:    msg,
-		Data:       data,
-		Length:     len(data),
+		Length:     len(payload),
 		WireLength: len(payload) + headerLen,
 	}
 }
