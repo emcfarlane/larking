@@ -73,33 +73,65 @@ func errInvalidType(v any) error {
 	return fmt.Errorf("marshal invalid type %T", v)
 }
 
+// vtMessage implements planetscale MessageVT interface.
+type vtMessage interface {
+	SizeVT() int
+	MarshalToSizedBufferVT([]byte) (int, error)
+	UnmarshalVT([]byte) error
+}
+
 // CodecProto is a Codec implementation with protobuf binary format.
 type CodecProto struct {
 	proto.MarshalOptions
 }
 
 func (c CodecProto) Marshal(v interface{}) ([]byte, error) {
-	m, ok := v.(proto.Message)
-	if !ok {
+	switch m := v.(type) {
+	case vtMessage:
+		size := m.SizeVT()
+		dAtA := make([]byte, size)
+		n, err := m.MarshalToSizedBufferVT(dAtA[:size])
+		if err != nil {
+			return nil, err
+		}
+		return dAtA[:n], nil
+	case proto.Message:
+		return c.MarshalOptions.Marshal(m)
+	default:
 		return nil, errInvalidType(v)
 	}
-	return c.MarshalOptions.Marshal(m)
 }
 
 func (c CodecProto) MarshalAppend(b []byte, v interface{}) ([]byte, error) {
-	m, ok := v.(proto.Message)
-	if !ok {
+	switch m := v.(type) {
+	case vtMessage:
+		size := m.SizeVT()
+		if cap(b) < size {
+			dst := make([]byte, len(b), growcap(cap(b), size))
+			copy(dst, b)
+			b = dst
+		}
+		n, err := m.MarshalToSizedBufferVT(b[:size])
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	case proto.Message:
+		return c.MarshalOptions.MarshalAppend(b, m)
+	default:
 		return nil, errInvalidType(v)
 	}
-	return c.MarshalOptions.MarshalAppend(b, m)
 }
 
 func (CodecProto) Unmarshal(data []byte, v interface{}) error {
-	m, ok := v.(proto.Message)
-	if !ok {
+	switch m := v.(type) {
+	case vtMessage:
+		return m.UnmarshalVT(data)
+	case proto.Message:
+		return proto.Unmarshal(data, m)
+	default:
 		return errInvalidType(v)
 	}
-	return proto.Unmarshal(data, m)
 }
 
 // ReadNext reads a varint size-delimited wire-format message from r.
