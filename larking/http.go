@@ -153,7 +153,7 @@ func (s *streamHTTP) SendMsg(m interface{}) error {
 	}
 	if stats := s.opts.statsHandler; stats != nil {
 		// TODO: raw payload stats.
-		stats.HandleRPC(s.ctx, outPayload(false, m, b, b, time.Now()))
+		stats.HandleRPC(s.ctx, outPayload(false, m, b, time.Now()))
 	}
 	return nil
 }
@@ -243,7 +243,7 @@ func (s *streamHTTP) decodeRequestArgs(args proto.Message) (int, error) {
 	}
 	if stats := s.opts.statsHandler; stats != nil {
 		// TODO: raw payload stats.
-		stats.HandleRPC(s.ctx, inPayload(false, msg, b, b, time.Now()))
+		stats.HandleRPC(s.ctx, inPayload(false, msg, b, time.Now()))
 	}
 	return count, nil
 }
