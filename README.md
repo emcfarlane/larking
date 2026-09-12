@@ -1,10 +1,8 @@
-```
-   _,
-  ( '>   Welcome to larking.io
- / ) )
- /|^^
-```
+# larking
 [![Go Reference](https://pkg.go.dev/badge/larking.io.svg)](https://pkg.go.dev/larking.io/larking)
+
+> [!IMPORTANT]
+> This project is archived and no longer maintained. Its successor is [connectrpc/vanguard-go](https://github.com/connectrpc/vanguard-go), which is where all ongoing development happens. New projects should start there.
 
 Larking is a [protoreflect](https://pkg.go.dev/google.golang.org/protobuf/reflect/protoreflect) gRPC-transcoding implementation with support for gRPC, gRPC-web and twirp protocols.
 Bind [`google.api.http`](https://github.com/googleapis/googleapis/blob/master/google/api/http.proto) annotations to gRPC services without code generation.
